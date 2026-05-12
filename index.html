@@ -7,167 +7,62 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', sans-serif; background: #f1f5f9; color: #1e293b; min-height: 100vh; }
 
-    body {
-      font-family: 'Inter', -apple-system, sans-serif;
-      background: #f1f5f9;
-      color: #1e293b;
-      min-height: 100vh;
-    }
-
-    .header {
-      background: linear-gradient(135deg, #0f2954 0%, #1d4ed8 100%);
-      color: white;
-      padding: 14px 24px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      position: sticky;
-      top: 0;
-      z-index: 100;
-      box-shadow: 0 4px 20px rgba(15,41,84,0.35);
-    }
+    .header { background: linear-gradient(135deg, #0f2954 0%, #1d4ed8 100%); color: white; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; box-shadow: 0 4px 20px rgba(15,41,84,0.35); }
     .header-left { display: flex; align-items: center; gap: 10px; }
-    .logo {
-      width: 36px; height: 36px; background: white; border-radius: 8px;
-      display: flex; align-items: center; justify-content: center;
-      font-weight: 800; color: #0f2954; font-size: 11px; letter-spacing: -0.5px;
-      flex-shrink: 0;
-    }
+    .logo { width: 36px; height: 36px; background: white; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #0f2954; font-size: 11px; flex-shrink: 0; }
     .header h1 { font-size: 17px; font-weight: 700; letter-spacing: -0.3px; }
-    .header-sub { font-size: 11px; opacity: 0.6; margin-top: 1px; }
+    .header-sub { font-size: 11px; opacity: 0.6; }
     .header-right { display: flex; align-items: center; gap: 10px; }
-    .live-dot {
-      width: 8px; height: 8px; border-radius: 50%;
-      background: #4ade80;
-      box-shadow: 0 0 0 0 rgba(74,222,128,0.6);
-      animation: pulse 2s infinite;
-    }
-    .live-dot.error { background: #f87171; box-shadow: 0 0 0 0 rgba(248,113,113,0.6); }
+    .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; box-shadow: 0 0 0 0 rgba(74,222,128,0.6); animation: pulse 2s infinite; }
+    .live-dot.error { background: #f87171; animation: none; }
     .live-dot.loading { background: #fbbf24; animation: none; }
-    @keyframes pulse {
-      0%   { box-shadow: 0 0 0 0 rgba(74,222,128,0.6); }
-      70%  { box-shadow: 0 0 0 6px rgba(74,222,128,0); }
-      100% { box-shadow: 0 0 0 0 rgba(74,222,128,0); }
-    }
+    @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(74,222,128,0.6); } 70% { box-shadow: 0 0 0 6px rgba(74,222,128,0); } 100% { box-shadow: 0 0 0 0 rgba(74,222,128,0); } }
     .last-updated { font-size: 11px; opacity: 0.65; }
-    .btn-refresh {
-      background: rgba(255,255,255,0.15);
-      border: 1.5px solid rgba(255,255,255,0.3);
-      color: white; font-family: inherit; font-size: 12px; font-weight: 600;
-      padding: 6px 14px; border-radius: 8px; cursor: pointer; transition: background 0.15s;
-    }
+    .btn-refresh { background: rgba(255,255,255,0.15); border: 1.5px solid rgba(255,255,255,0.3); color: white; font-family: inherit; font-size: 12px; font-weight: 600; padding: 6px 14px; border-radius: 8px; cursor: pointer; transition: background 0.15s; }
     .btn-refresh:hover { background: rgba(255,255,255,0.25); }
     .btn-refresh:disabled { opacity: 0.4; cursor: not-allowed; }
 
-    .main { max-width: 860px; margin: 0 auto; padding: 24px 16px; }
+    .main { max-width: 1000px; margin: 0 auto; padding: 20px 16px; }
 
-    /* ── One-time setup notice ── */
-    .setup-notice {
-      background: #eff6ff; border: 1px solid #bfdbfe;
-      border-radius: 12px; padding: 16px 20px; margin-bottom: 20px;
-    }
-    .setup-notice summary {
-      font-size: 13px; font-weight: 700; color: #1d4ed8; cursor: pointer; user-select: none;
-    }
-    .setup-notice ol {
-      margin-top: 10px; padding-left: 20px; display: flex; flex-direction: column; gap: 6px;
-    }
-    .setup-notice li { font-size: 13px; color: #1e40af; line-height: 1.5; }
-    .setup-notice code {
-      background: #dbeafe; padding: 1px 6px; border-radius: 4px;
-      font-family: monospace; font-size: 12px;
-    }
+    .controls-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+    .date-heading { font-size: 18px; font-weight: 800; color: #0f2954; }
+    input[type="date"] { border: 1.5px solid #e2e8f0; border-radius: 8px; padding: 6px 10px; font-family: inherit; font-size: 13px; background: white; color: #1e293b; cursor: pointer; }
+    input[type="date"]:focus { outline: none; border-color: #1d4ed8; }
 
-    /* ── Error banner ── */
-    .error-banner {
-      background: #fef2f2; color: #dc2626; border: 1px solid #fecaca;
-      border-radius: 10px; padding: 12px 16px; font-size: 13px; font-weight: 500;
-      margin-bottom: 20px; display: none;
-    }
+    .error-banner { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; border-radius: 10px; padding: 12px 16px; font-size: 13px; font-weight: 500; margin-bottom: 16px; display: none; }
     .error-banner.show { display: block; }
 
-    /* ── Controls row ── */
-    .controls-row {
-      display: flex; align-items: center; justify-content: space-between;
-      gap: 12px; margin-bottom: 16px; flex-wrap: wrap;
-    }
-    .date-heading { font-size: 20px; font-weight: 800; color: #0f2954; }
-    .controls-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-    .target-wrap { display: flex; align-items: center; gap: 6px; }
-    .target-wrap label { font-size: 12px; font-weight: 600; color: #64748b; }
-    .target-wrap input {
-      width: 52px; border: 1.5px solid #e2e8f0; border-radius: 6px;
-      padding: 4px 8px; font-family: inherit; font-size: 13px; font-weight: 700;
-      text-align: center; background: #f8fafc;
-    }
-    .target-wrap input:focus { outline: none; border-color: #1d4ed8; }
-    input[type="date"] {
-      border: 1.5px solid #e2e8f0; border-radius: 8px;
-      padding: 6px 10px; font-family: inherit; font-size: 13px;
-      background: white; color: #1e293b; cursor: pointer;
-    }
-    input[type="date"]:focus { outline: none; border-color: #1d4ed8; }
-    .total-pill {
-      background: #1d4ed8; color: white;
-      font-size: 13px; font-weight: 700;
-      padding: 4px 14px; border-radius: 20px;
-    }
+    .team-section { margin-bottom: 28px; }
+    .team-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+    .team-badge { display: flex; align-items: center; gap: 8px; }
+    .team-color-bar { width: 4px; height: 26px; border-radius: 2px; flex-shrink: 0; }
+    .team-name { font-size: 15px; font-weight: 800; color: #0f2954; letter-spacing: 0.5px; }
+    .team-stats { display: flex; gap: 8px; margin-left: auto; flex-wrap: wrap; }
+    .stat-pill { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 20px; }
+    .stat-total { background: #1d4ed8; color: white; }
+    .stat-hits { background: #f0fdf4; color: #16a34a; border: 1px solid #86efac; }
 
-    /* ── Leaderboard ── */
-    .leaderboard { display: flex; flex-direction: column; gap: 10px; }
+    .member-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; }
 
-    .agent-card {
-      background: white; border-radius: 14px;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
-      padding: 16px 20px; display: flex; align-items: center; gap: 16px;
-      transition: transform 0.1s, box-shadow 0.1s;
-    }
-    .agent-card:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-    .agent-card.hit-target { background: #f0fdf4; border: 1.5px solid #86efac; }
-    .agent-card.hit-target .dc-count { color: #16a34a; }
-    .agent-card.hit-target .progress-bar { background: linear-gradient(90deg, #16a34a, #4ade80); }
+    .member-card { background: white; border-radius: 12px; padding: 11px 14px; display: flex; align-items: center; gap: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); border: 1.5px solid transparent; transition: transform 0.1s; }
+    .member-card:hover { transform: translateY(-1px); }
+    .member-card.hit  { background: #f0fdf4; border-color: #86efac; }
+    .member-card.miss1 { background: #fff7ed; border-color: #fed7aa; }
+    .member-card.miss0 { background: #fef2f2; border-color: #fecaca; }
 
-    .rank-badge {
-      width: 40px; height: 40px; border-radius: 50%;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 20px; flex-shrink: 0;
-    }
-    .rank-1 { background: #fef9c3; }
-    .rank-2 { background: #f1f5f9; }
-    .rank-3 { background: #fff7ed; }
-    .rank-other { background: #f1f5f9; font-size: 14px; font-weight: 700; color: #94a3b8; }
+    .member-info { flex: 1; min-width: 0; }
+    .member-name { font-size: 13px; font-weight: 600; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .member-bar-wrap { height: 3px; background: #e2e8f0; border-radius: 99px; margin-top: 5px; }
+    .member-bar { height: 100%; border-radius: 99px; transition: width 0.5s; }
+    .bar-hit  { background: linear-gradient(90deg, #16a34a, #4ade80); }
+    .bar-miss1 { background: linear-gradient(90deg, #ea580c, #fb923c); }
+    .bar-miss0 { background: #fca5a5; }
 
-    .agent-info { flex: 1; min-width: 0; }
-    .agent-name { font-size: 16px; font-weight: 700; color: #0f2954; }
-    .agent-meta { font-size: 12px; color: #94a3b8; margin-top: 2px; }
-    .progress-bar-wrap { width: 100%; height: 6px; background: #e2e8f0; border-radius: 99px; margin-top: 8px; }
-    .progress-bar {
-      height: 100%; border-radius: 99px;
-      background: linear-gradient(90deg, #1d4ed8, #3b82f6);
-      transition: width 0.5s ease;
-    }
-    .rank-1-card .progress-bar { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
-
-    .dc-count-wrap { text-align: right; flex-shrink: 0; }
-    .dc-count { font-size: 32px; font-weight: 800; color: #1d4ed8; line-height: 1; }
-    .dc-label { font-size: 11px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
-
-    /* ── Loading skeleton ── */
-    .skeleton-card {
-      background: white; border-radius: 14px; padding: 16px 20px;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.06); display: flex; gap: 16px; align-items: center;
-    }
-    .skel { background: #e2e8f0; border-radius: 6px; animation: shimmer 1.2s infinite; }
-    @keyframes shimmer {
-      0%,100% { opacity: 1; } 50% { opacity: 0.5; }
-    }
-
-    /* ── Empty state ── */
-    .empty-state { text-align: center; padding: 60px 20px; color: #94a3b8; }
-    .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
-    .empty-state p { font-size: 14px; }
+    .dc-badge { font-size: 24px; font-weight: 800; line-height: 1; flex-shrink: 0; min-width: 34px; text-align: right; }
+    .dc-hit  { color: #16a34a; }
+    .dc-miss { color: #dc2626; }
 
     .footer { text-align: center; padding: 24px 16px; font-size: 11px; color: #cbd5e1; }
   </style>
@@ -190,61 +85,117 @@
 </header>
 
 <main class="main">
-
-  <!-- One-time setup (hidden once connected) -->
-  <details class="setup-notice" id="setupNotice">
-    <summary>⚙️ One-time setup required — click to expand</summary>
-    <ol>
-      <li>Open your Google Sheet → <strong>File → Share → Publish to web</strong></li>
-      <li>Choose <strong>Sheet1</strong> (or the relevant tab) and set format to <strong>Comma-separated values (.csv)</strong></li>
-      <li>Click <strong>Publish</strong> and confirm. That's it — the dashboard will load automatically.</li>
-      <li>Your sheet must have these 3 columns (row 1 = header, ignored):<br>
-        <code>Date</code> (YYYY-MM-DD) &nbsp;|&nbsp; <code>Agent Name</code> &nbsp;|&nbsp; <code>DC Count</code></li>
-    </ol>
-  </details>
-
+  <div class="controls-row">
+    <div class="date-heading" id="dateHeading">Loading…</div>
+    <input type="date" id="selectedDate" oninput="renderDashboard()">
+  </div>
   <div class="error-banner" id="errorBanner"></div>
-
-  <div id="leaderboardSection" style="display:none;">
-    <div class="controls-row">
-      <div class="date-heading" id="dateHeading"></div>
-      <div class="controls-right">
-        <input type="date" id="selectedDate" oninput="renderLeaderboard()">
-        <div class="target-wrap">
-          <label for="targetInput">Target:</label>
-          <input type="number" id="targetInput" min="0" max="99" value="3" oninput="renderLeaderboard()">
-        </div>
-        <div class="total-pill" id="totalPill"></div>
-      </div>
-    </div>
-    <div class="leaderboard" id="leaderboard"></div>
-  </div>
-
-  <div id="skeletonSection">
-    <div style="display:flex;flex-direction:column;gap:10px;">
-      <div class="skeleton-card"><div class="skel" style="width:40px;height:40px;border-radius:50%;flex-shrink:0;"></div><div style="flex:1;display:flex;flex-direction:column;gap:8px;"><div class="skel" style="height:14px;width:55%;"></div><div class="skel" style="height:8px;width:80%;"></div></div><div class="skel" style="width:42px;height:36px;border-radius:8px;"></div></div>
-      <div class="skeleton-card"><div class="skel" style="width:40px;height:40px;border-radius:50%;flex-shrink:0;"></div><div style="flex:1;display:flex;flex-direction:column;gap:8px;"><div class="skel" style="height:14px;width:45%;"></div><div class="skel" style="height:8px;width:70%;"></div></div><div class="skel" style="width:42px;height:36px;border-radius:8px;"></div></div>
-      <div class="skeleton-card"><div class="skel" style="width:40px;height:40px;border-radius:50%;flex-shrink:0;"></div><div style="flex:1;display:flex;flex-direction:column;gap:8px;"><div class="skel" style="height:14px;width:60%;"></div><div class="skel" style="height:8px;width:65%;"></div></div><div class="skel" style="width:42px;height:36px;border-radius:8px;"></div></div>
-    </div>
-  </div>
-
-  <div class="empty-state" id="emptyState" style="display:none;">
-    <div class="icon">📊</div>
-    <p>No data for <strong id="emptyDate"></strong>.<br>Make sure the sheet has rows for this date.</p>
-  </div>
-
+  <div id="teamsContainer"></div>
 </main>
 
 <footer class="footer">Outsource Accelerator · DC Performance Dashboard · Auto-refreshes every 60 seconds</footer>
 
 <script>
-  // Published CSV URL from Google Sheets (File → Share → Publish to web → CSV)
-  const CSV_URL    = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSisLiJWdncrB-dDPNI0JGqSTbBQl5n5OAel1Epyr7DAsonyVAa6HSFCVXdA4_uMTbnBgGawkyX6DYh/pub?gid=0&single=true&output=csv';
-  const REFRESH_MS = 60000;
+  const CSV_URL      = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSisLiJWdncrB-dDPNI0JGqSTbBQl5n5OAel1Epyr7DAsonyVAa6HSFCVXdA4_uMTbnBgGawkyX6DYh/pub?gid=0&single=true&output=csv';
+  const REFRESH_MS   = 60000;
+  const DAILY_TARGET = 2;
+
+  const TEAMS = [
+    {
+      id: 'jetlica', name: 'JETLICA', color: '#059669',
+      members: [
+        { id: 'ybanez',   display: 'Jetdel Ybanez',        ln: 'ybanez' },
+        { id: 'tanate',   display: 'Angelica Tanate',       ln: 'tanate' },
+        { id: 'lumaban',  display: 'Kurt Lumaban',          ln: 'lumaban' },
+        { id: 'malavega', display: 'Jose Carlos Malavega',  ln: 'malavega' },
+        { id: 'rees',     display: 'Jean Rees',             ln: 'rees' },
+        { id: 'anos',     display: 'Marc Anos',             ln: 'anos' },
+        { id: 'lentija',  display: 'Jefferson Lentija',     ln: 'lentija' },
+        { id: 'decamora', display: 'Maureen Decamora',      ln: 'decamora' },
+        { id: 'tupaz',    display: 'Rommel Tupaz',          ln: 'tupaz' },
+        { id: 'togonon',  display: 'Jheus Togonon',         ln: 'togonon' },
+        { id: 'ruiz',     display: 'Renz Ruiz',             ln: 'ruiz' },
+        { id: 'silang',   display: 'Gian Carlo Silang',     ln: 'silang' },
+        { id: 'garcia',   display: 'Katherine Garcia',      ln: 'garcia' },
+      ]
+    },
+    {
+      id: 'ritchcent', name: 'RITCHCENT', color: '#1d4ed8',
+      members: [
+        { id: 'gadier',      display: 'Vincent Gadier',        ln: 'gadier' },
+        { id: 'valenzuela',  display: 'Aaron Kyle Valenzuela', ln: 'valenzuela' },
+        { id: 'velasco',     display: 'Edward Velasco',        ln: 'velasco' },
+        { id: 'melo',        display: 'Alvin Melo',            ln: 'melo' },
+        { id: 'vosotros',    display: 'Diana Vosotros',        ln: 'vosotros' },
+        { id: 'arcena',      display: 'Charlito Arcena',       ln: 'arcena' },
+        { id: 'petras',      display: 'Art Joseph Petras',     ln: 'petras' },
+        { id: 'galoso',      display: 'Lawrence Galoso',       ln: 'galoso' },
+        { id: 'pabiona',     display: 'Cristina Pabiona',      ln: 'pabiona' },
+        { id: 'sarmiento_c', display: 'Charles Sarmiento',     ln: 'sarmiento', fn: 'charles' },
+        { id: 'pastor',      display: 'Alelie Pastor',         ln: 'pastor' },
+        { id: 'mamaclay',    display: 'Mart Mamaclay',         ln: 'mamaclay' },
+        { id: 'sindac',      display: 'Renz Sindac',           ln: 'sindac' },
+        { id: 'catolico',    display: 'Pedro Catolico',        ln: 'catolico' },
+        { id: 'sarmiento_j', display: 'Julius Sarmiento',      ln: 'sarmiento', fn: 'julius' },
+        { id: 'baliuag',     display: 'Charlon Baliuag',       ln: 'baliuag' },
+        { id: 'fortez',      display: 'Carlo Fortez',          ln: 'fortez' },
+      ]
+    },
+    {
+      id: 'jumhon', name: 'JUMHON', color: '#d97706',
+      members: [
+        { id: 'vere',        display: 'Jumar Vere',            ln: 'vere' },
+        { id: 'bayhon',      display: 'Alvin Bayhon',          ln: 'bayhon' },
+        { id: 'demayo',      display: 'Jerry Demayo',          ln: 'demayo' },
+        { id: 'delos_reyes', display: 'Joy Delos Reyes',       ln: 'reyes', ln2: 'delos reyes' },
+        { id: 'saminado',    display: 'Jervin Saminado',       ln: 'saminado' },
+        { id: 'biron',       display: 'Anne Biron',            ln: 'biron' },
+        { id: 'cavinta',     display: 'Steven Kurt Cavinta',   ln: 'cavinta' },
+        { id: 'verastigue',  display: 'Bedier Verastigue',     ln: 'verastigue' },
+        { id: 'tapiador',    display: 'Juaquin Tapiador',      ln: 'tapiador' },
+        { id: 'bondad',      display: 'Joshua Bondad',         ln: 'bondad' },
+        { id: 'benjamin',    display: 'Russell Benjamin',      ln: 'benjamin' },
+        { id: 'silva',       display: 'Godwin Silva',          ln: 'silva' },
+        { id: 'escabillas',  display: 'Kenneth Escabillas',    ln: 'escabillas' },
+        { id: 'bautista',    display: 'Dan Marc Bautista',     ln: 'bautista' },
+      ]
+    }
+  ];
+
+  // ── Build name-matching lookups ──
+  const LN_MAP  = {}; // lastWord → [{m, team}]
+  const LN2_MAP = {}; // twoWordLN → [{m, team}]
+  for (const team of TEAMS) {
+    for (const m of team.members) {
+      (LN_MAP[m.ln] = LN_MAP[m.ln] || []).push({ m, team });
+      if (m.ln2) (LN2_MAP[m.ln2] = LN2_MAP[m.ln2] || []).push({ m, team });
+    }
+  }
+
+  // Given a raw name from the sheet, return a member id
+  function resolveAgent(rawName) {
+    const parts = rawName.trim().toLowerCase().split(/\s+/);
+    if (!parts.length) return null;
+
+    // Try two-word last name first (e.g. "Joy Delos Reyes")
+    if (parts.length >= 3) {
+      const tw = parts[parts.length - 2] + ' ' + parts[parts.length - 1];
+      if (LN2_MAP[tw]?.length) return LN2_MAP[tw][0].m.id;
+    }
+
+    const ln = parts[parts.length - 1];
+    const hits = LN_MAP[ln] || [];
+    if (!hits.length) return null;
+    if (hits.length === 1) return hits[0].m.id;
+
+    // Disambiguate by first name (handles two Sarmientos)
+    const fn = parts[0];
+    const exact = hits.find(c => c.m.fn && c.m.fn === fn);
+    return exact ? exact.m.id : hits[0].m.id;
+  }
 
   const $ = id => document.getElementById(id);
-  // allRows: [{date: 'YYYY-MM-DD', agent: string, count: number}] — aggregated
-  let allRows = [];
+  let rawRows = [];
   let refreshTimer = null;
 
   (function init() {
@@ -257,153 +208,126 @@
     try {
       const res = await fetch(CSV_URL + '&t=' + Date.now());
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const text = await res.text();
-      allRows = aggregateCSV(text);
+      rawRows = parseCSV(await res.text());
       hideError();
-      $('setupNotice').style.display = 'none';
       $('btnRefresh').disabled = false;
       $('lastUpdated').textContent = 'Updated ' + new Date().toLocaleTimeString();
       setDot('live');
-      renderLeaderboard();
+      renderDashboard();
       scheduleRefresh();
     } catch (err) {
       setDot('error');
       $('lastUpdated').textContent = 'Failed to load';
       showError(err.message);
-      $('skeletonSection').style.display = 'none';
       scheduleRefresh();
     }
   }
 
   function refresh() { clearTimeout(refreshTimer); loadData(); }
+  function scheduleRefresh() { clearTimeout(refreshTimer); refreshTimer = setTimeout(loadData, REFRESH_MS); }
 
-  function scheduleRefresh() {
-    clearTimeout(refreshTimer);
-    refreshTimer = setTimeout(loadData, REFRESH_MS);
+  function parseCSV(text) {
+    return text.trim().split('\n').slice(1).map(line => {
+      const c = splitCSVLine(line);
+      return { rawDate: (c[0]||'').trim(), agent: (c[1]||'').trim(), sp1: (c[2]||'').trim(), sp2: (c[3]||'').trim() };
+    }).filter(r => r.rawDate && r.agent);
   }
 
-  // Each row: Date, BDR, SP1, SP2
-  // SP1 filled = 1 DC, SP2 filled = 1 DC → each row contributes 0–2 DCs
-  function aggregateCSV(text) {
-    const lines = text.trim().split('\n');
-    if (lines.length < 2) return [];
-
-    const counts = {}; // key: "YYYY-MM-DD||AgentName" → number
-
-    lines.slice(1).forEach(line => {
-      const cols = splitCSVLine(line);
-      const rawDate = (cols[0] || '').trim();
-      const agent   = (cols[1] || '').trim();
-      if (!rawDate || !agent) return;
-
-      const date = normalizeDate(rawDate);
-      if (!date) return;
-
-      const sp1 = (cols[2] || '').trim();
-      const sp2 = (cols[3] || '').trim();
-      const dcs = (sp1 ? 1 : 0) + (sp2 ? 1 : 0);
-      if (dcs === 0) return;
-
-      const key = `${date}||${agent}`;
-      counts[key] = (counts[key] || 0) + dcs;
-    });
-
-    return Object.entries(counts).map(([key, count]) => {
-      const [date, agent] = key.split('||');
-      return { date, agent, count };
-    });
+  function aggregateForDate(date) {
+    const counts = {};
+    for (const row of rawRows) {
+      if (normalizeDate(row.rawDate) !== date) continue;
+      const id = resolveAgent(row.agent);
+      if (!id) continue;
+      const dcs = (row.sp1 ? 1 : 0) + (row.sp2 ? 1 : 0);
+      if (!dcs) continue;
+      counts[id] = (counts[id] || 0) + dcs;
+    }
+    return counts;
   }
 
-  // Handles M/D/YYYY and YYYY-MM-DD → always returns YYYY-MM-DD
+  function renderDashboard() {
+    const date   = $('selectedDate').value;
+    const counts = aggregateForDate(date);
+    $('dateHeading').textContent = formatDate(date);
+
+    const container = $('teamsContainer');
+    container.innerHTML = '';
+    for (const team of TEAMS) container.appendChild(buildTeamSection(team, counts));
+  }
+
+  function buildTeamSection(team, counts) {
+    const withCounts = team.members.map(m => ({ m, count: counts[m.id] || 0 }));
+    const sorted     = [...withCounts].sort((a, b) => b.count - a.count);
+    const total      = withCounts.reduce((s, x) => s + x.count, 0);
+    const hits       = withCounts.filter(x => x.count >= DAILY_TARGET).length;
+
+    const sec = document.createElement('div');
+    sec.className = 'team-section';
+    sec.innerHTML = `
+      <div class="team-header">
+        <div class="team-badge">
+          <div class="team-color-bar" style="background:${esc(team.color)}"></div>
+          <div class="team-name">${esc(team.name)}</div>
+        </div>
+        <div class="team-stats">
+          <span class="stat-pill stat-total">${total} DCs today</span>
+          <span class="stat-pill stat-hits">${hits} / ${team.members.length} hit target</span>
+        </div>
+      </div>
+      <div class="member-grid"></div>`;
+
+    const grid = sec.querySelector('.member-grid');
+    for (const { m, count } of sorted) grid.appendChild(buildCard(m, count));
+    return sec;
+  }
+
+  function buildCard(m, count) {
+    const hit  = count >= DAILY_TARGET;
+    const cls  = hit ? 'hit' : count === 1 ? 'miss1' : 'miss0';
+    const bar  = hit ? 'bar-hit' : count === 1 ? 'bar-miss1' : 'bar-miss0';
+    const pct  = Math.min(100, (count / DAILY_TARGET) * 100);
+
+    const card = document.createElement('div');
+    card.className = `member-card ${cls}`;
+    card.innerHTML = `
+      <div class="member-info">
+        <div class="member-name">${esc(m.display)}</div>
+        <div class="member-bar-wrap"><div class="member-bar ${bar}" style="width:${pct}%"></div></div>
+      </div>
+      <div class="dc-badge ${hit ? 'dc-hit' : 'dc-miss'}">${count}</div>`;
+    return card;
+  }
+
   function normalizeDate(raw) {
     if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
     if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(raw)) {
-      const [m, d, y] = raw.split('/');
+      const [m,d,y] = raw.split('/');
       return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
     }
     return null;
   }
 
-  // Handles quoted fields with commas inside
   function splitCSVLine(line) {
-    const cols = [];
-    let cur = '', inQuote = false;
+    const cols = []; let cur = '', inQ = false;
     for (const ch of line) {
-      if (ch === '"') { inQuote = !inQuote; }
-      else if (ch === ',' && !inQuote) { cols.push(cur.trim()); cur = ''; }
-      else { cur += ch; }
+      if (ch === '"') inQ = !inQ;
+      else if (ch === ',' && !inQ) { cols.push(cur.trim()); cur = ''; }
+      else cur += ch;
     }
     cols.push(cur.trim());
     return cols;
   }
 
-  function renderLeaderboard() {
-    const date   = $('selectedDate').value;
-    const target = parseInt($('targetInput').value, 10) || 0;
-    const dayRows = allRows.filter(r => r.date === date);
-
-    $('skeletonSection').style.display    = 'none';
-    $('leaderboardSection').style.display = dayRows.length ? 'block' : 'none';
-    $('emptyState').style.display         = (!dayRows.length && allRows.length) ? 'block' : 'none';
-    $('emptyDate').textContent = formatDate(date);
-    if (!dayRows.length) return;
-
-    const sorted   = [...dayRows].sort((a, b) => b.count - a.count);
-    const maxCount = sorted[0]?.count || 1;
-    const total    = sorted.reduce((s, r) => s + r.count, 0);
-
-    $('dateHeading').textContent = formatDate(date);
-    $('totalPill').textContent   = `${total} DC${total !== 1 ? 's' : ''} today`;
-
-    const medals = ['🥇', '🥈', '🥉'];
-    const lb = $('leaderboard');
-    lb.innerHTML = '';
-
-    sorted.forEach((row, i) => {
-      const hitTarget  = target > 0 && row.count >= target;
-      const barMax     = target > 0 ? Math.max(maxCount, target) : maxCount;
-      const pct        = Math.round((row.count / barMax) * 100);
-      const badgeClass = i < 3 ? `rank-${i+1}` : 'rank-other';
-      const badge      = i < 3 ? medals[i] : `#${i+1}`;
-      const meta       = hitTarget && target > 0 ? '✅ Hit target'
-                       : target > 0 ? `${target - row.count} to target` : '';
-
-      const card = document.createElement('div');
-      card.className = 'agent-card' + (i === 0 ? ' rank-1-card' : '') + (hitTarget ? ' hit-target' : '');
-      card.innerHTML = `
-        <div class="rank-badge ${badgeClass}">${badge}</div>
-        <div class="agent-info">
-          <div class="agent-name">${esc(row.agent)}</div>
-          <div class="agent-meta">${meta}</div>
-          <div class="progress-bar-wrap">
-            <div class="progress-bar" style="width:${Math.min(pct,100)}%"></div>
-          </div>
-        </div>
-        <div class="dc-count-wrap">
-          <div class="dc-count">${row.count}</div>
-          <div class="dc-label">DCs booked</div>
-        </div>`;
-      lb.appendChild(card);
-    });
-  }
-
-  function setDot(state) {
-    $('liveDot').className = 'live-dot' + (state !== 'live' ? ' ' + state : '');
-  }
-  function showError(msg) {
-    const el = $('errorBanner');
-    el.textContent = '⚠️ ' + msg;
-    el.classList.add('show');
-  }
+  function setDot(s) { $('liveDot').className = 'live-dot' + (s !== 'live' ? ' ' + s : ''); }
+  function showError(msg) { const e = $('errorBanner'); e.textContent = '⚠️ ' + msg; e.classList.add('show'); }
   function hideError() { $('errorBanner').classList.remove('show'); }
   function formatDate(iso) {
     if (!iso) return '';
     const [y,m,d] = iso.split('-');
-    return new Date(+y, +m-1, +d).toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+    return new Date(+y,+m-1,+d).toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   }
-  function esc(s) {
-    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  }
+  function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 </script>
 </body>
 </html>
