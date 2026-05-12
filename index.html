@@ -282,8 +282,8 @@
     refreshTimer = setTimeout(loadData, REFRESH_MS);
   }
 
-  // Each row in the sheet = one booked DC (Date, BDR, SP1, SP2, …)
-  // We group by normalized date + agent and count bookings.
+  // Each row: Date, BDR, SP1, SP2
+  // SP1 filled = 1 DC, SP2 filled = 1 DC → each row contributes 0–2 DCs
   function aggregateCSV(text) {
     const lines = text.trim().split('\n');
     if (lines.length < 2) return [];
@@ -299,8 +299,13 @@
       const date = normalizeDate(rawDate);
       if (!date) return;
 
+      const sp1 = (cols[2] || '').trim();
+      const sp2 = (cols[3] || '').trim();
+      const dcs = (sp1 ? 1 : 0) + (sp2 ? 1 : 0);
+      if (dcs === 0) return;
+
       const key = `${date}||${agent}`;
-      counts[key] = (counts[key] || 0) + 1;
+      counts[key] = (counts[key] || 0) + dcs;
     });
 
     return Object.entries(counts).map(([key, count]) => {
