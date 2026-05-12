@@ -11,7 +11,7 @@
 
     .header { background: linear-gradient(135deg, #0f2954 0%, #1d4ed8 100%); color: white; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; box-shadow: 0 4px 20px rgba(15,41,84,0.35); }
     .header-left { display: flex; align-items: center; gap: 10px; }
-    .logo { width: 36px; height: 36px; background: white; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #0f2954; font-size: 11px; flex-shrink: 0; }
+    .logo { width: 36px; height: 36px; background: white; border-radius: 2px; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #0f2954; font-size: 11px; flex-shrink: 0; }
     .header h1 { font-size: 17px; font-weight: 700; letter-spacing: -0.3px; }
     .header-sub { font-size: 11px; opacity: 0.6; }
     .header-right { display: flex; align-items: center; gap: 10px; }
@@ -20,7 +20,7 @@
     .live-dot.loading { background: #fbbf24; animation: none; }
     @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(74,222,128,0.6); } 70% { box-shadow: 0 0 0 6px rgba(74,222,128,0); } 100% { box-shadow: 0 0 0 0 rgba(74,222,128,0); } }
     .last-updated { font-size: 11px; opacity: 0.65; }
-    .btn-refresh { background: rgba(255,255,255,0.15); border: 1.5px solid rgba(255,255,255,0.3); color: white; font-family: inherit; font-size: 12px; font-weight: 600; padding: 6px 14px; border-radius: 8px; cursor: pointer; transition: background 0.15s; }
+    .btn-refresh { background: rgba(255,255,255,0.15); border: 1.5px solid rgba(255,255,255,0.3); color: white; font-family: inherit; font-size: 12px; font-weight: 600; padding: 6px 14px; border-radius: 2px; cursor: pointer; transition: background 0.15s; }
     .btn-refresh:hover { background: rgba(255,255,255,0.25); }
     .btn-refresh:disabled { opacity: 0.4; cursor: not-allowed; }
 
@@ -28,10 +28,10 @@
 
     .controls-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
     .date-heading { font-size: 18px; font-weight: 800; color: #0f2954; }
-    input[type="date"] { border: 1.5px solid #e2e8f0; border-radius: 8px; padding: 6px 10px; font-family: inherit; font-size: 13px; background: white; color: #1e293b; cursor: pointer; }
+    input[type="date"] { border: 1.5px solid #e2e8f0; border-radius: 2px; padding: 6px 10px; font-family: inherit; font-size: 13px; background: white; color: #1e293b; cursor: pointer; }
     input[type="date"]:focus { outline: none; border-color: #1d4ed8; }
 
-    .error-banner { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; border-radius: 10px; padding: 12px 16px; font-size: 13px; font-weight: 500; margin-bottom: 16px; display: none; }
+    .error-banner { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; border-radius: 2px; padding: 12px 16px; font-size: 13px; font-weight: 500; margin-bottom: 16px; display: none; }
     .error-banner.show { display: block; }
 
     .team-section { margin-bottom: 28px; }
@@ -40,13 +40,13 @@
     .team-color-bar { width: 4px; height: 26px; border-radius: 2px; flex-shrink: 0; }
     .team-name { font-size: 15px; font-weight: 800; color: #0f2954; letter-spacing: 0.5px; }
     .team-stats { display: flex; gap: 8px; margin-left: auto; flex-wrap: wrap; }
-    .stat-pill { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 20px; }
+    .stat-pill { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 2px; }
     .stat-total { background: #1d4ed8; color: white; }
     .stat-hits { background: #f0fdf4; color: #16a34a; border: 1px solid #86efac; }
 
     .member-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; }
 
-    .member-card { background: white; border-radius: 12px; padding: 11px 14px; display: flex; align-items: center; gap: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); border: 1.5px solid transparent; transition: transform 0.1s; }
+    .member-card { background: white; border-radius: 0; padding: 11px 14px; display: flex; align-items: center; gap: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); border: 1.5px solid transparent; transition: transform 0.1s; }
     .member-card:hover { transform: translateY(-1px); }
     .member-card.hit  { background: #f0fdf4; border-color: #86efac; }
     .member-card.miss1 { background: #fff7ed; border-color: #fed7aa; }
@@ -54,8 +54,8 @@
 
     .member-info { flex: 1; min-width: 0; }
     .member-name { font-size: 13px; font-weight: 600; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .member-bar-wrap { height: 3px; background: #e2e8f0; border-radius: 99px; margin-top: 5px; }
-    .member-bar { height: 100%; border-radius: 99px; transition: width 0.5s; }
+    .member-bar-wrap { height: 3px; background: #e2e8f0; border-radius: 0; margin-top: 5px; }
+    .member-bar { height: 100%; border-radius: 0; transition: width 0.5s; }
     .bar-hit  { background: linear-gradient(90deg, #16a34a, #4ade80); }
     .bar-miss1 { background: linear-gradient(90deg, #ea580c, #fb923c); }
     .bar-miss0 { background: #fca5a5; }
