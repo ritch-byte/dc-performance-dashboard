@@ -4,96 +4,403 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>OA — DC Performance Dashboard</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
+    :root {
+      --blue:    #1A2DB5;
+      --magenta: #FF1FFF;
+      --navy:    #0D1A6E;
+      --white:   #FFFFFF;
+      --bg:      #F4F5FA;
+      --gray:    #A5A5A5;
+      --border:  #E2E4F0;
+      --shadow:  0 2px 8px rgba(26,45,181,0.10);
+    }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Inter', sans-serif; background: #f1f5f9; color: #1e293b; min-height: 100vh; }
+    html { height: 100%; }
+    body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--navy); min-height: 100vh; display: flex; flex-direction: column; }
 
-    .header { background: linear-gradient(135deg, #0f2954 0%, #1d4ed8 100%); color: white; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; box-shadow: 0 4px 20px rgba(15,41,84,0.35); }
-    .header-left { display: flex; align-items: center; gap: 10px; }
-    .logo { width: 36px; height: 36px; background: white; border-radius: 2px; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #0f2954; font-size: 11px; flex-shrink: 0; }
-    .header h1 { font-size: 17px; font-weight: 700; letter-spacing: -0.3px; }
-    .header-sub { font-size: 11px; opacity: 0.6; }
-    .header-right { display: flex; align-items: center; gap: 10px; }
-    .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; box-shadow: 0 0 0 0 rgba(74,222,128,0.6); animation: pulse 2s infinite; }
+    /* ── PAGE HEADER ── diagonal brand bar */
+    .page-header {
+      height: 64px;
+      background: var(--blue);
+      position: sticky;
+      top: 0;
+      z-index: 300;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 28px;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    /* Magenta diagonal slash — left panel */
+    .page-header::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0;
+      width: 260px;
+      height: 100%;
+      background: var(--magenta);
+      clip-path: polygon(0 0, 82% 0, 100% 100%, 0 100%);
+      z-index: 0;
+    }
+    .page-header > * { position: relative; z-index: 1; }
+
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand-mark {
+      width: 38px; height: 38px;
+      background: white;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-weight: 800; font-size: 12px; color: var(--navy);
+      flex-shrink: 0; letter-spacing: -0.5px;
+    }
+    .brand-wordmark { line-height: 1.25; }
+    .brand-name {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 13px; font-weight: 700; color: white;
+      letter-spacing: 0.8px; text-transform: uppercase;
+      display: block;
+    }
+    .brand-sub {
+      font-size: 10px; font-weight: 400; color: rgba(255,255,255,0.75);
+      letter-spacing: 0.3px; display: block;
+    }
+    .header-right { display: flex; align-items: center; gap: 12px; }
+    .live-chip {
+      display: flex; align-items: center; gap: 6px;
+      background: rgba(255,255,255,0.1);
+      padding: 4px 10px;
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+    .live-dot { width: 7px; height: 7px; border-radius: 50%; background: #4ade80; animation: pulse 2s infinite; flex-shrink: 0; }
     .live-dot.error { background: #f87171; animation: none; }
     .live-dot.loading { background: #fbbf24; animation: none; }
-    @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(74,222,128,0.6); } 70% { box-shadow: 0 0 0 6px rgba(74,222,128,0); } 100% { box-shadow: 0 0 0 0 rgba(74,222,128,0); } }
-    .last-updated { font-size: 11px; opacity: 0.65; }
-    .btn-refresh { background: rgba(255,255,255,0.15); border: 1.5px solid rgba(255,255,255,0.3); color: white; font-family: inherit; font-size: 12px; font-weight: 600; padding: 6px 14px; border-radius: 2px; cursor: pointer; transition: background 0.15s; }
-    .btn-refresh:hover { background: rgba(255,255,255,0.25); }
-    .btn-refresh:disabled { opacity: 0.4; cursor: not-allowed; }
+    @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
+    .last-updated { font-size: 11px; color: rgba(255,255,255,0.7); }
+    .btn-refresh {
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.25);
+      color: white; font-family: 'Inter', sans-serif;
+      font-size: 12px; font-weight: 600;
+      padding: 6px 14px; cursor: pointer; transition: background 0.15s;
+    }
+    .btn-refresh:hover { background: rgba(255,255,255,0.2); }
+    .btn-refresh:disabled { opacity: 0.35; cursor: not-allowed; }
 
-    .main { max-width: 1000px; margin: 0 auto; padding: 20px 16px; }
+    /* ── PAGE BODY ── */
+    .page-body { display: flex; flex: 1; align-items: flex-start; }
 
-    .controls-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
-    .date-heading { font-size: 18px; font-weight: 800; color: #0f2954; }
-    input[type="date"] { border: 1.5px solid #e2e8f0; border-radius: 2px; padding: 6px 10px; font-family: inherit; font-size: 13px; background: white; color: #1e293b; cursor: pointer; }
-    input[type="date"]:focus { outline: none; border-color: #1d4ed8; }
+    /* ── SIDEBAR ── */
+    .sidebar {
+      width: 220px;
+      background: var(--navy);
+      flex-shrink: 0;
+      position: sticky;
+      top: 64px;
+      height: calc(100vh - 64px);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+    /* Diagonal accent at sidebar top */
+    .sidebar-top-accent {
+      height: 5px;
+      background: var(--magenta);
+      clip-path: polygon(0 0, 100% 0, 100% 100%, 8% 100%);
+      flex-shrink: 0;
+    }
+    .nav-group-label {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 10px; font-weight: 600;
+      color: rgba(255,255,255,0.3);
+      letter-spacing: 1.8px; text-transform: uppercase;
+      padding: 20px 20px 6px;
+    }
+    .nav-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 20px;
+      color: rgba(255,255,255,0.55);
+      font-size: 13px; font-weight: 500;
+      cursor: pointer;
+      border-left: 3px solid transparent;
+      transition: all 0.12s;
+      text-decoration: none;
+      user-select: none;
+    }
+    .nav-item:hover { color: white; background: rgba(255,255,255,0.04); }
+    .nav-item.active {
+      color: white;
+      background: rgba(255,31,255,0.07);
+      border-left-color: var(--magenta);
+    }
+    .nav-icon { width: 15px; height: 15px; flex-shrink: 0; }
+    .sidebar-divider { height: 1px; background: rgba(255,255,255,0.07); margin: 8px 0; }
+    .sidebar-bottom {
+      margin-top: auto;
+      padding: 14px 18px;
+      border-top: 1px solid rgba(255,255,255,0.07);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .user-avatar {
+      width: 30px; height: 30px;
+      background: var(--magenta);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; font-weight: 800; color: white; flex-shrink: 0;
+      letter-spacing: 0.5px;
+    }
+    .user-name { font-size: 12px; font-weight: 600; color: white; line-height: 1.3; }
+    .user-role { font-size: 10px; color: rgba(255,255,255,0.4); }
 
-    .error-banner { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; border-radius: 2px; padding: 12px 16px; font-size: 13px; font-weight: 500; margin-bottom: 16px; display: none; }
+    /* ── MAIN CONTENT ── */
+    .main-content { flex: 1; min-width: 0; }
+
+    /* Sub-header: white bar, blue bottom border, magenta left strip */
+    .content-header {
+      background: white;
+      border-bottom: 2px solid var(--blue);
+      height: 52px;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 28px 0 32px;
+      position: sticky;
+      top: 64px;
+      z-index: 100;
+      gap: 16px;
+    }
+    .content-header::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0;
+      width: 5px; height: 100%;
+      background: var(--magenta);
+      clip-path: polygon(0 0, 100% 8%, 100% 92%, 0 100%);
+    }
+    .page-title {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 14px; font-weight: 700; color: var(--navy);
+      letter-spacing: -0.2px;
+    }
+    .ch-right { display: flex; align-items: center; gap: 10px; }
+    input[type="date"] {
+      border: 1.5px solid var(--border);
+      padding: 5px 10px;
+      font-family: 'Inter', sans-serif; font-size: 13px;
+      background: white; color: var(--navy); cursor: pointer;
+    }
+    input[type="date"]:focus { outline: none; border-color: var(--blue); }
+
+    /* ── MAIN BODY ── */
+    .main-body { padding: 24px 28px 32px; }
+
+    /* ── ERROR BANNER ── */
+    .error-banner {
+      background: #fef2f2; color: #dc2626;
+      border-left: 3px solid #dc2626;
+      padding: 10px 14px; font-size: 13px;
+      margin-bottom: 20px; display: none;
+    }
     .error-banner.show { display: block; }
 
-    .team-section { margin-bottom: 28px; }
-    .team-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
-    .team-badge { display: flex; align-items: center; gap: 8px; }
-    .team-color-bar { width: 4px; height: 26px; border-radius: 2px; flex-shrink: 0; }
-    .team-name { font-size: 15px; font-weight: 800; color: #0f2954; letter-spacing: 0.5px; }
-    .team-stats { display: flex; gap: 8px; margin-left: auto; flex-wrap: wrap; }
-    .stat-pill { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 2px; }
-    .stat-total { background: #1d4ed8; color: white; }
-    .stat-hits { background: #f0fdf4; color: #16a34a; border: 1px solid #86efac; }
+    /* ── TEAM SECTION ── */
+    .team-section { margin-bottom: 32px; }
+    .team-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 10px; padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap; gap: 8px;
+    }
+    .team-label { display: flex; align-items: center; gap: 10px; }
+    .team-accent { width: 3px; height: 20px; flex-shrink: 0; }
+    .team-name {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 12px; font-weight: 700;
+      color: var(--navy); letter-spacing: 1.2px; text-transform: uppercase;
+    }
+    .team-stats { display: flex; gap: 6px; align-items: center; }
+    .stat-pill {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 10px; font-weight: 700;
+      padding: 3px 9px;
+      letter-spacing: 0.6px; text-transform: uppercase;
+    }
+    .stat-total { background: var(--blue); color: white; }
+    .stat-hits  { background: #f0fdf4; color: #16a34a; border: 1px solid #86efac; }
 
-    .member-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; }
+    /* ── MEMBER GRID ── */
+    .member-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 6px; }
 
-    .member-card { background: white; border-radius: 0; padding: 11px 14px; display: flex; align-items: center; gap: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); border: 1.5px solid transparent; transition: transform 0.1s; }
-    .member-card:hover { transform: translateY(-1px); }
-    .member-card.hit  { background: #f0fdf4; border-color: #86efac; }
-    .member-card.miss1 { background: #fff7ed; border-color: #fed7aa; }
-    .member-card.miss0 { background: #fef2f2; border-color: #fecaca; }
+    /* ── MEMBER CARD ── */
+    .member-card {
+      background: white;
+      border-top: 3px solid var(--blue);
+      padding: 11px 13px;
+      display: flex; align-items: center; gap: 10px;
+      box-shadow: var(--shadow);
+      transition: box-shadow 0.15s, transform 0.1s;
+    }
+    .member-card:hover { box-shadow: 0 4px 16px rgba(26,45,181,0.15); transform: translateY(-1px); }
+    .member-card.hit   { border-top-color: #16a34a; background: #fafffe; }
+    .member-card.miss1 { border-top-color: #ea580c; }
+    .member-card.miss0 { border-top-color: #dc2626; }
 
     .member-info { flex: 1; min-width: 0; }
-    .member-name { font-size: 13px; font-weight: 600; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .member-bar-wrap { height: 3px; background: #e2e8f0; border-radius: 0; margin-top: 5px; }
-    .member-bar { height: 100%; border-radius: 0; transition: width 0.5s; }
-    .bar-hit  { background: linear-gradient(90deg, #16a34a, #4ade80); }
-    .bar-miss1 { background: linear-gradient(90deg, #ea580c, #fb923c); }
-    .bar-miss0 { background: #fca5a5; }
+    .member-name {
+      font-size: 12px; font-weight: 600; color: var(--navy);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .member-bar-wrap { height: 2px; background: #eceef6; margin-top: 6px; }
+    .member-bar { height: 100%; transition: width 0.5s ease; }
+    .bar-hit   { background: #16a34a; }
+    .bar-miss1 { background: #ea580c; }
+    .bar-miss0 { background: #dc2626; }
 
-    .dc-badge { font-size: 24px; font-weight: 800; line-height: 1; flex-shrink: 0; min-width: 34px; text-align: right; }
+    .dc-badge {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 26px; font-weight: 800; line-height: 1;
+      flex-shrink: 0; min-width: 34px; text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
     .dc-hit  { color: #16a34a; }
     .dc-miss { color: #dc2626; }
 
-    .footer { text-align: center; padding: 24px 16px; font-size: 11px; color: #cbd5e1; }
+    /* ── FOOTER ── */
+    .page-footer {
+      background: var(--navy);
+      padding: 14px 32px;
+      position: relative;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    /* Mirrored diagonal — blue left, magenta bleeds in bottom-right */
+    .page-footer::after {
+      content: '';
+      position: absolute;
+      right: 0; bottom: 0;
+      width: 220px; height: 100%;
+      background: var(--magenta);
+      opacity: 0.18;
+      clip-path: polygon(40% 0, 100% 0, 100% 100%, 0 100%);
+    }
+    .footer-inner {
+      position: relative; z-index: 1;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 16px; flex-wrap: wrap;
+    }
+    .footer-contact {
+      font-size: 11px; color: rgba(255,255,255,0.45);
+      letter-spacing: 0.2px;
+    }
+    .footer-copy {
+      font-size: 10px; color: rgba(255,255,255,0.25);
+      letter-spacing: 0.3px; text-transform: uppercase;
+    }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 700px) {
+      .sidebar { display: none; }
+      .member-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+    }
   </style>
 </head>
 <body>
 
-<header class="header">
-  <div class="header-left">
-    <div class="logo">OA</div>
-    <div>
-      <div class="header-sub">OUTSOURCE ACCELERATOR</div>
-      <h1>DC Performance Dashboard</h1>
+<!-- ── Page Header ── -->
+<header class="page-header">
+  <div class="brand">
+    <div class="brand-mark">OA</div>
+    <div class="brand-wordmark">
+      <span class="brand-name">Outsource Accelerator</span>
+      <span class="brand-sub">Operations Platform</span>
     </div>
   </div>
   <div class="header-right">
-    <div class="live-dot loading" id="liveDot"></div>
-    <div class="last-updated" id="lastUpdated">Loading…</div>
+    <div class="live-chip">
+      <div class="live-dot loading" id="liveDot"></div>
+      <span class="last-updated" id="lastUpdated">Loading…</span>
+    </div>
     <button class="btn-refresh" id="btnRefresh" onclick="refresh()" disabled>↻ Refresh</button>
   </div>
 </header>
 
-<main class="main">
-  <div class="controls-row">
-    <div class="date-heading" id="dateHeading">Loading…</div>
-    <input type="date" id="selectedDate" oninput="renderDashboard()">
-  </div>
-  <div class="error-banner" id="errorBanner"></div>
-  <div id="teamsContainer"></div>
-</main>
+<!-- ── Page Body ── -->
+<div class="page-body">
 
-<footer class="footer">Outsource Accelerator · DC Performance Dashboard · Auto-refreshes every 60 seconds</footer>
+  <!-- ── Sidebar ── -->
+  <nav class="sidebar">
+    <div class="sidebar-top-accent"></div>
+
+    <div class="nav-group-label">Performance</div>
+    <a class="nav-item active" href="#">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="1" y="1" width="6" height="6"/><rect x="9" y="1" width="6" height="6"/>
+        <rect x="1" y="9" width="6" height="6"/><rect x="9" y="9" width="6" height="6"/>
+      </svg>
+      DC Dashboard
+    </a>
+    <a class="nav-item" href="#">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="6" cy="4.5" r="2.5"/>
+        <path d="M1 13c0-2.8 2.2-5 5-5s5 2.2 5 5"/>
+        <circle cx="12.5" cy="5" r="1.8"/>
+        <path d="M11 13c.3-1.7 1.4-3 2.8-3.5"/>
+      </svg>
+      Team
+    </a>
+    <a class="nav-item" href="#">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M2 12l3-4 3 3 2.5-5 3 4"/>
+        <rect x="1" y="1" width="14" height="14"/>
+      </svg>
+      Reports
+    </a>
+
+    <div class="sidebar-divider"></div>
+    <div class="nav-group-label">System</div>
+    <a class="nav-item" href="#">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="8" cy="8" r="2.2"/>
+        <path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/>
+      </svg>
+      Settings
+    </a>
+
+    <div class="sidebar-bottom">
+      <div class="user-avatar">RC</div>
+      <div>
+        <div class="user-name">Ritch</div>
+        <div class="user-role">Ops Supervisor</div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ── Main Content ── -->
+  <main class="main-content">
+
+    <!-- Sub-header -->
+    <div class="content-header">
+      <div class="page-title" id="dateHeading">Loading…</div>
+      <div class="ch-right">
+        <input type="date" id="selectedDate" oninput="renderDashboard()">
+      </div>
+    </div>
+
+    <!-- Body -->
+    <div class="main-body">
+      <div class="error-banner" id="errorBanner"></div>
+      <div id="teamsContainer"></div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ── Footer ── -->
+<footer class="page-footer">
+  <div class="footer-inner">
+    <div class="footer-contact">info@outsourceaccelerator.com &nbsp;·&nbsp; outsourceaccelerator.com &nbsp;·&nbsp; +(632) 8562.8025</div>
+    <div class="footer-copy">Confidential Property of Outsource Accelerator</div>
+  </div>
+</footer>
 
 <script>
   const CSV_URL      = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSisLiJWdncrB-dDPNI0JGqSTbBQl5n5OAel1Epyr7DAsonyVAa6HSFCVXdA4_uMTbnBgGawkyX6DYh/pub?gid=0&single=true&output=csv';
@@ -115,12 +422,12 @@
         { id: 'tupaz',    display: 'Rommel Tupaz',          ln: 'tupaz' },
         { id: 'togonon',  display: 'Jheus Togonon',         ln: 'togonon' },
         { id: 'ruiz',     display: 'Renz Ruiz',             ln: 'ruiz' },
-        { id: 'silang',   display: 'Summer Silang',          ln: 'silang' },
-        { id: 'garcia',   display: 'Chin Garcia',            ln: 'garcia' },
+        { id: 'silang',   display: 'Summer Silang',         ln: 'silang' },
+        { id: 'garcia',   display: 'Chin Garcia',           ln: 'garcia' },
       ]
     },
     {
-      id: 'ritchcent', name: 'RITCHCENT', color: '#1d4ed8',
+      id: 'ritchcent', name: 'RITCHCENT', color: '#1A2DB5',
       members: [
         { id: 'gadier',      display: 'Vincent Gadier',        ln: 'gadier' },
         { id: 'valenzuela',  display: 'Aaron Kyle Valenzuela', ln: 'valenzuela' },
@@ -146,25 +453,24 @@
       members: [
         { id: 'vere',        display: 'Jumar Vere',            ln: 'vere' },
         { id: 'bayhon',      display: 'Alvin Bayhon',          ln: 'bayhon' },
-        { id: 'demayo',      display: 'Devi Demayo',            ln: 'demayo' },
+        { id: 'demayo',      display: 'Devi Demayo',           ln: 'demayo' },
         { id: 'delos_reyes', display: 'Joy Delos Reyes',       ln: 'reyes', ln2: 'delos reyes' },
         { id: 'saminado',    display: 'Jervin Saminado',       ln: 'saminado' },
         { id: 'biron',       display: 'Anne Biron',            ln: 'biron' },
         { id: 'cavinta',     display: 'Steven Kurt Cavinta',   ln: 'cavinta' },
         { id: 'verastigue',  display: 'Bedier Verastigue',     ln: 'verastigue' },
-        { id: 'tapiador',    display: 'Quin Fernandez',         ln: 'tapiador' },
+        { id: 'tapiador',    display: 'Quin Fernandez',        ln: 'tapiador' },
         { id: 'bondad',      display: 'Joshua Bondad',         ln: 'bondad' },
         { id: 'benjamin',    display: 'Russell Benjamin',      ln: 'benjamin' },
         { id: 'silva',       display: 'Godwin Silva',          ln: 'silva' },
         { id: 'escabillas',  display: 'Kenneth Escabillas',    ln: 'escabillas' },
-        { id: 'bautista',    display: 'Samara Bautista',        ln: 'bautista' },
+        { id: 'bautista',    display: 'Samara Bautista',       ln: 'bautista' },
       ]
     }
   ];
 
-  // ── Build name-matching lookups ──
-  const LN_MAP  = {}; // lastWord → [{m, team}]
-  const LN2_MAP = {}; // twoWordLN → [{m, team}]
+  // ── Name-matching lookups ──
+  const LN_MAP = {}, LN2_MAP = {};
   for (const team of TEAMS) {
     for (const m of team.members) {
       (LN_MAP[m.ln] = LN_MAP[m.ln] || []).push({ m, team });
@@ -172,34 +478,27 @@
     }
   }
 
-  // Given a raw name from the sheet, return a member id
   function resolveAgent(rawName) {
     const parts = rawName.trim().toLowerCase().split(/\s+/);
     if (!parts.length) return null;
-
-    // Try two-word last name first (e.g. "Joy Delos Reyes")
     if (parts.length >= 3) {
-      const tw = parts[parts.length - 2] + ' ' + parts[parts.length - 1];
+      const tw = parts[parts.length-2] + ' ' + parts[parts.length-1];
       if (LN2_MAP[tw]?.length) return LN2_MAP[tw][0].m.id;
     }
-
-    const ln = parts[parts.length - 1];
+    const ln = parts[parts.length-1];
     const hits = LN_MAP[ln] || [];
     if (!hits.length) return null;
     if (hits.length === 1) return hits[0].m.id;
-
-    // Disambiguate by first name (handles two Sarmientos)
     const fn = parts[0];
     const exact = hits.find(c => c.m.fn && c.m.fn === fn);
     return exact ? exact.m.id : hits[0].m.id;
   }
 
   const $ = id => document.getElementById(id);
-  let rawRows = [];
-  let refreshTimer = null;
+  let rawRows = [], refreshTimer = null;
 
   (function init() {
-    $('selectedDate').value = new Date().toISOString().slice(0, 10);
+    $('selectedDate').value = new Date().toISOString().slice(0,10);
     loadData();
   })();
 
@@ -207,7 +506,7 @@
     setDot('loading');
     try {
       const res = await fetch(CSV_URL + '&t=' + Date.now());
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
       rawRows = parseCSV(await res.text());
       hideError();
       $('btnRefresh').disabled = false;
@@ -215,7 +514,7 @@
       setDot('live');
       renderDashboard();
       scheduleRefresh();
-    } catch (err) {
+    } catch(err) {
       setDot('error');
       $('lastUpdated').textContent = 'Failed to load';
       showError(err.message);
@@ -228,8 +527,8 @@
 
   function parseCSV(text) {
     return text.trim().split('\n').slice(1).map(line => {
-      const c = splitCSVLine(line);
-      return { rawDate: (c[0]||'').trim(), agent: (c[1]||'').trim(), sp1: (c[2]||'').trim(), sp2: (c[3]||'').trim() };
+      const c = splitLine(line);
+      return { rawDate:(c[0]||'').trim(), agent:(c[1]||'').trim(), sp1:(c[2]||'').trim(), sp2:(c[3]||'').trim() };
     }).filter(r => r.rawDate && r.agent);
   }
 
@@ -250,29 +549,28 @@
     const date   = $('selectedDate').value;
     const counts = aggregateForDate(date);
     $('dateHeading').textContent = formatDate(date);
-
-    const container = $('teamsContainer');
-    container.innerHTML = '';
-    for (const team of TEAMS) container.appendChild(buildTeamSection(team, counts));
+    const c = $('teamsContainer');
+    c.innerHTML = '';
+    for (const team of TEAMS) c.appendChild(buildTeamSection(team, counts));
   }
 
   function buildTeamSection(team, counts) {
     const withCounts = team.members.map(m => ({ m, count: counts[m.id] || 0 }));
-    const sorted     = [...withCounts].sort((a, b) => b.count - a.count);
-    const total      = withCounts.reduce((s, x) => s + x.count, 0);
+    const sorted     = [...withCounts].sort((a,b) => b.count - a.count);
+    const total      = withCounts.reduce((s,x) => s + x.count, 0);
     const hits       = withCounts.filter(x => x.count >= DAILY_TARGET).length;
 
     const sec = document.createElement('div');
     sec.className = 'team-section';
     sec.innerHTML = `
       <div class="team-header">
-        <div class="team-badge">
-          <div class="team-color-bar" style="background:${esc(team.color)}"></div>
+        <div class="team-label">
+          <div class="team-accent" style="background:${esc(team.color)}"></div>
           <div class="team-name">${esc(team.name)}</div>
         </div>
         <div class="team-stats">
-          <span class="stat-pill stat-total">${total} DCs today</span>
-          <span class="stat-pill stat-hits">${hits} / ${team.members.length} hit target</span>
+          <span class="stat-pill stat-total">${total} DCs</span>
+          <span class="stat-pill stat-hits">${hits} / ${team.members.length} on target</span>
         </div>
       </div>
       <div class="member-grid"></div>`;
@@ -283,13 +581,12 @@
   }
 
   function buildCard(m, count) {
-    const hit  = count >= DAILY_TARGET;
-    const cls  = hit ? 'hit' : count === 1 ? 'miss1' : 'miss0';
-    const bar  = hit ? 'bar-hit' : count === 1 ? 'bar-miss1' : 'bar-miss0';
-    const pct  = Math.min(100, (count / DAILY_TARGET) * 100);
-
+    const hit = count >= DAILY_TARGET;
+    const cls = hit ? 'hit' : count === 1 ? 'miss1' : 'miss0';
+    const bar = hit ? 'bar-hit' : count === 1 ? 'bar-miss1' : 'bar-miss0';
+    const pct = Math.min(100, (count / DAILY_TARGET) * 100);
     const card = document.createElement('div');
-    card.className = `member-card ${cls}`;
+    card.className = 'member-card ' + cls;
     card.innerHTML = `
       <div class="member-info">
         <div class="member-name">${esc(m.display)}</div>
@@ -307,20 +604,17 @@
     }
     return null;
   }
-
-  function splitCSVLine(line) {
-    const cols = []; let cur = '', inQ = false;
+  function splitLine(line) {
+    const cols=[]; let cur='', inQ=false;
     for (const ch of line) {
-      if (ch === '"') inQ = !inQ;
-      else if (ch === ',' && !inQ) { cols.push(cur.trim()); cur = ''; }
-      else cur += ch;
+      if (ch==='"') inQ=!inQ;
+      else if (ch===',' && !inQ) { cols.push(cur.trim()); cur=''; }
+      else cur+=ch;
     }
-    cols.push(cur.trim());
-    return cols;
+    cols.push(cur.trim()); return cols;
   }
-
-  function setDot(s) { $('liveDot').className = 'live-dot' + (s !== 'live' ? ' ' + s : ''); }
-  function showError(msg) { const e = $('errorBanner'); e.textContent = '⚠️ ' + msg; e.classList.add('show'); }
+  function setDot(s) { $('liveDot').className = 'live-dot' + (s!=='live' ? ' '+s : ''); }
+  function showError(msg) { const e=$('errorBanner'); e.textContent='⚠ '+msg; e.classList.add('show'); }
   function hideError() { $('errorBanner').classList.remove('show'); }
   function formatDate(iso) {
     if (!iso) return '';
