@@ -278,6 +278,18 @@
     .view-btn.active { background: var(--blue); color: white; }
     .view-btn:hover:not(.active) { background: var(--bg); color: var(--navy); }
 
+    /* ── WEEK NAV ── */
+    .week-nav { display: flex; gap: 4px; }
+    .week-nav-btn {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 11px; font-weight: 700;
+      padding: 5px 12px; cursor: pointer;
+      background: white; color: var(--navy);
+      border: 1.5px solid var(--border);
+      letter-spacing: 0.3px; transition: background 0.12s;
+    }
+    .week-nav-btn:hover { background: var(--bg); border-color: var(--blue); }
+
     /* ── WTD RANGE LABEL ── */
     .wtd-range {
       font-size: 11px; color: var(--gray); font-style: italic;
@@ -416,6 +428,10 @@
           <button class="view-btn active" id="btnDaily" onclick="setView('daily')">Daily</button>
           <button class="view-btn" id="btnWtd" onclick="setView('wtd')">Week to Date</button>
         </div>
+        <div class="week-nav" id="weekNav" style="display:none;">
+          <button class="week-nav-btn" onclick="shiftWeek(-1)">&#8592; Prev</button>
+          <button class="week-nav-btn" onclick="shiftWeek(1)">Next &#8594;</button>
+        </div>
         <input type="date" id="selectedDate" oninput="renderDashboard()">
       </div>
     </div>
@@ -530,6 +546,14 @@
     currentView = v;
     $('btnDaily').classList.toggle('active', v === 'daily');
     $('btnWtd').classList.toggle('active', v === 'wtd');
+    $('weekNav').style.display = v === 'wtd' ? 'flex' : 'none';
+    renderDashboard();
+  }
+
+  function shiftWeek(delta) {
+    const d = new Date($('selectedDate').value + 'T00:00:00');
+    d.setDate(d.getDate() + delta * 7);
+    $('selectedDate').value = d.toISOString().slice(0,10);
     renderDashboard();
   }
 
@@ -598,23 +622,31 @@
     }
   }
 
-  // ── WTD: get Mon–selectedDate business days ──
+  // ── WTD: get all business days Mon–Fri of the selected date's week ──
+  // Capped at today so future days are excluded.
   function getBusinessDaysFrom(isoDate) {
     const [y,m,d] = isoDate.split('-').map(Number);
     const selected = new Date(y, m-1, d);
-    // Find Monday of this week
-    const day = selected.getDay(); // 0=Sun,1=Mon,...6=Sat
-    const diffToMon = day === 0 ? -6 : 1 - day;
+
+    // Monday of this week
+    const dow = selected.getDay();
     const monday = new Date(selected);
-    monday.setDate(selected.getDate() + diffToMon);
+    monday.setDate(selected.getDate() - (dow === 0 ? 6 : dow - 1));
+
+    // Friday of this week
+    const friday = new Date(monday);
+    friday.setDate(monday.getDate() + 4);
+
+    // Cap at today so we don't include future dates
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const end = friday <= today ? friday : today;
 
     const dates = [];
     const cur = new Date(monday);
-    while (cur <= selected) {
-      const dow = cur.getDay();
-      if (dow !== 0 && dow !== 6) { // skip weekends
-        dates.push(cur.toISOString().slice(0,10));
-      }
+    while (cur <= end) {
+      const d2 = cur.getDay();
+      if (d2 !== 0 && d2 !== 6) dates.push(cur.toISOString().slice(0,10));
       cur.setDate(cur.getDate() + 1);
     }
     return dates;
