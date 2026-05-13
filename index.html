@@ -246,9 +246,26 @@
       font-size: 12px; font-weight: 600; color: var(--navy);
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-    .member-pct {
+    .bar-outer {
+      position: relative;
+      height: 16px;
+      background: #eceef6;
+      margin-top: 6px;
+      overflow: hidden;
+    }
+    .bar-fill {
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      transition: width 0.4s ease;
+    }
+    .bar-pct-label {
+      position: absolute;
+      left: 0; right: 0; top: 0; bottom: 0;
+      display: flex; align-items: center;
+      padding-left: 6px;
       font-family: 'Plus Jakarta Sans', sans-serif;
-      font-size: 11px; font-weight: 700; margin-top: 5px;
+      font-size: 10px; font-weight: 700;
+      line-height: 1;
     }
 
     .dc-badge {
@@ -912,30 +929,38 @@
   function buildCard(m, count) {
     const hit = count >= DAILY_TARGET;
     const pct = Math.round((count / DAILY_TARGET) * 100);
-    const pctColor = hit ? '#16a34a' : count >= 1 ? '#ea580c' : '#dc2626';
+    const color = hit ? '#16a34a' : count >= 1 ? '#ea580c' : '#dc2626';
+    const labelColor = pct >= 40 ? 'white' : color;
     const card = document.createElement('div');
     card.className = 'member-card';
     card.innerHTML = `
       <div class="member-info">
         <div class="member-name">${esc(m.display)}</div>
-        <div class="member-pct" style="color:${pctColor}">${pct}%</div>
+        <div class="bar-outer">
+          <div class="bar-fill" style="width:${Math.min(pct,100)}%;background:${color}"></div>
+          <span class="bar-pct-label" style="color:${labelColor}">${pct}%</span>
+        </div>
       </div>
       <div class="dc-badge ${hit ? 'dc-hit' : 'dc-miss'}">${count}</div>`;
     return card;
   }
 
   function buildPeriodCard(m, count, target) {
-    let badgeCls, pctColor;
-    if (count >= target)          { badgeCls='dc-wtd-green';  pctColor='#16a34a'; }
-    else if (count >= target / 2) { badgeCls='dc-wtd-orange'; pctColor='#ea580c'; }
-    else                          { badgeCls='dc-wtd-red';    pctColor='#dc2626'; }
+    let badgeCls, color;
+    if (count >= target)          { badgeCls='dc-wtd-green';  color='#16a34a'; }
+    else if (count >= target / 2) { badgeCls='dc-wtd-orange'; color='#ea580c'; }
+    else                          { badgeCls='dc-wtd-red';    color='#dc2626'; }
     const pct = Math.round((count / target) * 100);
+    const labelColor = pct >= 40 ? 'white' : color;
     const card = document.createElement('div');
     card.className = 'member-card';
     card.innerHTML = `
       <div class="member-info">
         <div class="member-name">${esc(m.display)}</div>
-        <div class="member-pct" style="color:${pctColor}">${pct}%</div>
+        <div class="bar-outer">
+          <div class="bar-fill" style="width:${Math.min(pct,100)}%;background:${color}"></div>
+          <span class="bar-pct-label" style="color:${labelColor}">${pct}%</span>
+        </div>
       </div>
       <div class="dc-badge ${badgeCls}">${count}</div>`;
     return card;
