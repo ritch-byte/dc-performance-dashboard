@@ -559,18 +559,18 @@
     const dow = dt.getDay();
     const monday = new Date(dt);
     monday.setDate(dt.getDate() - (dow === 0 ? 6 : dow - 1));
-    return monday.toISOString().slice(0,10);
+    return localIso(monday);
   }
 
   function generateWeekOptions() {
     // First Monday of 2026 is Jan 5
     const start = new Date(2026, 0, 5);
-    const curMon = getMondayIso(new Date().toISOString().slice(0,10));
-    const todayMonday = new Date(curMon + 'T00:00:00');
+    const curMon = getMondayIso(localIso(new Date()));
+    const todayMonday = new Date(curMon.split('-')[0], +curMon.split('-')[1]-1, +curMon.split('-')[2]);
     const groups = {};
     const cur = new Date(start);
     while (cur <= todayMonday) {
-      const iso = cur.toISOString().slice(0,10);
+      const iso = localIso(cur);
       const [y, m] = iso.split('-');
       const key = `${y}-${m}`;
       if (!groups[key]) groups[key] = [];
@@ -614,7 +614,7 @@
   }
 
   (function init() {
-    $('selectedDate').value = new Date().toISOString().slice(0,10);
+    $('selectedDate').value = localIso(new Date());
     loadData();
   })();
 
@@ -702,7 +702,7 @@
     const cur = new Date(monday);
     while (cur <= end) {
       const d2 = cur.getDay();
-      if (d2 !== 0 && d2 !== 6) dates.push(cur.toISOString().slice(0,10));
+      if (d2 !== 0 && d2 !== 6) dates.push(localIso(cur));
       cur.setDate(cur.getDate() + 1);
     }
     return dates;
@@ -815,6 +815,11 @@
     if (!iso) return '';
     const [y,m,d] = iso.split('-');
     return new Date(+y,+m-1,+d).toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  }
+  function localIso(dt) {
+    return dt.getFullYear() + '-' +
+      String(dt.getMonth()+1).padStart(2,'0') + '-' +
+      String(dt.getDate()).padStart(2,'0');
   }
   function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 </script>
