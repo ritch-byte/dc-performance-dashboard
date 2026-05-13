@@ -233,27 +233,23 @@
     /* ── MEMBER CARD ── */
     .member-card {
       background: white;
-      border-top: 3px solid var(--blue);
+      border: 1px solid var(--border);
       padding: 11px 13px;
       display: flex; align-items: center; gap: 10px;
       box-shadow: var(--shadow);
       transition: box-shadow 0.15s, transform 0.1s;
     }
     .member-card:hover { box-shadow: 0 4px 16px rgba(26,45,181,0.15); transform: translateY(-1px); }
-    .member-card.hit   { border-top-color: #16a34a; background: #fafffe; }
-    .member-card.miss1 { border-top-color: #ea580c; }
-    .member-card.miss0 { border-top-color: #dc2626; }
 
     .member-info { flex: 1; min-width: 0; }
     .member-name {
       font-size: 12px; font-weight: 600; color: var(--navy);
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-    .member-bar-wrap { height: 2px; background: #eceef6; margin-top: 6px; }
-    .member-bar { height: 100%; transition: width 0.5s ease; }
-    .bar-hit   { background: #16a34a; }
-    .bar-miss1 { background: #ea580c; }
-    .bar-miss0 { background: #dc2626; }
+    .member-pct {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 11px; font-weight: 700; margin-top: 5px;
+    }
 
     .dc-badge {
       font-family: 'Plus Jakarta Sans', sans-serif;
@@ -328,16 +324,10 @@
       margin-bottom: 16px; letter-spacing: 0.2px;
     }
 
-    /* ── WTD CARD STATES ── */
-    .member-card.wtd-green  { border-top-color: #16a34a; background: #fafffe; }
-    .member-card.wtd-orange { border-top-color: #ea580c; }
-    .member-card.wtd-red    { border-top-color: #dc2626; }
+    /* ── WTD / PERIOD BADGE COLORS ── */
     .dc-wtd-green  { color: #16a34a; }
     .dc-wtd-orange { color: #ea580c; }
     .dc-wtd-red    { color: #dc2626; }
-    .bar-wtd-green  { background: #16a34a; }
-    .bar-wtd-orange { background: #ea580c; }
-    .bar-wtd-red    { background: #dc2626; }
 
     /* ── REPORTS TABLE ── */
     .reports-wrap { overflow-x: auto; }
@@ -921,32 +911,31 @@
 
   function buildCard(m, count) {
     const hit = count >= DAILY_TARGET;
-    const cls = hit ? 'hit' : count === 1 ? 'miss1' : 'miss0';
-    const bar = hit ? 'bar-hit' : count === 1 ? 'bar-miss1' : 'bar-miss0';
-    const pct = Math.min(100, (count / DAILY_TARGET) * 100);
+    const pct = Math.round((count / DAILY_TARGET) * 100);
+    const pctColor = hit ? '#16a34a' : count >= 1 ? '#ea580c' : '#dc2626';
     const card = document.createElement('div');
-    card.className = 'member-card ' + cls;
+    card.className = 'member-card';
     card.innerHTML = `
       <div class="member-info">
         <div class="member-name">${esc(m.display)}</div>
-        <div class="member-bar-wrap"><div class="member-bar ${bar}" style="width:${pct}%"></div></div>
+        <div class="member-pct" style="color:${pctColor}">${pct}%</div>
       </div>
       <div class="dc-badge ${hit ? 'dc-hit' : 'dc-miss'}">${count}</div>`;
     return card;
   }
 
   function buildPeriodCard(m, count, target) {
-    let cardCls, barCls, badgeCls;
-    if (count >= target)            { cardCls='wtd-green';  barCls='bar-wtd-green';  badgeCls='dc-wtd-green'; }
-    else if (count >= target / 2)   { cardCls='wtd-orange'; barCls='bar-wtd-orange'; badgeCls='dc-wtd-orange'; }
-    else                            { cardCls='wtd-red';    barCls='bar-wtd-red';    badgeCls='dc-wtd-red'; }
-    const pct = Math.min(100, (count / target) * 100);
+    let badgeCls, pctColor;
+    if (count >= target)          { badgeCls='dc-wtd-green';  pctColor='#16a34a'; }
+    else if (count >= target / 2) { badgeCls='dc-wtd-orange'; pctColor='#ea580c'; }
+    else                          { badgeCls='dc-wtd-red';    pctColor='#dc2626'; }
+    const pct = Math.round((count / target) * 100);
     const card = document.createElement('div');
-    card.className = 'member-card ' + cardCls;
+    card.className = 'member-card';
     card.innerHTML = `
       <div class="member-info">
         <div class="member-name">${esc(m.display)}</div>
-        <div class="member-bar-wrap"><div class="member-bar ${barCls}" style="width:${pct}%"></div></div>
+        <div class="member-pct" style="color:${pctColor}">${pct}%</div>
       </div>
       <div class="dc-badge ${badgeCls}">${count}</div>`;
     return card;
@@ -1121,7 +1110,6 @@
         const mtd = counts[m.id] || 0;
         const card = document.createElement('div');
         card.className = 'member-card';
-        card.style.borderTopColor = team.color;
         card.innerHTML = `
           <div class="member-info">
             <div class="member-name">${esc(m.display)}</div>
