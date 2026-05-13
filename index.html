@@ -571,8 +571,10 @@
     const cur = new Date(start);
     while (cur <= todayMonday) {
       const iso = localIso(cur);
-      const [y, m] = iso.split('-');
-      const key = `${y}-${m}`;
+      // Group by the month of Friday (so Apr 27–May 1 belongs to May, not April)
+      const [wy, wm, wd] = iso.split('-').map(Number);
+      const fri = new Date(wy, wm-1, wd + 4);
+      const key = `${fri.getFullYear()}-${String(fri.getMonth()+1).padStart(2,'0')}`;
       if (!groups[key]) groups[key] = [];
       groups[key].push(iso);
       cur.setDate(cur.getDate() + 7);
