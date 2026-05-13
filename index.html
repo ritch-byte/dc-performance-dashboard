@@ -374,14 +374,14 @@
     <div class="sidebar-top-accent"></div>
 
     <div class="nav-group-label">Performance</div>
-    <a class="nav-item active" href="#">
+    <a class="nav-item active" id="navDashboard" href="#" onclick="showPage('dashboard');return false;">
       <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
         <rect x="1" y="1" width="6" height="6"/><rect x="9" y="1" width="6" height="6"/>
         <rect x="1" y="9" width="6" height="6"/><rect x="9" y="9" width="6" height="6"/>
       </svg>
       DC Dashboard
     </a>
-    <a class="nav-item" href="#">
+    <a class="nav-item" id="navTeam" href="#" onclick="showPage('team');return false;">
       <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
         <circle cx="6" cy="4.5" r="2.5"/>
         <path d="M1 13c0-2.8 2.2-5 5-5s5 2.2 5 5"/>
@@ -420,30 +420,38 @@
   <!-- ── Main Content ── -->
   <main class="main-content">
 
-    <!-- Sub-header -->
-    <div class="content-header">
-      <div class="page-title" id="dateHeading">Loading…</div>
-      <div class="ch-right">
-        <div class="view-toggle">
-          <button class="view-btn active" id="btnDaily"    onclick="setView('daily')">Daily</button>
-          <button class="view-btn" id="btnWtd"      onclick="setView('wtd')">Week to Date</button>
-          <button class="view-btn" id="btnMtd"      onclick="setView('mtd')">Month to Date</button>
-          <button class="view-btn" id="btnPerMonth" onclick="setView('permonth')">Per Month</button>
+    <!-- ── Dashboard Section ── -->
+    <div id="dashboardSection">
+      <div class="content-header">
+        <div class="page-title" id="dateHeading">Loading…</div>
+        <div class="ch-right">
+          <div class="view-toggle">
+            <button class="view-btn active" id="btnDaily"    onclick="setView('daily')">Daily</button>
+            <button class="view-btn" id="btnWtd"      onclick="setView('wtd')">Week to Date</button>
+            <button class="view-btn" id="btnMtd"      onclick="setView('mtd')">Month to Date</button>
+            <button class="view-btn" id="btnPerMonth" onclick="setView('permonth')">Per Month</button>
+          </div>
+          <div id="weekSelectWrap" style="display:none;">
+            <select id="weekSelect" class="week-select" onchange="onWeekSelect()"></select>
+          </div>
+          <div id="monthSelectWrap" style="display:none;">
+            <select id="monthSelect" class="week-select" onchange="onMonthSelect()"></select>
+          </div>
+          <input type="date" id="selectedDate" oninput="renderDashboard()">
         </div>
-        <div id="weekSelectWrap" style="display:none;">
-          <select id="weekSelect" class="week-select" onchange="onWeekSelect()"></select>
-        </div>
-        <div id="monthSelectWrap" style="display:none;">
-          <select id="monthSelect" class="week-select" onchange="onMonthSelect()"></select>
-        </div>
-        <input type="date" id="selectedDate" oninput="renderDashboard()">
+      </div>
+      <div class="main-body">
+        <div class="error-banner" id="errorBanner"></div>
+        <div id="teamsContainer"></div>
       </div>
     </div>
 
-    <!-- Body -->
-    <div class="main-body">
-      <div class="error-banner" id="errorBanner"></div>
-      <div id="teamsContainer"></div>
+    <!-- ── Team Section ── -->
+    <div id="teamSection" style="display:none;">
+      <div class="content-header">
+        <div class="page-title">Team Roster</div>
+      </div>
+      <div class="main-body" id="teamBody"></div>
     </div>
 
   </main>
@@ -876,6 +884,57 @@
     const [y,m,d] = iso.split('-');
     return new Date(+y,+m-1,+d).toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   }
+  // ── Page navigation ──
+  function showPage(page) {
+    $('dashboardSection').style.display = page === 'dashboard' ? '' : 'none';
+    $('teamSection').style.display      = page === 'team'      ? '' : 'none';
+    $('navDashboard').classList.toggle('active', page === 'dashboard');
+    $('navTeam').classList.toggle('active', page === 'team');
+    if (page === 'team') renderTeamRoster();
+  }
+
+  function renderTeamRoster() {
+    const today = localIso(new Date());
+    const [ty, tm] = today.split('-');
+    const { counts } = aggregateMonth(`${ty}-${tm}`, true);
+    const body = $('teamBody');
+    body.innerHTML = '';
+    for (const team of TEAMS) {
+      const sorted = [...team.members].sort((a,b) => a.display.localeCompare(b.display));
+      const sec = document.createElement('div');
+      sec.className = 'team-section';
+      sec.innerHTML = `
+        <div class="team-header">
+          <div class="team-label">
+            <div class="team-accent" style="background:${esc(team.color)}"></div>
+            <div class="team-name">${esc(team.name)}</div>
+          </div>
+          <div class="team-stats">
+            <span class="stat-pill stat-total">${sorted.length} members</span>
+          </div>
+        </div>
+        <div class="member-grid"></div>`;
+      const grid = sec.querySelector('.member-grid');
+      for (const m of sorted) {
+        const mtd = counts[m.id] || 0;
+        const card = document.createElement('div');
+        card.className = 'member-card';
+        card.style.borderTopColor = team.color;
+        card.innerHTML = `
+          <div class="member-info">
+            <div class="member-name">${esc(m.display)}</div>
+            <div style="font-size:10px;color:var(--gray);margin-top:3px;letter-spacing:0.3px;text-transform:uppercase">${esc(team.name)}</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0">
+            <div style="font-size:22px;font-weight:800;font-family:'Plus Jakarta Sans',sans-serif;color:var(--blue);line-height:1">${mtd}</div>
+            <div style="font-size:9px;color:var(--gray);letter-spacing:0.5px;text-transform:uppercase;margin-top:2px">MTD DCs</div>
+          </div>`;
+        grid.appendChild(card);
+      }
+      body.appendChild(sec);
+    }
+  }
+
   function localIso(dt) {
     return dt.getFullYear() + '-' +
       String(dt.getMonth()+1).padStart(2,'0') + '-' +
