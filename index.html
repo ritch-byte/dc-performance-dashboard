@@ -425,11 +425,16 @@
       <div class="page-title" id="dateHeading">Loading…</div>
       <div class="ch-right">
         <div class="view-toggle">
-          <button class="view-btn active" id="btnDaily" onclick="setView('daily')">Daily</button>
-          <button class="view-btn" id="btnWtd" onclick="setView('wtd')">Week to Date</button>
+          <button class="view-btn active" id="btnDaily"    onclick="setView('daily')">Daily</button>
+          <button class="view-btn" id="btnWtd"      onclick="setView('wtd')">Week to Date</button>
+          <button class="view-btn" id="btnMtd"      onclick="setView('mtd')">Month to Date</button>
+          <button class="view-btn" id="btnPerMonth" onclick="setView('permonth')">Per Month</button>
         </div>
         <div id="weekSelectWrap" style="display:none;">
           <select id="weekSelect" class="week-select" onchange="onWeekSelect()"></select>
+        </div>
+        <div id="monthSelectWrap" style="display:none;">
+          <select id="monthSelect" class="week-select" onchange="onMonthSelect()"></select>
         </div>
         <input type="date" id="selectedDate" oninput="renderDashboard()">
       </div>
@@ -537,18 +542,22 @@
     return exact ? exact.m.id : hits[0].m.id;
   }
 
-  const WEEKLY_TARGET = 10;
+  const WEEKLY_TARGET  = 10;
+  const MONTHLY_TARGET = 40;
   const $ = id => document.getElementById(id);
   let rawRows = [], refreshTimer = null, currentView = 'daily';
 
   function setView(v) {
     currentView = v;
-    $('btnDaily').classList.toggle('active', v === 'daily');
-    $('btnWtd').classList.toggle('active', v === 'wtd');
-    const isWtd = v === 'wtd';
-    $('weekSelectWrap').style.display = isWtd ? 'block' : 'none';
-    $('selectedDate').style.display   = isWtd ? 'none'  : '';
-    if (isWtd) buildWeekSelect();
+    ['daily','wtd','mtd','permonth'].forEach(id => {
+      const btn = $('btn' + id.charAt(0).toUpperCase() + id.slice(1));
+      if (btn) btn.classList.toggle('active', v === id);
+    });
+    $('weekSelectWrap').style.display  = v === 'wtd'      ? 'block' : 'none';
+    $('monthSelectWrap').style.display = v === 'permonth' ? 'block' : 'none';
+    $('selectedDate').style.display    = v === 'daily'    ? ''      : 'none';
+    if (v === 'wtd')      buildWeekSelect();
+    if (v === 'permonth') buildMonthSelect();
     renderDashboard();
   }
 
@@ -672,11 +681,23 @@
       const counts = aggregateForDate(date);
       $('dateHeading').textContent = formatDate(date);
       for (const team of TEAMS) c.appendChild(buildTeamSection(team, counts, 'daily'));
-    } else {
+    } else if (currentView === 'wtd') {
       const { dates, counts } = aggregateWTD(date);
-      const rangeLabel = wtdRangeLabel(dates);
-      $('dateHeading').textContent = 'Week to Date — ' + rangeLabel;
+      $('dateHeading').textContent = 'Week to Date — ' + wtdRangeLabel(dates);
       for (const team of TEAMS) c.appendChild(buildTeamSection(team, counts, 'wtd'));
+    } else if (currentView === 'mtd') {
+      const today = localIso(new Date());
+      const [ty, tm] = today.split('-');
+      const { dates, counts } = aggregateMonth(`${ty}-${tm}`, true);
+      $('dateHeading').textContent = 'Month to Date — ' + wtdRangeLabel(dates);
+      for (const team of TEAMS) c.appendChild(buildTeamSection(team, counts, 'mtd'));
+    } else if (currentView === 'permonth') {
+      const ym = $('monthSelect').value || localIso(new Date()).slice(0,7);
+      const { dates, counts } = aggregateMonth(ym, false);
+      const [y, m] = ym.split('-').map(Number);
+      const label = new Date(y, m-1, 1).toLocaleDateString('en-US', { month:'long', year:'numeric' });
+      $('dateHeading').textContent = label + ' — ' + wtdRangeLabel(dates);
+      for (const team of TEAMS) c.appendChild(buildTeamSection(team, counts, 'permonth'));
     }
   }
 
@@ -722,6 +743,43 @@
     return { dates, counts };
   }
 
+  function aggregateMonth(yearMonth, capToday) {
+    const [y, m] = yearMonth.split('-').map(Number);
+    const lastDay = new Date(y, m, 0);
+    const today = new Date(); today.setHours(0,0,0,0);
+    const end = (capToday && lastDay > today) ? today : lastDay;
+    const dates = [];
+    const cur = new Date(y, m-1, 1);
+    while (cur <= end) {
+      const dow = cur.getDay();
+      if (dow !== 0 && dow !== 6) dates.push(localIso(cur));
+      cur.setDate(cur.getDate() + 1);
+    }
+    const counts = {};
+    for (const date of dates) {
+      for (const [id, n] of Object.entries(aggregateForDate(date)))
+        counts[id] = (counts[id] || 0) + n;
+    }
+    return { dates, counts };
+  }
+
+  function buildMonthSelect() {
+    const sel = $('monthSelect');
+    sel.innerHTML = '';
+    const today = localIso(new Date());
+    let [y, m] = today.split('-').map(Number);
+    while (y > 2026 || (y === 2026 && m >= 1)) {
+      const ym = `${y}-${String(m).padStart(2,'0')}`;
+      const opt = document.createElement('option');
+      opt.value = ym;
+      opt.textContent = new Date(y, m-1, 1).toLocaleDateString('en-US', { month:'long', year:'numeric' });
+      sel.appendChild(opt);
+      m--; if (m === 0) { m = 12; y--; }
+    }
+  }
+
+  function onMonthSelect() { renderDashboard(); }
+
   function wtdRangeLabel(dates) {
     if (!dates.length) return '';
     const fmt = iso => { const [y,m,d] = iso.split('-'); return new Date(+y,+m-1,+d).toLocaleDateString('en-US',{month:'short',day:'numeric'}); };
@@ -731,12 +789,12 @@
   }
 
   function buildTeamSection(team, counts, view) {
-    const target = view === 'wtd' ? WEEKLY_TARGET : DAILY_TARGET;
+    const target   = view === 'daily' ? DAILY_TARGET : view === 'wtd' ? WEEKLY_TARGET : MONTHLY_TARGET;
+    const hitLabel = { daily:'on target', wtd:'on weekly target', mtd:'on monthly target', permonth:'on monthly target' }[view];
     const withCounts = team.members.map(m => ({ m, count: counts[m.id] || 0 }));
     const sorted     = [...withCounts].sort((a,b) => b.count - a.count);
     const total      = withCounts.reduce((s,x) => s + x.count, 0);
     const hits       = withCounts.filter(x => x.count >= target).length;
-    const hitLabel   = view === 'wtd' ? 'on weekly target' : 'on target';
 
     const sec = document.createElement('div');
     sec.className = 'team-section';
@@ -755,7 +813,7 @@
 
     const grid = sec.querySelector('.member-grid');
     for (const { m, count } of sorted) {
-      grid.appendChild(view === 'wtd' ? buildWtdCard(m, count) : buildCard(m, count));
+      grid.appendChild(view === 'daily' ? buildCard(m, count) : buildPeriodCard(m, count, target));
     }
     return sec;
   }
@@ -776,12 +834,12 @@
     return card;
   }
 
-  function buildWtdCard(m, count) {
-    let tier, cardCls, barCls, badgeCls;
-    if (count >= WEEKLY_TARGET)      { tier='green';  cardCls='wtd-green';  barCls='bar-wtd-green';  badgeCls='dc-wtd-green'; }
-    else if (count >= 5)             { tier='orange'; cardCls='wtd-orange'; barCls='bar-wtd-orange'; badgeCls='dc-wtd-orange'; }
-    else                             { tier='red';    cardCls='wtd-red';    barCls='bar-wtd-red';    badgeCls='dc-wtd-red'; }
-    const pct = Math.min(100, (count / WEEKLY_TARGET) * 100);
+  function buildPeriodCard(m, count, target) {
+    let cardCls, barCls, badgeCls;
+    if (count >= target)            { cardCls='wtd-green';  barCls='bar-wtd-green';  badgeCls='dc-wtd-green'; }
+    else if (count >= target / 2)   { cardCls='wtd-orange'; barCls='bar-wtd-orange'; badgeCls='dc-wtd-orange'; }
+    else                            { cardCls='wtd-red';    barCls='bar-wtd-red';    badgeCls='dc-wtd-red'; }
+    const pct = Math.min(100, (count / target) * 100);
     const card = document.createElement('div');
     card.className = 'member-card ' + cardCls;
     card.innerHTML = `
