@@ -264,6 +264,37 @@
     .dc-hit  { color: #16a34a; }
     .dc-miss { color: #dc2626; }
 
+    /* ── VIEW TOGGLE ── */
+    .view-toggle { display: flex; border: 1.5px solid var(--border); overflow: hidden; }
+    .view-btn {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 11px; font-weight: 700;
+      padding: 5px 14px; cursor: pointer;
+      background: white; color: var(--gray);
+      border: none; letter-spacing: 0.5px; text-transform: uppercase;
+      transition: background 0.12s, color 0.12s;
+    }
+    .view-btn + .view-btn { border-left: 1.5px solid var(--border); }
+    .view-btn.active { background: var(--blue); color: white; }
+    .view-btn:hover:not(.active) { background: var(--bg); color: var(--navy); }
+
+    /* ── WTD RANGE LABEL ── */
+    .wtd-range {
+      font-size: 11px; color: var(--gray); font-style: italic;
+      margin-bottom: 16px; letter-spacing: 0.2px;
+    }
+
+    /* ── WTD CARD STATES ── */
+    .member-card.wtd-green  { border-top-color: #16a34a; background: #fafffe; }
+    .member-card.wtd-orange { border-top-color: #ea580c; }
+    .member-card.wtd-red    { border-top-color: #dc2626; }
+    .dc-wtd-green  { color: #16a34a; }
+    .dc-wtd-orange { color: #ea580c; }
+    .dc-wtd-red    { color: #dc2626; }
+    .bar-wtd-green  { background: #16a34a; }
+    .bar-wtd-orange { background: #ea580c; }
+    .bar-wtd-red    { background: #dc2626; }
+
     /* ── FOOTER ── */
     .page-footer {
       background: var(--navy);
@@ -381,6 +412,10 @@
     <div class="content-header">
       <div class="page-title" id="dateHeading">Loading…</div>
       <div class="ch-right">
+        <div class="view-toggle">
+          <button class="view-btn active" id="btnDaily" onclick="setView('daily')">Daily</button>
+          <button class="view-btn" id="btnWtd" onclick="setView('wtd')">Week to Date</button>
+        </div>
         <input type="date" id="selectedDate" oninput="renderDashboard()">
       </div>
     </div>
@@ -487,8 +522,16 @@
     return exact ? exact.m.id : hits[0].m.id;
   }
 
+  const WEEKLY_TARGET = 10;
   const $ = id => document.getElementById(id);
-  let rawRows = [], refreshTimer = null;
+  let rawRows = [], refreshTimer = null, currentView = 'daily';
+
+  function setView(v) {
+    currentView = v;
+    $('btnDaily').classList.toggle('active', v === 'daily');
+    $('btnWtd').classList.toggle('active', v === 'wtd');
+    renderDashboard();
+  }
 
   (function init() {
     $('selectedDate').value = new Date().toISOString().slice(0,10);
@@ -539,19 +582,71 @@
   }
 
   function renderDashboard() {
-    const date   = $('selectedDate').value;
-    const counts = aggregateForDate(date);
-    $('dateHeading').textContent = formatDate(date);
+    const date = $('selectedDate').value;
     const c = $('teamsContainer');
     c.innerHTML = '';
-    for (const team of TEAMS) c.appendChild(buildTeamSection(team, counts));
+
+    if (currentView === 'daily') {
+      const counts = aggregateForDate(date);
+      $('dateHeading').textContent = formatDate(date);
+      for (const team of TEAMS) c.appendChild(buildTeamSection(team, counts, 'daily'));
+    } else {
+      const { dates, counts } = aggregateWTD(date);
+      const rangeLabel = wtdRangeLabel(dates);
+      $('dateHeading').textContent = 'Week to Date — ' + rangeLabel;
+      for (const team of TEAMS) c.appendChild(buildTeamSection(team, counts, 'wtd'));
+    }
   }
 
-  function buildTeamSection(team, counts) {
+  // ── WTD: get Mon–selectedDate business days ──
+  function getBusinessDaysFrom(isoDate) {
+    const [y,m,d] = isoDate.split('-').map(Number);
+    const selected = new Date(y, m-1, d);
+    // Find Monday of this week
+    const day = selected.getDay(); // 0=Sun,1=Mon,...6=Sat
+    const diffToMon = day === 0 ? -6 : 1 - day;
+    const monday = new Date(selected);
+    monday.setDate(selected.getDate() + diffToMon);
+
+    const dates = [];
+    const cur = new Date(monday);
+    while (cur <= selected) {
+      const dow = cur.getDay();
+      if (dow !== 0 && dow !== 6) { // skip weekends
+        dates.push(cur.toISOString().slice(0,10));
+      }
+      cur.setDate(cur.getDate() + 1);
+    }
+    return dates;
+  }
+
+  function aggregateWTD(isoDate) {
+    const dates = getBusinessDaysFrom(isoDate);
+    const counts = {};
+    for (const date of dates) {
+      const dayCounts = aggregateForDate(date);
+      for (const [id, n] of Object.entries(dayCounts)) {
+        counts[id] = (counts[id] || 0) + n;
+      }
+    }
+    return { dates, counts };
+  }
+
+  function wtdRangeLabel(dates) {
+    if (!dates.length) return '';
+    const fmt = iso => { const [y,m,d] = iso.split('-'); return new Date(+y,+m-1,+d).toLocaleDateString('en-US',{month:'short',day:'numeric'}); };
+    return dates.length === 1
+      ? fmt(dates[0])
+      : fmt(dates[0]) + ' – ' + fmt(dates[dates.length-1]);
+  }
+
+  function buildTeamSection(team, counts, view) {
+    const target = view === 'wtd' ? WEEKLY_TARGET : DAILY_TARGET;
     const withCounts = team.members.map(m => ({ m, count: counts[m.id] || 0 }));
     const sorted     = [...withCounts].sort((a,b) => b.count - a.count);
     const total      = withCounts.reduce((s,x) => s + x.count, 0);
-    const hits       = withCounts.filter(x => x.count >= DAILY_TARGET).length;
+    const hits       = withCounts.filter(x => x.count >= target).length;
+    const hitLabel   = view === 'wtd' ? 'on weekly target' : 'on target';
 
     const sec = document.createElement('div');
     sec.className = 'team-section';
@@ -563,13 +658,15 @@
         </div>
         <div class="team-stats">
           <span class="stat-pill stat-total">${total} DCs</span>
-          <span class="stat-pill stat-hits">${hits} / ${team.members.length} on target</span>
+          <span class="stat-pill stat-hits">${hits} / ${team.members.length} ${hitLabel}</span>
         </div>
       </div>
       <div class="member-grid"></div>`;
 
     const grid = sec.querySelector('.member-grid');
-    for (const { m, count } of sorted) grid.appendChild(buildCard(m, count));
+    for (const { m, count } of sorted) {
+      grid.appendChild(view === 'wtd' ? buildWtdCard(m, count) : buildCard(m, count));
+    }
     return sec;
   }
 
@@ -586,6 +683,23 @@
         <div class="member-bar-wrap"><div class="member-bar ${bar}" style="width:${pct}%"></div></div>
       </div>
       <div class="dc-badge ${hit ? 'dc-hit' : 'dc-miss'}">${count}</div>`;
+    return card;
+  }
+
+  function buildWtdCard(m, count) {
+    let tier, cardCls, barCls, badgeCls;
+    if (count >= WEEKLY_TARGET)      { tier='green';  cardCls='wtd-green';  barCls='bar-wtd-green';  badgeCls='dc-wtd-green'; }
+    else if (count >= 5)             { tier='orange'; cardCls='wtd-orange'; barCls='bar-wtd-orange'; badgeCls='dc-wtd-orange'; }
+    else                             { tier='red';    cardCls='wtd-red';    barCls='bar-wtd-red';    badgeCls='dc-wtd-red'; }
+    const pct = Math.min(100, (count / WEEKLY_TARGET) * 100);
+    const card = document.createElement('div');
+    card.className = 'member-card ' + cardCls;
+    card.innerHTML = `
+      <div class="member-info">
+        <div class="member-name">${esc(m.display)}</div>
+        <div class="member-bar-wrap"><div class="member-bar ${barCls}" style="width:${pct}%"></div></div>
+      </div>
+      <div class="dc-badge ${badgeCls}">${count}</div>`;
     return card;
   }
 
