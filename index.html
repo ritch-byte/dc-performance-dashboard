@@ -307,6 +307,31 @@
     .bar-wtd-orange { background: #ea580c; }
     .bar-wtd-red    { background: #dc2626; }
 
+    /* ── REPORTS TABLE ── */
+    .reports-wrap { overflow-x: auto; }
+    .reports-table { width: 100%; border-collapse: collapse; font-size: 12px; white-space: nowrap; }
+    .reports-table th {
+      background: var(--navy); color: white;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 10px; font-weight: 700;
+      letter-spacing: 0.8px; text-transform: uppercase;
+      padding: 9px 16px; text-align: center;
+    }
+    .reports-table th.col-name { text-align: left; min-width: 170px; }
+    .reports-table td {
+      padding: 8px 16px; border-bottom: 1px solid var(--border);
+      text-align: center; font-weight: 700; font-size: 14px;
+    }
+    .reports-table td.col-name { text-align: left; font-size: 12px; font-weight: 600; color: var(--navy); }
+    .reports-table tbody tr:hover td { background: #f8f9ff; }
+    .cell-green  { background: #f0fdf4; color: #16a34a; }
+    .cell-orange { background: #fff7ed; color: #ea580c; }
+    .cell-red    { background: #fef2f2; color: #dc2626; }
+    .cell-zero   { color: #d1d5db; font-weight: 400; }
+    .trend-up   { color: #16a34a; font-size: 17px; font-weight: 800; }
+    .trend-down { color: #dc2626; font-size: 17px; font-weight: 800; }
+    .trend-flat { color: var(--gray); font-size: 17px; }
+
     /* ── FOOTER ── */
     .page-footer {
       background: var(--navy);
@@ -390,7 +415,7 @@
       </svg>
       Team
     </a>
-    <a class="nav-item" href="#">
+    <a class="nav-item" id="navReports" href="#" onclick="showPage('reports');return false;">
       <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
         <path d="M2 12l3-4 3 3 2.5-5 3 4"/>
         <rect x="1" y="1" width="14" height="14"/>
@@ -452,6 +477,17 @@
         <div class="page-title">Team Roster</div>
       </div>
       <div class="main-body" id="teamBody"></div>
+    </div>
+
+    <!-- ── Reports Section ── -->
+    <div id="reportsSection" style="display:none;">
+      <div class="content-header">
+        <div class="page-title">Individual Reports — Weekly Breakdown</div>
+        <div class="ch-right">
+          <select id="reportMonthSelect" class="week-select" onchange="renderReports()"></select>
+        </div>
+      </div>
+      <div class="main-body" id="reportsBody"></div>
     </div>
 
   </main>
@@ -888,9 +924,117 @@
   function showPage(page) {
     $('dashboardSection').style.display = page === 'dashboard' ? '' : 'none';
     $('teamSection').style.display      = page === 'team'      ? '' : 'none';
+    $('reportsSection').style.display   = page === 'reports'   ? '' : 'none';
     $('navDashboard').classList.toggle('active', page === 'dashboard');
     $('navTeam').classList.toggle('active', page === 'team');
-    if (page === 'team') renderTeamRoster();
+    $('navReports').classList.toggle('active', page === 'reports');
+    if (page === 'team')    renderTeamRoster();
+    if (page === 'reports') { buildReportMonthSelect(); renderReports(); }
+  }
+
+  // ── Reports ──
+  function buildReportMonthSelect() {
+    const sel = $('reportMonthSelect');
+    if (sel.options.length) return; // already built
+    let [y, m] = localIso(new Date()).split('-').map(Number);
+    while (y > 2026 || (y === 2026 && m >= 1)) {
+      const ym = `${y}-${String(m).padStart(2,'0')}`;
+      const opt = document.createElement('option');
+      opt.value = ym;
+      opt.textContent = new Date(y, m-1, 1).toLocaleDateString('en-US', { month:'long', year:'numeric' });
+      sel.appendChild(opt);
+      m--; if (m === 0) { m = 12; y--; }
+    }
+  }
+
+  function getWeeksForMonth(yearMonth) {
+    return generateWeekOptions()[yearMonth] || [];
+  }
+
+  function getWeekCount(memberId, mondayIso) {
+    return getBusinessDaysFrom(mondayIso)
+      .reduce((s, date) => s + (aggregateForDate(date)[memberId] || 0), 0);
+  }
+
+  function getWeekDateRange(mondayIso) {
+    const [y,m,d] = mondayIso.split('-').map(Number);
+    const fri = new Date(y, m-1, d+4);
+    const mf = new Date(y,m-1,d).toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    const ff = fri.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    return `${mf} – ${ff}`;
+  }
+
+  function getTrend(counts) {
+    const nonZero = counts.filter(n => n > 0);
+    if (nonZero.length < 2) return { dir:'flat', icon:'—' };
+    const last = nonZero[nonZero.length-1], prev = nonZero[nonZero.length-2];
+    if (last > prev) return { dir:'up',   icon:'↑' };
+    if (last < prev) return { dir:'down', icon:'↓' };
+    return { dir:'flat', icon:'→' };
+  }
+
+  function renderReports() {
+    const ym = $('reportMonthSelect').value || localIso(new Date()).slice(0,7);
+    const weeks = getWeeksForMonth(ym);
+    const body = $('reportsBody');
+    body.innerHTML = '';
+
+    if (!weeks.length) {
+      body.innerHTML = '<p style="padding:20px;color:var(--gray)">No data for this period.</p>';
+      return;
+    }
+
+    for (const team of TEAMS) {
+      // Pre-compute all week counts per member
+      const weekData = {};
+      for (const m of team.members)
+        weekData[m.id] = weeks.map(mon => getWeekCount(m.id, mon));
+
+      const sorted = [...team.members].sort((a,b) =>
+        weekData[b.id].reduce((s,n)=>s+n,0) - weekData[a.id].reduce((s,n)=>s+n,0)
+      );
+
+      const headerCols = weeks.map((mon, i) =>
+        `<th>WK ${i+1}<br><span style="font-size:9px;font-weight:400;opacity:0.75;text-transform:none;letter-spacing:0">${getWeekDateRange(mon)}</span></th>`
+      ).join('');
+
+      let rows = '';
+      for (const m of sorted) {
+        const cnts = weekData[m.id];
+        const total = cnts.reduce((s,n)=>s+n,0);
+        const trend = getTrend(cnts);
+        const cells = cnts.map(n => {
+          const cls = n >= WEEKLY_TARGET ? 'cell-green' : n >= 5 ? 'cell-orange' : n > 0 ? 'cell-red' : 'cell-zero';
+          return `<td class="${cls}">${n > 0 ? n : '–'}</td>`;
+        }).join('');
+        rows += `<tr>
+          <td class="col-name">${esc(m.display)}</td>
+          ${cells}
+          <td style="font-weight:800;color:var(--navy);font-size:15px">${total}</td>
+          <td class="trend-${trend.dir}">${trend.icon}</td>
+        </tr>`;
+      }
+
+      const sec = document.createElement('div');
+      sec.className = 'team-section';
+      sec.innerHTML = `
+        <div class="team-header">
+          <div class="team-label">
+            <div class="team-accent" style="background:${esc(team.color)}"></div>
+            <div class="team-name">${esc(team.name)}</div>
+          </div>
+        </div>
+        <div class="reports-wrap">
+          <table class="reports-table">
+            <thead><tr>
+              <th class="col-name">Member</th>${headerCols}
+              <th>Total</th><th>Trend</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
+      body.appendChild(sec);
+    }
   }
 
   function renderTeamRoster() {
