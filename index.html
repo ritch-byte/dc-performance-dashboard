@@ -264,6 +264,38 @@
     .dc-hit  { color: #16a34a; }
     .dc-miss { color: #dc2626; }
 
+    /* ── DAY SUMMARY ── */
+    .day-summary {
+      display: flex; align-items: center; gap: 12px;
+      background: var(--navy);
+      padding: 12px 20px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    .day-summary-label {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 10px; font-weight: 700;
+      color: rgba(255,255,255,0.45);
+      letter-spacing: 1.5px; text-transform: uppercase;
+      margin-right: 4px;
+    }
+    .day-summary-stat {
+      display: flex; align-items: baseline; gap: 6px;
+    }
+    .day-summary-num {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 28px; font-weight: 800; color: white; line-height: 1;
+    }
+    .day-summary-sub {
+      font-size: 11px; color: rgba(255,255,255,0.5);
+      letter-spacing: 0.3px;
+    }
+    .day-summary-divider {
+      width: 1px; height: 28px;
+      background: rgba(255,255,255,0.12);
+      margin: 0 4px;
+    }
+
     /* ── VIEW TOGGLE ── */
     .view-toggle { display: flex; border: 1.5px solid var(--border); overflow: hidden; }
     .view-btn {
@@ -729,6 +761,25 @@
     if (currentView === 'daily') {
       const counts = aggregateForDate(date);
       $('dateHeading').textContent = formatDate(date);
+      // Grand total summary
+      const allMembers = TEAMS.flatMap(t => t.members);
+      const grandTotal = allMembers.reduce((s,m) => s + (counts[m.id] || 0), 0);
+      const onTarget   = allMembers.filter(m => !m.hidden && (counts[m.id] || 0) >= DAILY_TARGET).length;
+      const totalVisible = allMembers.filter(m => !m.hidden).length;
+      const summary = document.createElement('div');
+      summary.className = 'day-summary';
+      summary.innerHTML = `
+        <span class="day-summary-label">Day Total</span>
+        <div class="day-summary-stat">
+          <span class="day-summary-num">${grandTotal}</span>
+          <span class="day-summary-sub">DCs booked</span>
+        </div>
+        <div class="day-summary-divider"></div>
+        <div class="day-summary-stat">
+          <span class="day-summary-num">${onTarget}</span>
+          <span class="day-summary-sub">of ${totalVisible} hit target</span>
+        </div>`;
+      c.appendChild(summary);
       for (const team of TEAMS) c.appendChild(buildTeamSection(team, counts, 'daily'));
     } else if (currentView === 'wtd') {
       const { dates, counts } = aggregateWTD(date);
