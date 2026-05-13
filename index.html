@@ -278,17 +278,17 @@
     .view-btn.active { background: var(--blue); color: white; }
     .view-btn:hover:not(.active) { background: var(--bg); color: var(--navy); }
 
-    /* ── WEEK NAV ── */
-    .week-nav { display: flex; gap: 4px; }
-    .week-nav-btn {
+    /* ── WEEK SELECT ── */
+    .week-select {
+      border: 1.5px solid var(--border);
+      padding: 5px 10px;
       font-family: 'Plus Jakarta Sans', sans-serif;
       font-size: 11px; font-weight: 700;
-      padding: 5px 12px; cursor: pointer;
       background: white; color: var(--navy);
-      border: 1.5px solid var(--border);
-      letter-spacing: 0.3px; transition: background 0.12s;
+      cursor: pointer; letter-spacing: 0.3px;
+      max-width: 220px;
     }
-    .week-nav-btn:hover { background: var(--bg); border-color: var(--blue); }
+    .week-select:focus { outline: none; border-color: var(--blue); }
 
     /* ── WTD RANGE LABEL ── */
     .wtd-range {
@@ -428,9 +428,8 @@
           <button class="view-btn active" id="btnDaily" onclick="setView('daily')">Daily</button>
           <button class="view-btn" id="btnWtd" onclick="setView('wtd')">Week to Date</button>
         </div>
-        <div class="week-nav" id="weekNav" style="display:none;">
-          <button class="week-nav-btn" onclick="shiftWeek(-1)">&#8592; Prev</button>
-          <button class="week-nav-btn" onclick="shiftWeek(1)">Next &#8594;</button>
+        <div id="weekSelectWrap" style="display:none;">
+          <select id="weekSelect" class="week-select" onchange="onWeekSelect()"></select>
         </div>
         <input type="date" id="selectedDate" oninput="renderDashboard()">
       </div>
@@ -546,15 +545,72 @@
     currentView = v;
     $('btnDaily').classList.toggle('active', v === 'daily');
     $('btnWtd').classList.toggle('active', v === 'wtd');
-    $('weekNav').style.display = v === 'wtd' ? 'flex' : 'none';
+    const isWtd = v === 'wtd';
+    $('weekSelectWrap').style.display = isWtd ? 'block' : 'none';
+    $('selectedDate').style.display   = isWtd ? 'none'  : '';
+    if (isWtd) buildWeekSelect();
     renderDashboard();
   }
 
-  function shiftWeek(delta) {
-    const d = new Date($('selectedDate').value + 'T00:00:00');
-    d.setDate(d.getDate() + delta * 7);
-    $('selectedDate').value = d.toISOString().slice(0,10);
-    renderDashboard();
+  // ── Week select: generate all Mon–Fri weeks from Jan 2026 to current ──
+  function getMondayIso(isoDate) {
+    const [y,m,d] = isoDate.split('-').map(Number);
+    const dt = new Date(y, m-1, d);
+    const dow = dt.getDay();
+    const monday = new Date(dt);
+    monday.setDate(dt.getDate() - (dow === 0 ? 6 : dow - 1));
+    return monday.toISOString().slice(0,10);
+  }
+
+  function generateWeekOptions() {
+    // First Monday of 2026 is Jan 5
+    const start = new Date(2026, 0, 5);
+    const curMon = getMondayIso(new Date().toISOString().slice(0,10));
+    const todayMonday = new Date(curMon + 'T00:00:00');
+    const groups = {};
+    const cur = new Date(start);
+    while (cur <= todayMonday) {
+      const iso = cur.toISOString().slice(0,10);
+      const [y, m] = iso.split('-');
+      const key = `${y}-${m}`;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(iso);
+      cur.setDate(cur.getDate() + 7);
+    }
+    return groups;
+  }
+
+  function buildWeekSelect() {
+    const sel = $('weekSelect');
+    sel.innerHTML = '';
+    const groups = generateWeekOptions();
+    const currentMonday = getMondayIso($('selectedDate').value);
+    const monthKeys = Object.keys(groups).sort().reverse();
+    for (const key of monthKeys) {
+      const [y, m] = key.split('-');
+      const monthLabel = new Date(+y, +m-1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      const optgroup = document.createElement('optgroup');
+      optgroup.label = monthLabel;
+      const mondays = groups[key];
+      for (let i = mondays.length - 1; i >= 0; i--) {
+        const mon = mondays[i];
+        const [wy,wm,wd] = mon.split('-').map(Number);
+        const friDt = new Date(wy, wm-1, wd + 4);
+        const monFmt = new Date(wy, wm-1, wd).toLocaleDateString('en-US', { month:'short', day:'numeric' });
+        const friFmt = friDt.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+        const opt = document.createElement('option');
+        opt.value = mon;
+        opt.textContent = `Week ${i+1}  (${monFmt} – ${friFmt})`;
+        if (mon === currentMonday) opt.selected = true;
+        optgroup.appendChild(opt);
+      }
+      sel.appendChild(optgroup);
+    }
+  }
+
+  function onWeekSelect() {
+    const mon = $('weekSelect').value;
+    if (mon) { $('selectedDate').value = mon; renderDashboard(); }
   }
 
   (function init() {
