@@ -519,6 +519,8 @@
         { id: 'ruiz',     display: 'Renz Ruiz',             ln: 'ruiz' },
         { id: 'silang',   display: 'Summer Silang',         ln: 'silang' },
         { id: 'garcia',   display: 'Chin Garcia',           ln: 'garcia' },
+        { id: 'jetdel',   display: 'Jetdel',                ln: 'jetdel',  hidden: true },
+        { id: 'tanate',   display: 'Angelica Tanate',        ln: 'tanate',  hidden: true },
       ]
     },
     {
@@ -540,6 +542,7 @@
         { id: 'sarmiento_j', display: 'Julius Sarmiento',      ln: 'sarmiento', fn: 'julius' },
         { id: 'baliuag',     display: 'Charlon Baliuag',       ln: 'baliuag' },
         { id: 'fortez',      display: 'Carlo Fortez',          ln: 'fortez' },
+        { id: 'gadier',      display: 'Vincent Gadier',        ln: 'gadier',  hidden: true },
       ]
     },
     {
@@ -557,6 +560,8 @@
         { id: 'silva',       display: 'Godwin Silva',          ln: 'silva' },
         { id: 'escabillas',  display: 'Kenneth Escabillas',    ln: 'escabillas' },
         { id: 'bautista',    display: 'Samara Bautista',       ln: 'bautista' },
+        { id: 'jumar',       display: 'Jumar',                 ln: 'jumar',   hidden: true },
+        { id: 'bayhon',      display: 'Alvin Bayhon',          ln: 'bayhon',  hidden: true },
       ]
     }
   ];
@@ -835,10 +840,11 @@
   function buildTeamSection(team, counts, view) {
     const target   = view === 'daily' ? DAILY_TARGET : view === 'wtd' ? WEEKLY_TARGET : MONTHLY_TARGET;
     const hitLabel = { daily:'on target', wtd:'on weekly target', mtd:'on monthly target', permonth:'on monthly target' }[view];
-    const withCounts = team.members.map(m => ({ m, count: counts[m.id] || 0 }));
-    const sorted     = [...withCounts].sort((a,b) => b.count - a.count);
-    const total      = withCounts.reduce((s,x) => s + x.count, 0);
-    const hits       = withCounts.filter(x => x.count >= target).length;
+    const allCounts = team.members.map(m => ({ m, count: counts[m.id] || 0 }));
+    const visible   = allCounts.filter(x => !x.m.hidden);
+    const sorted    = [...visible].sort((a,b) => b.count - a.count);
+    const total     = allCounts.reduce((s,x) => s + x.count, 0); // includes hidden DCs
+    const hits      = visible.filter(x => x.count >= target).length;
 
     const sec = document.createElement('div');
     sec.className = 'team-section';
@@ -850,7 +856,7 @@
         </div>
         <div class="team-stats">
           <span class="stat-pill stat-total">${total} DCs</span>
-          <span class="stat-pill stat-hits">${hits} / ${team.members.length} ${hitLabel}</span>
+          <span class="stat-pill stat-hits">${hits} / ${visible.length} ${hitLabel}</span>
         </div>
       </div>
       <div class="member-grid"></div>`;
@@ -985,12 +991,13 @@
     }
 
     for (const team of TEAMS) {
-      // Pre-compute all week counts per member
+      // Pre-compute all week counts per member (visible only)
+      const visible = team.members.filter(m => !m.hidden);
       const weekData = {};
-      for (const m of team.members)
+      for (const m of visible)
         weekData[m.id] = weeks.map(mon => getWeekCount(m.id, mon));
 
-      const sorted = [...team.members].sort((a,b) =>
+      const sorted = [...visible].sort((a,b) =>
         weekData[b.id].reduce((s,n)=>s+n,0) - weekData[a.id].reduce((s,n)=>s+n,0)
       );
 
@@ -1044,7 +1051,7 @@
     const body = $('teamBody');
     body.innerHTML = '';
     for (const team of TEAMS) {
-      const sorted = [...team.members].sort((a,b) => a.display.localeCompare(b.display));
+      const sorted = team.members.filter(m => !m.hidden).sort((a,b) => a.display.localeCompare(b.display));
       const sec = document.createElement('div');
       sec.className = 'team-section';
       sec.innerHTML = `
