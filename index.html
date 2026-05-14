@@ -804,6 +804,27 @@
     } else if (currentView === 'wtd') {
       const { dates, counts } = aggregateWTD(date);
       $('dateHeading').textContent = 'Week to Date — ' + wtdRangeLabel(dates);
+      const memberMap2 = new Map();
+      for (const t of TEAMS) for (const m of t.members)
+        if (!memberMap2.has(m.id) || !m.hidden) memberMap2.set(m.id, m);
+      const uniq2 = [...memberMap2.values()];
+      const wtdTotal   = uniq2.reduce((s,m) => s + (counts[m.id] || 0), 0);
+      const wtdOnTarget  = uniq2.filter(m => !m.hidden && (counts[m.id]||0) >= WEEKLY_TARGET).length;
+      const wtdVisible   = uniq2.filter(m => !m.hidden).length;
+      const wtdSummary = document.createElement('div');
+      wtdSummary.className = 'day-summary';
+      wtdSummary.innerHTML = `
+        <span class="day-summary-label">Week Total</span>
+        <div class="day-summary-stat">
+          <span class="day-summary-num">${wtdTotal}</span>
+          <span class="day-summary-sub">DCs booked</span>
+        </div>
+        <div class="day-summary-divider"></div>
+        <div class="day-summary-stat">
+          <span class="day-summary-num">${wtdOnTarget}</span>
+          <span class="day-summary-sub">of ${wtdVisible} hit weekly target</span>
+        </div>`;
+      c.appendChild(wtdSummary);
       for (const team of TEAMS) c.appendChild(buildTeamSection(team, counts, 'wtd'));
     } else if (currentView === 'mtd') {
       const today = localIso(new Date());
