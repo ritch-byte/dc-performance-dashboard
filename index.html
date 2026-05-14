@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>OA — DC Performance Dashboard</title>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
     :root {
       --blue:    #1A2DB5;
@@ -403,6 +404,72 @@
       letter-spacing: 0.3px; text-transform: uppercase;
     }
 
+    /* ── MEMBER CARD POINTER ── */
+    .member-card { cursor: pointer; }
+
+    /* ── PROFILE MODAL ── */
+    .profile-modal {
+      position: fixed; inset: 0;
+      background: rgba(13,26,110,0.6);
+      z-index: 600;
+      display: flex; align-items: center; justify-content: center;
+      padding: 20px;
+    }
+    .profile-panel {
+      background: white;
+      width: 100%; max-width: 700px;
+      max-height: 92vh; overflow-y: auto;
+      box-shadow: 0 24px 64px rgba(13,26,110,0.35);
+      display: flex; flex-direction: column;
+    }
+    .profile-head {
+      padding: 20px 24px;
+      display: flex; align-items: center; gap: 14px;
+      position: relative; flex-shrink: 0;
+    }
+    .profile-avatar {
+      width: 46px; height: 46px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 15px; font-weight: 800; color: white;
+    }
+    .profile-member-name {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 17px; font-weight: 700; color: white; line-height: 1.2;
+    }
+    .profile-team-badge {
+      font-size: 9px; font-weight: 700; letter-spacing: 1.2px;
+      text-transform: uppercase; padding: 3px 8px;
+      color: white; margin-top: 5px; display: inline-block;
+      background: rgba(255,255,255,0.15);
+    }
+    .profile-close {
+      position: absolute; right: 16px; top: 16px;
+      background: rgba(255,255,255,0.15); border: none; color: white;
+      width: 30px; height: 30px; font-size: 15px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .profile-close:hover { background: rgba(255,255,255,0.28); }
+    .profile-stats-row {
+      display: flex; border-bottom: 2px solid var(--border); flex-shrink: 0;
+    }
+    .profile-stat-box {
+      flex: 1; padding: 14px 16px; text-align: center;
+      border-right: 1px solid var(--border);
+    }
+    .profile-stat-box:last-child { border-right: none; }
+    .profile-stat-num {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 30px; font-weight: 800; color: var(--navy); line-height: 1;
+    }
+    .profile-stat-lbl {
+      font-size: 10px; color: var(--gray);
+      letter-spacing: 0.5px; text-transform: uppercase; margin-top: 4px;
+    }
+    .profile-chart-area { padding: 20px 24px; flex: 1; }
+    .profile-chart-toggle { display: flex; border: 1.5px solid var(--border); margin-bottom: 16px; width: fit-content; }
+    .profile-canvas-wrap { position: relative; height: 270px; }
+
     /* ── RESPONSIVE ── */
     @media (max-width: 700px) {
       .sidebar { display: none; }
@@ -532,6 +599,48 @@
   </main>
 </div>
 
+<!-- ── Profile Modal ── -->
+<div id="profileModal" class="profile-modal" style="display:none" onclick="if(event.target===this)closeProfile()">
+  <div class="profile-panel">
+    <div class="profile-head" id="profileHead">
+      <div class="profile-avatar" id="profileAvatar">--</div>
+      <div>
+        <div class="profile-member-name" id="profileName">--</div>
+        <span class="profile-team-badge" id="profileTeamBadge">--</span>
+      </div>
+      <button class="profile-close" onclick="closeProfile()">✕</button>
+    </div>
+    <div class="profile-stats-row">
+      <div class="profile-stat-box">
+        <div class="profile-stat-num" id="profileStatDay">0</div>
+        <div class="profile-stat-lbl">Today</div>
+      </div>
+      <div class="profile-stat-box">
+        <div class="profile-stat-num" id="profileStatWeek">0</div>
+        <div class="profile-stat-lbl">This Week</div>
+      </div>
+      <div class="profile-stat-box">
+        <div class="profile-stat-num" id="profileStatMonth">0</div>
+        <div class="profile-stat-lbl">This Month</div>
+      </div>
+      <div class="profile-stat-box">
+        <div class="profile-stat-num" id="profileStatAll">0</div>
+        <div class="profile-stat-lbl">All Time</div>
+      </div>
+    </div>
+    <div class="profile-chart-area">
+      <div class="profile-chart-toggle">
+        <button class="view-btn active" id="pBtnDaily"   onclick="setProfileView('daily')">Daily (30d)</button>
+        <button class="view-btn"        id="pBtnWeekly"  onclick="setProfileView('weekly')">Weekly</button>
+        <button class="view-btn"        id="pBtnMonthly" onclick="setProfileView('monthly')">Monthly</button>
+      </div>
+      <div class="profile-canvas-wrap">
+        <canvas id="profileChart"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ── Footer ── -->
 <footer class="page-footer">
   <div class="footer-inner">
@@ -643,7 +752,7 @@
   const WEEKLY_TARGET  = 10;
   const MONTHLY_TARGET = 40;
   const $ = id => document.getElementById(id);
-  let rawRows = [], refreshTimer = null, currentView = 'daily';
+  let rawRows = [], refreshTimer = null, currentView = 'daily', _aggCache = {};
 
   function setView(v) {
     currentView = v;
@@ -732,7 +841,7 @@
     try {
       const res = await fetch(CSV_URL + '&t=' + Date.now());
       if (!res.ok) throw new Error('HTTP ' + res.status);
-      rawRows = parseCSV(await res.text());
+      rawRows = parseCSV(await res.text()); _aggCache = {};
       hideError();
       $('btnRefresh').disabled = false;
       $('lastUpdated').textContent = 'Updated ' + new Date().toLocaleTimeString();
@@ -758,6 +867,7 @@
   }
 
   function aggregateForDate(date) {
+    if (_aggCache[date]) return _aggCache[date];
     const counts = {};
     for (const row of rawRows) {
       if (normalizeDate(row.rawDate) !== date) continue;
@@ -767,7 +877,7 @@
       if (!dcs) continue;
       counts[id] = (counts[id] || 0) + dcs;
     }
-    return counts;
+    return (_aggCache[date] = counts);
   }
 
   function renderDashboard() {
@@ -952,6 +1062,7 @@
     const labelColor = pct >= 40 ? 'white' : color;
     const card = document.createElement('div');
     card.className = 'member-card';
+    card.onclick = () => openProfile(m.id);
     card.innerHTML = `
       <div class="member-info">
         <div class="member-name">${esc(m.display)}</div>
@@ -973,6 +1084,7 @@
     const labelColor = pct >= 40 ? 'white' : color;
     const card = document.createElement('div');
     card.className = 'member-card';
+    card.onclick = () => openProfile(m.id);
     card.innerHTML = `
       <div class="member-info">
         <div class="member-name">${esc(m.display)}</div>
@@ -1154,6 +1266,7 @@
         const mtd = counts[m.id] || 0;
         const card = document.createElement('div');
         card.className = 'member-card';
+        card.onclick = () => openProfile(m.id);
         card.innerHTML = `
           <div class="member-info">
             <div class="member-name">${esc(m.display)}</div>
@@ -1167,6 +1280,166 @@
       }
       body.appendChild(sec);
     }
+  }
+
+  // ── Member Profile ──
+  let _profileMember = null, _profileTeam = null, _profileView = 'daily', _profileChart = null;
+
+  function openProfile(memberId) {
+    // Find member — prefer visible version (POC team) over hidden
+    for (const t of TEAMS) {
+      const m = t.members.find(x => x.id === memberId && !x.hidden);
+      if (m) { _profileMember = m; _profileTeam = t; break; }
+    }
+    if (!_profileMember) return;
+
+    const initials = _profileMember.display.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    $('profileAvatar').textContent = initials;
+    $('profileAvatar').style.background = _profileTeam.color;
+    $('profileHead').style.background = _profileTeam.color;
+    $('profileName').textContent = _profileMember.display;
+    $('profileTeamBadge').textContent = _profileTeam.name;
+
+    const today   = localIso(new Date());
+    const [ty,tm] = today.split('-');
+    const todayC  = aggregateForDate(today)[memberId] || 0;
+    const weekC   = aggregateWTD(today).counts[memberId] || 0;
+    const monthC  = aggregateMonth(`${ty}-${tm}`, true).counts[memberId] || 0;
+    const allC    = rawRows.filter(r => resolveAgent(r.agent) === memberId)
+                           .reduce((s,r) => s + (r.sp1?1:0) + (r.sp2?1:0), 0);
+    $('profileStatDay').textContent   = todayC;
+    $('profileStatWeek').textContent  = weekC;
+    $('profileStatMonth').textContent = monthC;
+    $('profileStatAll').textContent   = allC;
+
+    _profileView = 'daily';
+    ['Daily','Weekly','Monthly'].forEach(v => {
+      $('pBtn'+v).classList.toggle('active', v.toLowerCase() === _profileView);
+    });
+    $('profileModal').style.display = 'flex';
+    renderProfileChart();
+  }
+
+  function closeProfile() {
+    $('profileModal').style.display = 'none';
+    if (_profileChart) { _profileChart.destroy(); _profileChart = null; }
+    _profileMember = null;
+  }
+
+  function setProfileView(v) {
+    _profileView = v;
+    ['Daily','Weekly','Monthly'].forEach(b =>
+      $('pBtn'+b).classList.toggle('active', b.toLowerCase() === v)
+    );
+    renderProfileChart();
+  }
+
+  function renderProfileChart() {
+    const id = _profileMember.id;
+    let pts;
+    if (_profileView === 'daily')        pts = getProfileDailyData(id);
+    else if (_profileView === 'weekly')  pts = getProfileWeeklyData(id);
+    else                                 pts = getProfileMonthlyData(id);
+
+    const target = _profileView === 'daily' ? DAILY_TARGET
+                 : _profileView === 'weekly' ? WEEKLY_TARGET : MONTHLY_TARGET;
+    const teamColor = _profileTeam.color;
+
+    const ctx = $('profileChart').getContext('2d');
+    if (_profileChart) _profileChart.destroy();
+    _profileChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: pts.map(p => p.label),
+        datasets: [
+          {
+            label: 'DCs',
+            data: pts.map(p => p.value),
+            borderColor: teamColor,
+            backgroundColor: teamColor + '18',
+            fill: true, tension: 0.3,
+            pointBackgroundColor: teamColor,
+            pointRadius: pts.length > 20 ? 2 : 4,
+            pointHoverRadius: 6,
+            borderWidth: 2,
+          },
+          {
+            label: 'Target',
+            data: new Array(pts.length).fill(target),
+            borderColor: 'rgba(255,31,255,0.45)',
+            borderDash: [5,4], borderWidth: 1.5,
+            pointRadius: 0, fill: false,
+          }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y}` }
+          }
+        },
+        scales: {
+          y: { beginAtZero: true, ticks: { stepSize: 1, precision: 0 },
+               grid: { color: '#eceef6' } },
+          x: { ticks: { maxTicksLimit: 12, maxRotation: 45 },
+               grid: { display: false } }
+        }
+      }
+    });
+  }
+
+  function getProfileDailyData(memberId) {
+    const pts = [], cur = new Date();
+    let count = 0;
+    while (count < 30) {
+      const dow = cur.getDay();
+      if (dow !== 0 && dow !== 6) {
+        const iso = localIso(cur);
+        pts.unshift({
+          label: new Date(+iso.split('-')[0], +iso.split('-')[1]-1, +iso.split('-')[2])
+                   .toLocaleDateString('en-US',{month:'short',day:'numeric'}),
+          value: aggregateForDate(iso)[memberId] || 0
+        });
+        count++;
+      }
+      cur.setDate(cur.getDate() - 1);
+    }
+    return pts;
+  }
+
+  function getProfileWeeklyData(memberId) {
+    const groups = generateWeekOptions();
+    const pts = [];
+    for (const ym of Object.keys(groups).sort()) {
+      for (const mon of groups[ym]) {
+        const [y,m,d] = mon.split('-').map(Number);
+        pts.push({
+          label: new Date(y,m-1,d).toLocaleDateString('en-US',{month:'short',day:'numeric'}),
+          value: getWeekCount(memberId, mon)
+        });
+      }
+    }
+    return pts;
+  }
+
+  function getProfileMonthlyData(memberId) {
+    const today = localIso(new Date());
+    const [cy,cm] = today.split('-').map(Number);
+    const pts = [];
+    let y = 2026, m = 1;
+    while (y < cy || (y === cy && m <= cm)) {
+      const ym = `${y}-${String(m).padStart(2,'0')}`;
+      const isCurrent = y === cy && m === cm;
+      const { counts } = aggregateMonth(ym, isCurrent);
+      pts.push({
+        label: new Date(y,m-1,1).toLocaleDateString('en-US',{month:'short',year:'2-digit'}),
+        value: counts[memberId] || 0
+      });
+      m++; if (m > 12) { m = 1; y++; }
+    }
+    return pts;
   }
 
   function localIso(dt) {
