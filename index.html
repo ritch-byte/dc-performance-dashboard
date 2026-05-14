@@ -609,7 +609,7 @@
         </div>
         <div class="profile-stat-box">
           <div class="profile-stat-num" id="profileStatAll">0</div>
-          <div class="profile-stat-lbl">All Time</div>
+          <div class="profile-stat-lbl">Last Month</div>
         </div>
       </div>
       <div class="profile-chart-area">
@@ -1288,16 +1288,16 @@
     $('profileTeamBadge').textContent = _profileTeam.name;
 
     const today   = localIso(new Date());
-    const [ty,tm] = today.split('-');
+    const [ty,tm] = today.split('-').map(Number);
     const todayC  = aggregateForDate(today)[memberId] || 0;
     const weekC   = aggregateWTD(today).counts[memberId] || 0;
-    const monthC  = aggregateMonth(`${ty}-${tm}`, true).counts[memberId] || 0;
-    const allC    = rawRows.filter(r => resolveAgent(r.agent) === memberId)
-                           .reduce((s,r) => s + (r.sp1?1:0) + (r.sp2?1:0), 0);
+    const monthC  = aggregateMonth(`${ty}-${String(tm).padStart(2,'0')}`, true).counts[memberId] || 0;
+    const prevM   = tm === 1 ? `${ty-1}-12` : `${ty}-${String(tm-1).padStart(2,'0')}`;
+    const lastMonthC = aggregateMonth(prevM, false).counts[memberId] || 0;
     $('profileStatDay').textContent   = todayC;
     $('profileStatWeek').textContent  = weekC;
     $('profileStatMonth').textContent = monthC;
-    $('profileStatAll').textContent   = allC;
+    $('profileStatAll').textContent   = lastMonthC;
 
     _profileView = 'daily';
     ['Daily','Weekly','Monthly'].forEach(v => {
@@ -1477,13 +1477,15 @@
     const groups = generateWeekOptions();
     const pts = [];
     for (const ym of Object.keys(groups).sort()) {
-      for (const mon of groups[ym]) {
-        const [y,m,d] = mon.split('-').map(Number);
+      const [y, m] = ym.split('-').map(Number);
+      const monthAbbr = new Date(y, m-1, 1).toLocaleDateString('en-US', { month: 'short' });
+      const mondays = groups[ym];
+      mondays.forEach((mon, i) => {
         pts.push({
-          label: new Date(y,m-1,d).toLocaleDateString('en-US',{month:'short',day:'numeric'}),
+          label: `${monthAbbr} W${i + 1}`,
           value: getWeekCount(memberId, mon)
         });
-      }
+      });
     }
     return pts;
   }
