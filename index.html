@@ -1327,17 +1327,23 @@
     id: 'pointLabels',
     afterDatasetsDraw(chart) {
       const ctx = chart.ctx;
-      const meta = chart.getDatasetMeta(0); // DCs dataset only
+      const meta = chart.getDatasetMeta(0);
       const vals = chart.data.datasets[0].data;
       const color = chart.data.datasets[0].borderColor;
       ctx.save();
-      ctx.font = 'bold 11px "Plus Jakarta Sans", Inter, sans-serif';
-      ctx.fillStyle = color;
+      ctx.font = 'bold 12px "Plus Jakarta Sans", Inter, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'bottom';
       meta.data.forEach((pt, i) => {
         if (!vals[i]) return;
-        ctx.fillText(vals[i], pt.x, pt.y - 6);
+        // Small white halo so label is readable over the fill area
+        ctx.fillStyle = 'white';
+        ctx.fillText(vals[i], pt.x + 1, pt.y - 7);
+        ctx.fillText(vals[i], pt.x - 1, pt.y - 7);
+        ctx.fillText(vals[i], pt.x,     pt.y - 6);
+        ctx.fillText(vals[i], pt.x,     pt.y - 8);
+        ctx.fillStyle = color;
+        ctx.fillText(vals[i], pt.x, pt.y - 7);
       });
       ctx.restore();
     }
@@ -1359,6 +1365,8 @@
     wrap.innerHTML = '';
     const canvas = document.createElement('canvas');
     wrap.appendChild(canvas);
+    const targetLabel = _profileView === 'daily' ? 'Daily Target'
+                      : _profileView === 'weekly' ? 'Weekly Target' : 'Monthly Target';
     _profileChart = new Chart(canvas.getContext('2d'), {
       type: 'line',
       plugins: [pointLabelPlugin],
@@ -1366,39 +1374,81 @@
         labels: pts.map(p => p.label),
         datasets: [
           {
-            label: 'DCs',
+            label: 'Booked DCs',
             data: pts.map(p => p.value),
             borderColor: teamColor,
-            backgroundColor: teamColor + '18',
-            fill: true, tension: 0.3,
-            pointBackgroundColor: teamColor,
+            backgroundColor: teamColor + '22',
+            fill: true, tension: 0.35,
+            pointBackgroundColor: '#fff',
+            pointBorderColor: teamColor,
+            pointBorderWidth: 2,
             pointRadius: pts.length > 20 ? 3 : 5,
             pointHoverRadius: 7,
-            borderWidth: 2,
+            pointHoverBackgroundColor: teamColor,
+            borderWidth: 2.5,
           },
           {
-            label: 'Target',
+            label: targetLabel,
             data: new Array(pts.length).fill(target),
-            borderColor: 'rgba(255,31,255,0.5)',
-            borderDash: [5,4], borderWidth: 1.5,
+            borderColor: '#FF1FFF',
+            borderDash: [6, 4], borderWidth: 1.5,
             pointRadius: 0, fill: false,
+            borderCapStyle: 'round',
           }
         ]
       },
       options: {
         responsive: true, maintainAspectRatio: false,
-        layout: { padding: { top: 24 } },
+        layout: { padding: { top: 28, right: 12 } },
+        interaction: { mode: 'index', intersect: false },
         plugins: {
-          legend: { display: false },
+          legend: {
+            display: true,
+            position: 'top',
+            align: 'end',
+            labels: {
+              boxWidth: 12, boxHeight: 12,
+              padding: 16,
+              font: { family: "'Plus Jakarta Sans', sans-serif", size: 11, weight: '600' },
+              color: '#0D1A6E',
+              usePointStyle: true,
+              pointStyle: 'circle',
+            }
+          },
           tooltip: {
-            callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y}` }
+            backgroundColor: '#0D1A6E',
+            titleColor: 'rgba(255,255,255,0.6)',
+            bodyColor: '#fff',
+            padding: 10,
+            borderColor: 'rgba(255,255,255,0.1)',
+            borderWidth: 1,
+            titleFont: { family: "'Plus Jakarta Sans', sans-serif", size: 11 },
+            bodyFont: { family: "'Plus Jakarta Sans', sans-serif", size: 12, weight: '700' },
+            callbacks: { label: c => `  ${c.dataset.label}: ${c.parsed.y}` }
           }
         },
         scales: {
-          y: { beginAtZero: true, ticks: { stepSize: 1, precision: 0 },
-               grid: { color: '#eceef6' } },
-          x: { ticks: { maxTicksLimit: 12, maxRotation: 45 },
-               grid: { display: false } }
+          y: {
+            beginAtZero: true,
+            ticks: {
+              stepSize: 1, precision: 0,
+              font: { family: 'Inter', size: 11 },
+              color: '#A5A5A5',
+              padding: 6,
+            },
+            grid: { color: '#eceef6' },
+            border: { dash: [4, 4], color: 'transparent' }
+          },
+          x: {
+            ticks: {
+              maxTicksLimit: 14, maxRotation: 40,
+              font: { family: 'Inter', size: 11 },
+              color: '#A5A5A5',
+              padding: 4,
+            },
+            grid: { display: false },
+            border: { color: '#E2E4F0' }
+          }
         }
       }
     });
