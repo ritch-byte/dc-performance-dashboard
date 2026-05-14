@@ -6,7 +6,6 @@
   <title>OA — DC Performance Dashboard</title>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
   <style>
     :root {
       --blue:    #1A2DB5;
@@ -1323,6 +1322,27 @@
     renderProfileChart();
   }
 
+  // Inline plugin: draw numeric labels above each non-zero DC data point
+  const pointLabelPlugin = {
+    id: 'pointLabels',
+    afterDatasetsDraw(chart) {
+      const ctx = chart.ctx;
+      const meta = chart.getDatasetMeta(0); // DCs dataset only
+      const vals = chart.data.datasets[0].data;
+      const color = chart.data.datasets[0].borderColor;
+      ctx.save();
+      ctx.font = 'bold 11px "Plus Jakarta Sans", Inter, sans-serif';
+      ctx.fillStyle = color;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      meta.data.forEach((pt, i) => {
+        if (!vals[i]) return;
+        ctx.fillText(vals[i], pt.x, pt.y - 6);
+      });
+      ctx.restore();
+    }
+  };
+
   function renderProfileChart() {
     const id = _profileMember.id;
     let pts;
@@ -1334,7 +1354,6 @@
                  : _profileView === 'weekly' ? WEEKLY_TARGET : MONTHLY_TARGET;
     const teamColor = _profileTeam.color;
 
-    const hasLabels = typeof ChartDataLabels !== 'undefined';
     if (_profileChart) { _profileChart.destroy(); _profileChart = null; }
     const wrap = $('profileChartWrap');
     wrap.innerHTML = '';
@@ -1342,7 +1361,7 @@
     wrap.appendChild(canvas);
     _profileChart = new Chart(canvas.getContext('2d'), {
       type: 'line',
-      plugins: hasLabels ? [ChartDataLabels] : [],
+      plugins: [pointLabelPlugin],
       data: {
         labels: pts.map(p => p.label),
         datasets: [
@@ -1353,14 +1372,14 @@
             backgroundColor: teamColor + '18',
             fill: true, tension: 0.3,
             pointBackgroundColor: teamColor,
-            pointRadius: pts.length > 20 ? 2 : 4,
-            pointHoverRadius: 6,
+            pointRadius: pts.length > 20 ? 3 : 5,
+            pointHoverRadius: 7,
             borderWidth: 2,
           },
           {
             label: 'Target',
             data: new Array(pts.length).fill(target),
-            borderColor: 'rgba(255,31,255,0.45)',
+            borderColor: 'rgba(255,31,255,0.5)',
             borderDash: [5,4], borderWidth: 1.5,
             pointRadius: 0, fill: false,
           }
@@ -1368,21 +1387,12 @@
       },
       options: {
         responsive: true, maintainAspectRatio: false,
-        layout: { padding: { top: 28 } },
+        layout: { padding: { top: 24 } },
         plugins: {
           legend: { display: false },
           tooltip: {
             callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y}` }
-          },
-          datalabels: hasLabels ? {
-            display: c => c.datasetIndex === 0 && c.parsed.y > 0,
-            align: 'top',
-            anchor: 'end',
-            offset: 2,
-            color: teamColor,
-            font: { family: "'Plus Jakarta Sans', sans-serif", size: 11, weight: '700' },
-            formatter: v => v
-          } : { display: false }
+          }
         },
         scales: {
           y: { beginAtZero: true, ticks: { stepSize: 1, precision: 0 },
