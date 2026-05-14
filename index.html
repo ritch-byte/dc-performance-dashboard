@@ -637,8 +637,6 @@
 </footer>
 
 <script>
-  Chart.register(ChartDataLabels);
-
   const CSV_URL      = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSisLiJWdncrB-dDPNI0JGqSTbBQl5n5OAel1Epyr7DAsonyVAa6HSFCVXdA4_uMTbnBgGawkyX6DYh/pub?gid=0&single=true&output=csv';
   const REFRESH_MS   = 60000;
   const DAILY_TARGET = 2;
@@ -1309,7 +1307,7 @@
       $('pBtn'+v).classList.toggle('active', v.toLowerCase() === _profileView);
     });
     showPage('profile');
-    renderProfileChart();
+    requestAnimationFrame(renderProfileChart);
   }
 
   function closeProfile() {
@@ -1337,10 +1335,12 @@
                  : _profileView === 'weekly' ? WEEKLY_TARGET : MONTHLY_TARGET;
     const teamColor = _profileTeam.color;
 
-    const ctx = $('profileChart').getContext('2d');
+    const hasLabels = typeof ChartDataLabels !== 'undefined';
+    const canvasCtx = $('profileChart').getContext('2d');
     if (_profileChart) _profileChart.destroy();
-    _profileChart = new Chart(ctx, {
+    _profileChart = new Chart(canvasCtx, {
       type: 'line',
+      plugins: hasLabels ? [ChartDataLabels] : [],
       data: {
         labels: pts.map(p => p.label),
         datasets: [
@@ -1366,21 +1366,21 @@
       },
       options: {
         responsive: true, maintainAspectRatio: false,
-        layout: { padding: { top: 24 } },
+        layout: { padding: { top: 28 } },
         plugins: {
           legend: { display: false },
           tooltip: {
             callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y}` }
           },
-          datalabels: {
-            display: ctx => ctx.datasetIndex === 0 && ctx.parsed.y > 0,
+          datalabels: hasLabels ? {
+            display: c => c.datasetIndex === 0 && c.parsed.y > 0,
             align: 'top',
             anchor: 'end',
             offset: 2,
             color: teamColor,
             font: { family: "'Plus Jakarta Sans', sans-serif", size: 11, weight: '700' },
             formatter: v => v
-          }
+          } : { display: false }
         },
         scales: {
           y: { beginAtZero: true, ticks: { stepSize: 1, precision: 0 },
