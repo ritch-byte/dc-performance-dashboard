@@ -619,9 +619,7 @@
           <button class="view-btn"        id="pBtnWeekly"  onclick="setProfileView('weekly')">Weekly</button>
           <button class="view-btn"        id="pBtnMonthly" onclick="setProfileView('monthly')">Monthly</button>
         </div>
-        <div class="profile-canvas-wrap">
-          <canvas id="profileChart"></canvas>
-        </div>
+        <div class="profile-canvas-wrap" id="profileChartWrap"></div>
       </div>
     </div>
 
@@ -1307,7 +1305,8 @@
       $('pBtn'+v).classList.toggle('active', v.toLowerCase() === _profileView);
     });
     showPage('profile');
-    requestAnimationFrame(renderProfileChart);
+    void $('profileChartWrap').offsetWidth; // force reflow so wrapper has real dimensions
+    renderProfileChart();
   }
 
   function closeProfile() {
@@ -1336,9 +1335,12 @@
     const teamColor = _profileTeam.color;
 
     const hasLabels = typeof ChartDataLabels !== 'undefined';
-    const canvasCtx = $('profileChart').getContext('2d');
-    if (_profileChart) _profileChart.destroy();
-    _profileChart = new Chart(canvasCtx, {
+    if (_profileChart) { _profileChart.destroy(); _profileChart = null; }
+    const wrap = $('profileChartWrap');
+    wrap.innerHTML = '';
+    const canvas = document.createElement('canvas');
+    wrap.appendChild(canvas);
+    _profileChart = new Chart(canvas.getContext('2d'), {
       type: 'line',
       plugins: hasLabels ? [ChartDataLabels] : [],
       data: {
