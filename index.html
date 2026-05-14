@@ -6,6 +6,7 @@
   <title>OA — DC Performance Dashboard</title>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
   <style>
     :root {
       --blue:    #1A2DB5;
@@ -407,26 +408,20 @@
     /* ── MEMBER CARD POINTER ── */
     .member-card { cursor: pointer; }
 
-    /* ── PROFILE MODAL ── */
-    .profile-modal {
-      position: fixed; inset: 0;
-      background: rgba(13,26,110,0.6);
-      z-index: 600;
-      display: flex; align-items: center; justify-content: center;
-      padding: 20px;
-    }
-    .profile-panel {
-      background: white;
-      width: 100%; max-width: 700px;
-      max-height: 92vh; overflow-y: auto;
-      box-shadow: 0 24px 64px rgba(13,26,110,0.35);
-      display: flex; flex-direction: column;
-    }
+    /* ── PROFILE SECTION (full page) ── */
     .profile-head {
-      padding: 20px 24px;
+      padding: 18px 28px;
       display: flex; align-items: center; gap: 14px;
-      position: relative; flex-shrink: 0;
+      flex-shrink: 0; position: sticky; top: 64px; z-index: 100;
     }
+    .profile-back-btn {
+      background: rgba(255,255,255,0.15); border: none; color: white;
+      padding: 6px 14px; font-family: 'Inter', sans-serif;
+      font-size: 12px; font-weight: 600; cursor: pointer;
+      display: flex; align-items: center; gap: 5px;
+      transition: background 0.12s; flex-shrink: 0;
+    }
+    .profile-back-btn:hover { background: rgba(255,255,255,0.28); }
     .profile-avatar {
       width: 46px; height: 46px; flex-shrink: 0;
       display: flex; align-items: center; justify-content: center;
@@ -443,32 +438,26 @@
       color: white; margin-top: 5px; display: inline-block;
       background: rgba(255,255,255,0.15);
     }
-    .profile-close {
-      position: absolute; right: 16px; top: 16px;
-      background: rgba(255,255,255,0.15); border: none; color: white;
-      width: 30px; height: 30px; font-size: 15px; cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-    }
-    .profile-close:hover { background: rgba(255,255,255,0.28); }
     .profile-stats-row {
-      display: flex; border-bottom: 2px solid var(--border); flex-shrink: 0;
+      display: flex; border-bottom: 2px solid var(--border);
+      background: white;
     }
     .profile-stat-box {
-      flex: 1; padding: 14px 16px; text-align: center;
+      flex: 1; padding: 16px 16px; text-align: center;
       border-right: 1px solid var(--border);
     }
     .profile-stat-box:last-child { border-right: none; }
     .profile-stat-num {
       font-family: 'Plus Jakarta Sans', sans-serif;
-      font-size: 30px; font-weight: 800; color: var(--navy); line-height: 1;
+      font-size: 32px; font-weight: 800; color: var(--navy); line-height: 1;
     }
     .profile-stat-lbl {
       font-size: 10px; color: var(--gray);
       letter-spacing: 0.5px; text-transform: uppercase; margin-top: 4px;
     }
-    .profile-chart-area { padding: 20px 24px; flex: 1; }
-    .profile-chart-toggle { display: flex; border: 1.5px solid var(--border); margin-bottom: 16px; width: fit-content; }
-    .profile-canvas-wrap { position: relative; height: 270px; }
+    .profile-chart-area { padding: 24px 28px 36px; background: white; margin-top: 1px; }
+    .profile-chart-toggle { display: flex; border: 1.5px solid var(--border); margin-bottom: 20px; width: fit-content; }
+    .profile-canvas-wrap { position: relative; height: 440px; }
 
     /* ── RESPONSIVE ── */
     @media (max-width: 700px) {
@@ -596,49 +585,47 @@
       <div class="main-body" id="reportsBody"></div>
     </div>
 
-  </main>
-</div>
+    <!-- ── Profile Section ── -->
+    <div id="profileSection" style="display:none;">
+      <div class="profile-head" id="profileHead">
+        <button class="profile-back-btn" onclick="closeProfile()">← Back</button>
+        <div class="profile-avatar" id="profileAvatar">--</div>
+        <div>
+          <div class="profile-member-name" id="profileName">--</div>
+          <span class="profile-team-badge" id="profileTeamBadge">--</span>
+        </div>
+      </div>
+      <div class="profile-stats-row">
+        <div class="profile-stat-box">
+          <div class="profile-stat-num" id="profileStatDay">0</div>
+          <div class="profile-stat-lbl">Today</div>
+        </div>
+        <div class="profile-stat-box">
+          <div class="profile-stat-num" id="profileStatWeek">0</div>
+          <div class="profile-stat-lbl">This Week</div>
+        </div>
+        <div class="profile-stat-box">
+          <div class="profile-stat-num" id="profileStatMonth">0</div>
+          <div class="profile-stat-lbl">This Month</div>
+        </div>
+        <div class="profile-stat-box">
+          <div class="profile-stat-num" id="profileStatAll">0</div>
+          <div class="profile-stat-lbl">All Time</div>
+        </div>
+      </div>
+      <div class="profile-chart-area">
+        <div class="profile-chart-toggle">
+          <button class="view-btn active" id="pBtnDaily"   onclick="setProfileView('daily')">Daily (30d)</button>
+          <button class="view-btn"        id="pBtnWeekly"  onclick="setProfileView('weekly')">Weekly</button>
+          <button class="view-btn"        id="pBtnMonthly" onclick="setProfileView('monthly')">Monthly</button>
+        </div>
+        <div class="profile-canvas-wrap">
+          <canvas id="profileChart"></canvas>
+        </div>
+      </div>
+    </div>
 
-<!-- ── Profile Modal ── -->
-<div id="profileModal" class="profile-modal" style="display:none" onclick="if(event.target===this)closeProfile()">
-  <div class="profile-panel">
-    <div class="profile-head" id="profileHead">
-      <div class="profile-avatar" id="profileAvatar">--</div>
-      <div>
-        <div class="profile-member-name" id="profileName">--</div>
-        <span class="profile-team-badge" id="profileTeamBadge">--</span>
-      </div>
-      <button class="profile-close" onclick="closeProfile()">✕</button>
-    </div>
-    <div class="profile-stats-row">
-      <div class="profile-stat-box">
-        <div class="profile-stat-num" id="profileStatDay">0</div>
-        <div class="profile-stat-lbl">Today</div>
-      </div>
-      <div class="profile-stat-box">
-        <div class="profile-stat-num" id="profileStatWeek">0</div>
-        <div class="profile-stat-lbl">This Week</div>
-      </div>
-      <div class="profile-stat-box">
-        <div class="profile-stat-num" id="profileStatMonth">0</div>
-        <div class="profile-stat-lbl">This Month</div>
-      </div>
-      <div class="profile-stat-box">
-        <div class="profile-stat-num" id="profileStatAll">0</div>
-        <div class="profile-stat-lbl">All Time</div>
-      </div>
-    </div>
-    <div class="profile-chart-area">
-      <div class="profile-chart-toggle">
-        <button class="view-btn active" id="pBtnDaily"   onclick="setProfileView('daily')">Daily (30d)</button>
-        <button class="view-btn"        id="pBtnWeekly"  onclick="setProfileView('weekly')">Weekly</button>
-        <button class="view-btn"        id="pBtnMonthly" onclick="setProfileView('monthly')">Monthly</button>
-      </div>
-      <div class="profile-canvas-wrap">
-        <canvas id="profileChart"></canvas>
-      </div>
-    </div>
-  </div>
+  </main>
 </div>
 
 <!-- ── Footer ── -->
@@ -650,6 +637,8 @@
 </footer>
 
 <script>
+  Chart.register(ChartDataLabels);
+
   const CSV_URL      = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSisLiJWdncrB-dDPNI0JGqSTbBQl5n5OAel1Epyr7DAsonyVAa6HSFCVXdA4_uMTbnBgGawkyX6DYh/pub?gid=0&single=true&output=csv';
   const REFRESH_MS   = 60000;
   const DAILY_TARGET = 2;
@@ -1123,10 +1112,13 @@
     return new Date(+y,+m-1,+d).toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   }
   // ── Page navigation ──
+  let _prevPage = 'dashboard';
   function showPage(page) {
+    if (page !== 'profile') _prevPage = page;
     $('dashboardSection').style.display = page === 'dashboard' ? '' : 'none';
     $('teamSection').style.display      = page === 'team'      ? '' : 'none';
     $('reportsSection').style.display   = page === 'reports'   ? '' : 'none';
+    $('profileSection').style.display   = page === 'profile'   ? '' : 'none';
     $('navDashboard').classList.toggle('active', page === 'dashboard');
     $('navTeam').classList.toggle('active', page === 'team');
     $('navReports').classList.toggle('active', page === 'reports');
@@ -1316,14 +1308,14 @@
     ['Daily','Weekly','Monthly'].forEach(v => {
       $('pBtn'+v).classList.toggle('active', v.toLowerCase() === _profileView);
     });
-    $('profileModal').style.display = 'flex';
+    showPage('profile');
     renderProfileChart();
   }
 
   function closeProfile() {
-    $('profileModal').style.display = 'none';
     if (_profileChart) { _profileChart.destroy(); _profileChart = null; }
     _profileMember = null;
+    showPage(_prevPage);
   }
 
   function setProfileView(v) {
@@ -1374,10 +1366,20 @@
       },
       options: {
         responsive: true, maintainAspectRatio: false,
+        layout: { padding: { top: 24 } },
         plugins: {
           legend: { display: false },
           tooltip: {
             callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y}` }
+          },
+          datalabels: {
+            display: ctx => ctx.datasetIndex === 0 && ctx.parsed.y > 0,
+            align: 'top',
+            anchor: 'end',
+            offset: 2,
+            color: teamColor,
+            font: { family: "'Plus Jakarta Sans', sans-serif", size: 11, weight: '700' },
+            formatter: v => v
           }
         },
         scales: {
