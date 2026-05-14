@@ -558,7 +558,7 @@
         { id: 'ruiz',     display: 'Renz Ruiz',             ln: 'ruiz' },
         { id: 'silang',   display: 'Summer Silang',         ln: 'silang' },
         { id: 'garcia',   display: 'Chin Garcia',           ln: 'garcia' },
-        { id: 'jetdel',   display: 'Jetdel',                ln: 'jetdel',  hidden: true },
+        { id: 'jetdel',   display: 'Jetdel Ybanez',           ln: 'ybanez',  hidden: true },
         { id: 'tanate',   display: 'Angelica Tanate',        ln: 'tanate',  hidden: true },
       ]
     },
@@ -600,7 +600,17 @@
         { id: 'escabillas',  display: 'Kenneth Escabillas',    ln: 'escabillas' },
         { id: 'bautista',    display: 'Samara Bautista',       ln: 'bautista' },
         { id: 'jumar',       display: 'Jumar',                 ln: 'jumar',   hidden: true },
-        { id: 'bayhon',      display: 'Alvin Bayhon',          ln: 'bayhon',  hidden: true },
+        { id: 'bayhon',      display: 'Ali Bayhon',            ln: 'bayhon',  hidden: true },
+      ]
+    },
+    {
+      id: 'poc', name: 'POC TEAM', color: '#7c3aed',
+      members: [
+        { id: 'jetdel',  display: 'Jetdel Ybanez',   ln: 'ybanez' },
+        { id: 'tanate',  display: 'Angelica Tanate',  ln: 'tanate' },
+        { id: 'gadier',  display: 'Vincent Gadier',   ln: 'gadier' },
+        { id: 'bayhon',  display: 'Ali Bayhon',       ln: 'bayhon' },
+        { id: 'jumar',   display: 'Jumar',            ln: 'jumar'  },
       ]
     }
   ];
@@ -768,11 +778,14 @@
     if (currentView === 'daily') {
       const counts = aggregateForDate(date);
       $('dateHeading').textContent = formatDate(date);
-      // Grand total summary
-      const allMembers = TEAMS.flatMap(t => t.members);
-      const grandTotal = allMembers.reduce((s,m) => s + (counts[m.id] || 0), 0);
-      const onTarget   = allMembers.filter(m => !m.hidden && (counts[m.id] || 0) >= DAILY_TARGET).length;
-      const totalVisible = allMembers.filter(m => !m.hidden).length;
+      // Grand total summary — deduplicate by ID (POC members appear in 2 teams)
+      const memberMap = new Map();
+      for (const t of TEAMS) for (const m of t.members)
+        if (!memberMap.has(m.id) || !m.hidden) memberMap.set(m.id, m);
+      const uniqueMembers = [...memberMap.values()];
+      const grandTotal   = uniqueMembers.reduce((s,m) => s + (counts[m.id] || 0), 0);
+      const onTarget     = uniqueMembers.filter(m => !m.hidden && (counts[m.id]||0) >= DAILY_TARGET).length;
+      const totalVisible = uniqueMembers.filter(m => !m.hidden).length;
       const summary = document.createElement('div');
       summary.className = 'day-summary';
       summary.innerHTML = `
