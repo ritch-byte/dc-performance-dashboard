@@ -470,6 +470,16 @@
     .att-none     { background: #f9fafb; color: #c0c0c0; border: 1px solid #e5e7eb; }
     .att-rate-bar { height: 4px; background: #e2e4f0; border-radius: 2px; margin-top: 5px; overflow: hidden; }
     .att-rate-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
+    .profile-att-area {
+      padding: 24px 28px 36px; background: white; margin-top: 1px;
+      border-top: 1px solid var(--border);
+    }
+    .profile-att-title {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 10px; font-weight: 700; color: var(--gray);
+      letter-spacing: 1.4px; text-transform: uppercase;
+      margin-bottom: 14px;
+    }
 
     /* ── RESPONSIVE ── */
     @media (max-width: 700px) {
@@ -657,6 +667,10 @@
           <div class="profile-stat-num" id="profileStatAll">0</div>
           <div class="profile-stat-lbl">Last Month</div>
         </div>
+        <div class="profile-stat-box" id="profileStatAttBox" style="border-left:2px solid var(--border)">
+          <div class="profile-stat-num" id="profileStatAtt" style="font-size:22px">—</div>
+          <div class="profile-stat-lbl">MTD Attendance</div>
+        </div>
       </div>
       <div class="profile-chart-area">
         <div class="profile-chart-toggle">
@@ -665,6 +679,10 @@
           <button class="view-btn"        id="pBtnMonthly" onclick="setProfileView('monthly')">Monthly</button>
         </div>
         <div class="profile-canvas-wrap" id="profileChartWrap"></div>
+      </div>
+      <div class="profile-att-area">
+        <div class="profile-att-title">Attendance — This Month</div>
+        <div id="profileAttContent"></div>
       </div>
     </div>
 
@@ -1349,6 +1367,15 @@
     $('profileStatMonth').textContent = monthC;
     $('profileStatAll').textContent   = lastMonthC;
 
+    // Attendance MTD
+    if (_attLoaded) {
+      const ym = `${ty}-${String(tm).padStart(2,'0')}`;
+      const { att: a, sch: s } = getAgentAttForMonth(memberId, ym);
+      $('profileStatAtt').textContent = s ? `${a}/${s}` : '—';
+    } else {
+      $('profileStatAtt').textContent = '—';
+    }
+
     _profileView = 'daily';
     ['Daily','Weekly','Monthly'].forEach(v => {
       $('pBtn'+v).classList.toggle('active', v.toLowerCase() === _profileView);
@@ -1356,6 +1383,7 @@
     showPage('profile');
     void $('profileChartWrap').offsetWidth; // force reflow so wrapper has real dimensions
     renderProfileChart();
+    renderProfileAttendance(memberId);
   }
 
   function closeProfile() {
@@ -1650,21 +1678,16 @@
     if (s === 'present')  return 'att-present';
     if (s === 'late' || s === 'undertime') return 'att-late';
     if (s === 'absent')   return 'att-absent';
-    if (s === 'off' || s === 'rd' || s === 'rest day' || s === 'holiday') return 'att-off';
     return 'att-none';
   }
 
   function attStatusLabel(status) {
-    if (!status) return '—';
-    const s = status.toLowerCase();
+    const s = (status||'').toLowerCase();
     if (s === 'present')   return 'Present';
     if (s === 'late')      return 'Late';
     if (s === 'undertime') return 'Undertime';
     if (s === 'absent')    return 'Absent';
-    if (s === 'off')       return 'Off';
-    if (s === 'rd' || s === 'rest day') return 'RD';
-    if (s === 'holiday')   return 'Holiday';
-    return status;
+    return '—';
   }
 
   function isAttended(status) {
@@ -1775,6 +1798,81 @@
       }
       container.appendChild(sec);
     }
+  }
+
+  function getAgentAttForMonth(memberId, ym) {
+    const [y, m] = ym.split('-').map(Number);
+    const rows = rawAttRows.filter(r => {
+      const d = normalizeDate(r.rawDate); if (!d) return false;
+      const [dy,dm] = d.split('-').map(Number);
+      return dy===y && dm===m && resolveAgent(r.name) === memberId;
+    });
+    const seen = new Set(); let att = 0, sch = 0;
+    for (const row of rows) {
+      const d = normalizeDate(row.rawDate);
+      if (seen.has(d)) continue; seen.add(d);
+      if (isScheduled(row.status)) sch++;
+      if (isAttended(row.status))  att++;
+    }
+    return { att, sch };
+  }
+
+  function renderProfileAttendance(memberId) {
+    const el = $('profileAttContent');
+    el.innerHTML = '';
+    if (!_attLoaded) {
+      el.innerHTML = '<p style="color:var(--gray);font-size:12px;padding:8px 0">Attendance data not loaded — open the Attendance tab first.</p>';
+      return;
+    }
+    const today = localIso(new Date());
+    const [ty, tm] = today.split('-').map(Number);
+    const ym = `${ty}-${String(tm).padStart(2,'0')}`;
+    const weeks = getWeeksForMonth(ym);
+    if (!weeks.length) {
+      el.innerHTML = '<p style="color:var(--gray);font-size:12px;padding:8px 0">No data for this month.</p>';
+      return;
+    }
+
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex;flex-direction:column;gap:0';
+
+    weeks.forEach((mon, i) => {
+      const dates = getBusinessDaysFrom(mon);
+      const seen = new Set(); let att = 0, sch = 0;
+      const dayDots = dates.map(date => {
+        const row = rawAttRows.find(r => normalizeDate(r.rawDate)===date && resolveAgent(r.name)===memberId);
+        const status = row?.status || '';
+        if (!seen.has(date)) {
+          seen.add(date);
+          if (isScheduled(status)) sch++;
+          if (isAttended(status))  att++;
+        }
+        const s = status.toLowerCase();
+        const dotColor = s==='present' ? '#16a34a'
+          : (s==='late'||s==='undertime') ? '#ea580c'
+          : s==='absent' ? '#dc2626'
+          : '#dde0ec';
+        const [,,d] = date.split('-');
+        return `<span title="${attStatusLabel(status)||'No data'}" style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:var(--gray);cursor:default">
+          <span style="width:9px;height:9px;border-radius:50%;background:${dotColor};display:inline-block;flex-shrink:0"></span>
+          ${+d}
+        </span>`;
+      }).join('');
+
+      const pct = sch ? Math.round(att/sch*100) : null;
+      const rateColor = pct===null ? '#9ca3af' : pct>=90 ? '#16a34a' : pct>=75 ? '#ea580c' : '#dc2626';
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:14px;padding:9px 0;border-bottom:1px solid var(--border)';
+      row.innerHTML = `
+        <div style="min-width:36px;font-size:11px;font-weight:700;color:var(--navy);font-family:'Plus Jakarta Sans',sans-serif">W${i+1}</div>
+        <div style="flex:1;display:flex;gap:10px;flex-wrap:wrap;align-items:center">${dayDots}</div>
+        <div style="text-align:right;min-width:52px">
+          ${sch ? `<span style="font-size:14px;font-weight:800;font-family:'Plus Jakarta Sans',sans-serif;color:${rateColor}">${att}/${sch}</span>` : '<span style="color:var(--gray);font-size:12px">—</span>'}
+        </div>`;
+      wrap.appendChild(row);
+    });
+
+    el.appendChild(wrap);
   }
 
   function renderAttPeriod(container, rows) {
