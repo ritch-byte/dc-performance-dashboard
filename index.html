@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="pragma" content="no-cache">
+  <meta http-equiv="expires" content="0">
   <title>OA — DC Performance Dashboard</title>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -681,7 +684,10 @@
         <div class="profile-canvas-wrap" id="profileChartWrap"></div>
       </div>
       <div class="profile-att-area">
-        <div class="profile-att-title">Attendance — This Month</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+          <div class="profile-att-title" style="margin-bottom:0">Attendance — This Month</div>
+          <button id="attReloadBtn" onclick="attReload()" style="font-size:11px;font-weight:600;color:var(--blue);background:none;border:1px solid var(--border);padding:4px 10px;cursor:pointer;font-family:'Inter',sans-serif">↻ Reload</button>
+        </div>
         <div id="profileAttContent"></div>
       </div>
     </div>
@@ -1852,12 +1858,22 @@
     return { att, sch };
   }
 
+  function attReload() {
+    if (!_profileMember) return;
+    _attLoading = false;
+    _attLoaded  = false;
+    rawAttRows  = [];
+    const el = $('profileAttContent');
+    if (el) el.innerHTML = '<p style="color:var(--gray);font-size:12px;padding:8px 0">Reloading…</p>';
+    loadAttendanceData();
+  }
+
   function renderProfileAttendance(memberId) {
     const el = $('profileAttContent');
     el.innerHTML = '';
     if (!_attLoaded) {
-      el.innerHTML = '<p style="color:var(--gray);font-size:12px;padding:8px 0">Loading attendance data…</p>';
-      loadAttendanceData();
+      el.innerHTML = '<p style="color:var(--gray);font-size:12px;padding:8px 0">Loading… (click ↻ Reload if this persists)</p>';
+      if (!_attLoading) loadAttendanceData();
       return;
     }
     const today = localIso(new Date());
