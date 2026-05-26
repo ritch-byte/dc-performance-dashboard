@@ -1644,6 +1644,16 @@
         $('attErrorBanner').textContent = '⚠ Attendance data failed to load: ' + err.message;
         $('attErrorBanner').classList.add('show');
       }
+      if (_profileMember) {
+        const el = $('profileAttContent');
+        if (el) el.innerHTML = `<p style="color:#dc2626;font-size:12px;padding:8px 0">
+          Could not load attendance data (${esc(err.message)}).
+          <button onclick="_attLoading=false;renderProfileAttendance('${_profileMember.id}')"
+            style="color:var(--blue);background:none;border:none;cursor:pointer;font-size:12px;text-decoration:underline;padding:0;margin-left:4px">
+            Retry
+          </button>
+        </p>`;
+      }
     } finally {
       _attLoading = false;
     }
