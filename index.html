@@ -461,6 +461,42 @@
     .profile-chart-toggle { display: flex; border: 1.5px solid var(--border); margin-bottom: 20px; width: fit-content; }
     .profile-canvas-wrap { position: relative; height: 440px; }
 
+    /* ── PERFORMANCE SHEET ── */
+    .sheet-scroll { overflow-x: auto; }
+    .sheet-table {
+      border-collapse: collapse; font-size: 12px;
+      width: 100%; min-width: 400px;
+    }
+    .sheet-table thead th {
+      background: var(--navy); color: white;
+      padding: 8px 10px; text-align: center;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 9px; font-weight: 700;
+      letter-spacing: 0.6px; text-transform: uppercase;
+      white-space: nowrap; position: sticky; top: 116px;
+      border-right: 1px solid rgba(255,255,255,0.1);
+    }
+    .sheet-table thead th.sh-name { text-align: left; min-width: 150px; position: sticky; left: 0; z-index: 2; background: var(--navy); }
+    .sheet-table td { padding: 6px 9px; text-align: center; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); white-space: nowrap; }
+    .sheet-table td.sh-name { text-align: left; font-weight: 600; color: var(--navy); font-size: 12px; padding-left: 14px; background: white; position: sticky; left: 0; z-index: 1; border-right: 2px solid var(--border); }
+    .sh-cell-hit  { background: #f0fdf4; color: #16a34a; font-weight: 700; }
+    .sh-cell-part { background: #fffbeb; color: #d97706; font-weight: 700; }
+    .sh-cell-zero { color: #d1d5db; }
+    .sh-cell-total { background: #f0f4ff; color: var(--navy); font-weight: 800; border-left: 2px solid var(--border) !important; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 13px; }
+    .sh-team-row td { background: var(--bg); font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 700; color: var(--navy); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; padding: 7px 10px; border-bottom: 1px solid var(--border); }
+    .sh-team-row td.sh-name { position: sticky; left: 0; z-index: 1; border-right: 2px solid var(--border); }
+    .sh-totals-row td { background: #e8edff; font-weight: 800; color: var(--navy); border-top: 2px solid var(--blue); font-family: 'Plus Jakarta Sans', sans-serif; }
+    .sh-totals-row td.sh-name { position: sticky; left: 0; z-index: 1; border-right: 2px solid var(--border); }
+    .sh-week-sep { border-left: 2px solid var(--blue) !important; }
+    .btn-export {
+      background: var(--blue); color: white;
+      border: none; padding: 7px 16px;
+      font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 700;
+      cursor: pointer; letter-spacing: 0.3px;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .btn-export:hover { background: var(--navy); }
+
     /* ── ATTENDANCE ── */
     .att-status-chip {
       font-size: 10px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;
@@ -542,6 +578,13 @@
       </svg>
       Reports
     </a>
+    <a class="nav-item" id="navSheet" href="#" onclick="showPage('sheet');return false;">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="1" y="1" width="14" height="14" rx="1"/>
+        <path d="M1 5h14M5 5v10M1 9h14"/>
+      </svg>
+      Performance Sheet
+    </a>
     <a class="nav-item" id="navAttendance" href="#" onclick="showPage('attendance');return false;">
       <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
         <rect x="1" y="2" width="14" height="13" rx="1"/>
@@ -616,6 +659,32 @@
         </div>
       </div>
       <div class="main-body" id="reportsBody"></div>
+    </div>
+
+    <!-- ── Performance Sheet Section ── -->
+    <div id="sheetSection" style="display:none;">
+      <div class="content-header">
+        <div class="page-title" id="sheetHeading">Performance Sheet</div>
+        <div class="ch-right">
+          <div class="view-toggle">
+            <button class="view-btn active" id="sheetBtnWeekly"  onclick="setSheetView('weekly')">Weekly</button>
+            <button class="view-btn"        id="sheetBtnMonthly" onclick="setSheetView('monthly')">Monthly</button>
+          </div>
+          <div id="sheetWeekSelectWrap">
+            <select id="sheetWeekSelect" class="week-select" onchange="renderSheet()"></select>
+          </div>
+          <div id="sheetMonthSelectWrap" style="display:none;">
+            <select id="sheetMonthSelect" class="week-select" onchange="renderSheet()"></select>
+          </div>
+          <button class="btn-export" onclick="downloadSheetCSV()">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 2v8M4 7l4 4 4-4"/><path d="M2 13h12"/></svg>
+            Export CSV
+          </button>
+        </div>
+      </div>
+      <div class="main-body" style="padding-top:16px">
+        <div id="sheetContainer"></div>
+      </div>
     </div>
 
     <!-- ── Attendance Section ── -->
@@ -1185,14 +1254,18 @@
     $('dashboardSection').style.display    = page === 'dashboard'  ? '' : 'none';
     $('teamSection').style.display         = page === 'team'       ? '' : 'none';
     $('reportsSection').style.display      = page === 'reports'    ? '' : 'none';
+    $('sheetSection').style.display        = page === 'sheet'      ? '' : 'none';
     $('attendanceSection').style.display   = page === 'attendance' ? '' : 'none';
     $('profileSection').style.display      = page === 'profile'    ? '' : 'none';
+    $('sheetSection').style.display        = page === 'sheet'      ? '' : 'none';
     $('navDashboard').classList.toggle('active',   page === 'dashboard');
     $('navTeam').classList.toggle('active',        page === 'team');
     $('navReports').classList.toggle('active',     page === 'reports');
+    $('navSheet').classList.toggle('active',       page === 'sheet');
     $('navAttendance').classList.toggle('active',  page === 'attendance');
     if (page === 'team')       renderTeamRoster();
     if (page === 'reports')    { buildReportMonthSelect(); renderReports(); }
+    if (page === 'sheet')      { buildSheetWeekSelect(); renderSheet(); }
     if (page === 'attendance') { if (!_attLoaded) loadAttendanceData(); else renderAttendance(); }
   }
 
@@ -1599,6 +1672,216 @@
       String(dt.getDate()).padStart(2,'0');
   }
   function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  // ── PERFORMANCE SHEET ──
+  let sheetView = 'weekly', _sheetDates = [], _sheetData = {};
+
+  function setSheetView(v) {
+    sheetView = v;
+    $('sheetBtnWeekly').classList.toggle('active',  v === 'weekly');
+    $('sheetBtnMonthly').classList.toggle('active', v === 'monthly');
+    $('sheetWeekSelectWrap').style.display  = v === 'weekly'  ? '' : 'none';
+    $('sheetMonthSelectWrap').style.display = v === 'monthly' ? '' : 'none';
+    if (v === 'monthly') buildSheetMonthSelect();
+    renderSheet();
+  }
+
+  function buildSheetWeekSelect() {
+    const sel = $('sheetWeekSelect');
+    if (sel.options.length) return;
+    const groups = generateWeekOptions();
+    for (const key of Object.keys(groups).sort().reverse()) {
+      const [y, m] = key.split('-');
+      const og = document.createElement('optgroup');
+      og.label = new Date(+y,+m-1,1).toLocaleDateString('en-US',{month:'long',year:'numeric'});
+      const mondays = groups[key];
+      for (let i = mondays.length-1; i >= 0; i--) {
+        const mon = mondays[i];
+        const [wy,wm,wd] = mon.split('-').map(Number);
+        const fri = new Date(wy,wm-1,wd+4);
+        const opt = document.createElement('option');
+        opt.value = mon;
+        opt.textContent = `Week ${i+1}  (${new Date(wy,wm-1,wd).toLocaleDateString('en-US',{month:'short',day:'numeric'})} – ${fri.toLocaleDateString('en-US',{month:'short',day:'numeric'})})`;
+        og.appendChild(opt);
+      }
+      sel.appendChild(og);
+    }
+  }
+
+  function buildSheetMonthSelect() {
+    const sel = $('sheetMonthSelect');
+    if (sel.options.length) return;
+    let [y, m] = localIso(new Date()).split('-').map(Number);
+    while (y > 2026 || (y === 2026 && m >= 1)) {
+      const ym = `${y}-${String(m).padStart(2,'0')}`;
+      const opt = document.createElement('option');
+      opt.value = ym;
+      opt.textContent = new Date(y,m-1,1).toLocaleDateString('en-US',{month:'long',year:'numeric'});
+      sel.appendChild(opt);
+      m--; if (m === 0) { m = 12; y--; }
+    }
+  }
+
+  function renderSheet() {
+    const c = $('sheetContainer');
+    c.innerHTML = '';
+
+    let dates = [], weekBoundaries = new Set();
+    if (sheetView === 'weekly') {
+      const mon = $('sheetWeekSelect').value;
+      if (!mon) return;
+      dates = getBusinessDaysFrom(mon);
+      $('sheetHeading').textContent = 'Performance Sheet — Week of ' + wtdRangeLabel(dates);
+    } else {
+      const ym = $('sheetMonthSelect').value || localIso(new Date()).slice(0,7);
+      const [y, m] = ym.split('-').map(Number);
+      const isCurrent = localIso(new Date()).slice(0,7) === ym;
+      dates = aggregateMonth(ym, isCurrent).dates;
+      $('sheetHeading').textContent = 'Performance Sheet — ' +
+        new Date(y,m-1,1).toLocaleDateString('en-US',{month:'long',year:'numeric'});
+      // mark first day of each week as a separator
+      dates.forEach(d => { if (new Date(...d.split('-').map((v,i)=>i===1?+v-1:+v)).getDay()===1) weekBoundaries.add(d); });
+    }
+
+    _sheetDates = dates;
+
+    // Build per-agent per-day counts
+    const agentDay = {};
+    for (const date of dates) {
+      for (const [id, n] of Object.entries(aggregateForDate(date))) {
+        if (!agentDay[id]) agentDay[id] = {};
+        agentDay[id][date] = n;
+      }
+    }
+    _sheetData = agentDay;
+
+    // Date header labels
+    const colHeaders = dates.map(d => {
+      const [y,mo,dy] = d.split('-').map(Number);
+      const dt = new Date(y,mo-1,dy);
+      return {
+        iso: d,
+        top: dt.toLocaleDateString('en-US',{weekday:'short'}),
+        bot: dt.toLocaleDateString('en-US',{month:'short',day:'numeric'}),
+        sep: weekBoundaries.has(d),
+      };
+    });
+
+    // Summary strip: grand total across all teams
+    const allVisible = TEAMS.flatMap(t => t.members.filter(m => !m.hidden));
+    const grandDayTotals = dates.map(d => allVisible.reduce((s,m) => s+(agentDay[m.id]?.[d]||0), 0));
+    const grandTotal = grandDayTotals.reduce((s,n) => s+n, 0);
+
+    const summary = document.createElement('div');
+    summary.className = 'day-summary';
+    summary.style.marginBottom = '20px';
+    summary.innerHTML = `
+      <span class="day-summary-label">All Teams</span>
+      <div class="day-summary-stat">
+        <span class="day-summary-num">${grandTotal}</span>
+        <span class="day-summary-sub">total DCs (${dates.length} days)</span>
+      </div>
+      <div class="day-summary-divider"></div>
+      <div class="day-summary-stat">
+        <span class="day-summary-num">${Math.round(grandTotal/Math.max(allVisible.length*dates.length,1)*10)/10}</span>
+        <span class="day-summary-sub">avg DCs / agent-day</span>
+      </div>`;
+    c.appendChild(summary);
+
+    for (const team of TEAMS) {
+      const visible = team.members.filter(m => !m.hidden);
+      const totFor = m => dates.reduce((s,d) => s+(agentDay[m.id]?.[d]||0), 0);
+      const sorted = [...visible].sort((a,b) => totFor(b) - totFor(a));
+
+      const sec = document.createElement('div');
+      sec.className = 'team-section';
+      sec.innerHTML = `
+        <div class="team-header">
+          <div class="team-label">
+            <div class="team-accent" style="background:${esc(team.color)}"></div>
+            <div class="team-name">${esc(team.name)}</div>
+          </div>
+        </div>`;
+
+      const scrollWrap = document.createElement('div');
+      scrollWrap.className = 'sheet-scroll';
+
+      const table = document.createElement('table');
+      table.className = 'sheet-table';
+
+      // Header
+      const thead = document.createElement('thead');
+      const hRow = document.createElement('tr');
+      hRow.innerHTML = `<th class="sh-name">Agent</th>` +
+        colHeaders.map(h => `<th class="${h.sep?'sh-week-sep':''}" title="${h.bot}">${h.top}<br><span style="font-size:8px;font-weight:400;opacity:0.7">${h.bot}</span></th>`).join('') +
+        `<th>Total</th>`;
+      thead.appendChild(hRow);
+      table.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+
+      // Agent rows
+      const dayTeamTot = {};
+      for (const m of sorted) {
+        const tr = document.createElement('tr');
+        const rowTot = totFor(m);
+        let html = `<td class="sh-name">${esc(m.display)}</td>`;
+        for (const {iso, sep} of colHeaders) {
+          const n = agentDay[m.id]?.[iso] || 0;
+          dayTeamTot[iso] = (dayTeamTot[iso]||0) + n;
+          const cls = n >= DAILY_TARGET ? 'sh-cell-hit' : n >= 1 ? 'sh-cell-part' : 'sh-cell-zero';
+          const sepCls = sep ? 'sh-week-sep' : '';
+          html += `<td class="${cls} ${sepCls}">${n||'—'}</td>`;
+        }
+        html += `<td class="sh-cell-total">${rowTot||'—'}</td>`;
+        tr.innerHTML = html;
+        tbody.appendChild(tr);
+      }
+
+      // Team totals row
+      const teamTot = Object.values(dayTeamTot).reduce((s,n)=>s+n,0);
+      const totRow = document.createElement('tr');
+      totRow.className = 'sh-totals-row';
+      let totHtml = `<td class="sh-name">Team Total</td>`;
+      for (const {iso, sep} of colHeaders) {
+        const n = dayTeamTot[iso]||0;
+        const sepCls = sep ? 'sh-week-sep' : '';
+        totHtml += `<td class="${sepCls}" style="font-weight:800;color:var(--blue)">${n||'—'}</td>`;
+      }
+      totHtml += `<td class="sh-cell-total" style="color:var(--blue)">${teamTot||'—'}</td>`;
+      totRow.innerHTML = totHtml;
+      tbody.appendChild(totRow);
+
+      table.appendChild(tbody);
+      scrollWrap.appendChild(table);
+      sec.appendChild(scrollWrap);
+      c.appendChild(sec);
+    }
+  }
+
+  function downloadSheetCSV() {
+    if (!_sheetDates.length) { alert('No data to export.'); return; }
+    const colFmt = d => { const [y,m,dy]=d.split('-').map(Number); return new Date(y,m-1,dy).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}); };
+    const rows = [['Team','Agent',..._sheetDates.map(colFmt),'Total']];
+    for (const team of TEAMS) {
+      const visible = team.members.filter(m => !m.hidden);
+      const totFor = m => _sheetDates.reduce((s,d)=>s+(_sheetData[m.id]?.[d]||0),0);
+      const sorted = [...visible].sort((a,b) => totFor(b)-totFor(a));
+      for (const m of sorted) {
+        rows.push([team.name, m.display, ..._sheetDates.map(d=>_sheetData[m.id]?.[d]||0), totFor(m)]);
+      }
+      const teamDayTots = _sheetDates.map(d => visible.reduce((s,m)=>s+(_sheetData[m.id]?.[d]||0),0));
+      rows.push([team.name,'TEAM TOTAL',...teamDayTots, teamDayTots.reduce((s,n)=>s+n,0)]);
+      rows.push([]);
+    }
+    const csv = rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\r\n');
+    const blob = new Blob(['﻿'+csv,], {type:'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `DC-Sheet-${$('sheetHeading').textContent.replace(/[^a-z0-9]+/gi,'-')}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
 
   // ── ATTENDANCE ──
   const ATTENDANCE_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTuEQK7B71W5APS55L64RZE1OmtTkItTY1suAOqAoAcUOnWF1WjOc3IT6W0PHsT7ekKD0-RMgHN9RAu/pub?gid=0&single=true&output=csv';
