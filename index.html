@@ -1596,7 +1596,7 @@
 
   // ── ATTENDANCE ──
   const ATTENDANCE_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTuEQK7B71W5APS55L64RZE1OmtTkItTY1suAOqAoAcUOnWF1WjOc3IT6W0PHsT7ekKD0-RMgHN9RAu/pub?gid=0&single=true&output=csv';
-  let rawAttRows = [], attView = 'daily', _attLoaded = false;
+  let rawAttRows = [], attView = 'daily', _attLoaded = false, _attLoading = false;
 
   function parseAttendanceCSV(text) {
     return text.trim().split('\n').slice(1).map(line => {
@@ -1612,6 +1612,8 @@
   }
 
   async function loadAttendanceData() {
+    if (_attLoading) return;
+    _attLoading = true;
     try {
       const res = await fetch(ATTENDANCE_CSV_URL + '&t=' + Date.now());
       if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -1632,6 +1634,8 @@
         $('attErrorBanner').textContent = '⚠ Attendance data failed to load: ' + err.message;
         $('attErrorBanner').classList.add('show');
       }
+    } finally {
+      _attLoading = false;
     }
   }
 
@@ -1832,7 +1836,8 @@
     const el = $('profileAttContent');
     el.innerHTML = '';
     if (!_attLoaded) {
-      el.innerHTML = '<p style="color:var(--gray);font-size:12px;padding:8px 0">Attendance data not loaded — open the Attendance tab first.</p>';
+      el.innerHTML = '<p style="color:var(--gray);font-size:12px;padding:8px 0">Loading attendance data…</p>';
+      loadAttendanceData();
       return;
     }
     const today = localIso(new Date());
