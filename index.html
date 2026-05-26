@@ -458,6 +458,19 @@
     .profile-chart-toggle { display: flex; border: 1.5px solid var(--border); margin-bottom: 20px; width: fit-content; }
     .profile-canvas-wrap { position: relative; height: 440px; }
 
+    /* ── ATTENDANCE ── */
+    .att-status-chip {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;
+      padding: 3px 8px; white-space: nowrap; flex-shrink: 0;
+    }
+    .att-present  { background: #f0fdf4; color: #16a34a; border: 1px solid #86efac; }
+    .att-late     { background: #fff7ed; color: #ea580c; border: 1px solid #fed7aa; }
+    .att-absent   { background: #fef2f2; color: #dc2626; border: 1px solid #fca5a5; }
+    .att-off      { background: #f9fafb; color: #9ca3af; border: 1px solid #e5e7eb; }
+    .att-none     { background: #f9fafb; color: #c0c0c0; border: 1px solid #e5e7eb; }
+    .att-rate-bar { height: 4px; background: #e2e4f0; border-radius: 2px; margin-top: 5px; overflow: hidden; }
+    .att-rate-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
+
     /* ── RESPONSIVE ── */
     @media (max-width: 700px) {
       .sidebar { display: none; }
@@ -515,6 +528,14 @@
         <rect x="1" y="1" width="14" height="14"/>
       </svg>
       Reports
+    </a>
+    <a class="nav-item" id="navAttendance" href="#" onclick="showPage('attendance');return false;">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="1" y="2" width="14" height="13" rx="1"/>
+        <path d="M5 1v2M11 1v2M1 6h14"/>
+        <path d="M5 10l1.5 1.5L11 8"/>
+      </svg>
+      Attendance
     </a>
 
     <div class="sidebar-divider"></div>
@@ -582,6 +603,31 @@
         </div>
       </div>
       <div class="main-body" id="reportsBody"></div>
+    </div>
+
+    <!-- ── Attendance Section ── -->
+    <div id="attendanceSection" style="display:none;">
+      <div class="content-header">
+        <div class="page-title" id="attHeading">Attendance</div>
+        <div class="ch-right">
+          <div class="view-toggle">
+            <button class="view-btn active" id="attBtnDaily"   onclick="setAttView('daily')">Daily</button>
+            <button class="view-btn"        id="attBtnWeekly"  onclick="setAttView('weekly')">Weekly</button>
+            <button class="view-btn"        id="attBtnMonthly" onclick="setAttView('monthly')">Monthly</button>
+          </div>
+          <div id="attWeekSelectWrap" style="display:none;">
+            <select id="attWeekSelect" class="week-select" onchange="renderAttendance()"></select>
+          </div>
+          <div id="attMonthSelectWrap" style="display:none;">
+            <select id="attMonthSelect" class="week-select" onchange="renderAttendance()"></select>
+          </div>
+          <input type="date" id="attDate" oninput="renderAttendance()">
+        </div>
+      </div>
+      <div class="main-body">
+        <div class="error-banner" id="attErrorBanner"></div>
+        <div id="attContainer"></div>
+      </div>
     </div>
 
     <!-- ── Profile Section ── -->
@@ -817,6 +863,7 @@
 
   (function init() {
     $('selectedDate').value = localIso(new Date());
+    $('attDate').value = localIso(new Date());
     loadData();
   })();
 
@@ -1110,15 +1157,18 @@
   let _prevPage = 'dashboard';
   function showPage(page) {
     if (page !== 'profile') _prevPage = page;
-    $('dashboardSection').style.display = page === 'dashboard' ? '' : 'none';
-    $('teamSection').style.display      = page === 'team'      ? '' : 'none';
-    $('reportsSection').style.display   = page === 'reports'   ? '' : 'none';
-    $('profileSection').style.display   = page === 'profile'   ? '' : 'none';
-    $('navDashboard').classList.toggle('active', page === 'dashboard');
-    $('navTeam').classList.toggle('active', page === 'team');
-    $('navReports').classList.toggle('active', page === 'reports');
-    if (page === 'team')    renderTeamRoster();
-    if (page === 'reports') { buildReportMonthSelect(); renderReports(); }
+    $('dashboardSection').style.display    = page === 'dashboard'  ? '' : 'none';
+    $('teamSection').style.display         = page === 'team'       ? '' : 'none';
+    $('reportsSection').style.display      = page === 'reports'    ? '' : 'none';
+    $('attendanceSection').style.display   = page === 'attendance' ? '' : 'none';
+    $('profileSection').style.display      = page === 'profile'    ? '' : 'none';
+    $('navDashboard').classList.toggle('active',   page === 'dashboard');
+    $('navTeam').classList.toggle('active',        page === 'team');
+    $('navReports').classList.toggle('active',     page === 'reports');
+    $('navAttendance').classList.toggle('active',  page === 'attendance');
+    if (page === 'team')       renderTeamRoster();
+    if (page === 'reports')    { buildReportMonthSelect(); renderReports(); }
+    if (page === 'attendance') { if (!_attLoaded) loadAttendanceData(); else renderAttendance(); }
   }
 
   // ── Reports ──
@@ -1514,6 +1564,287 @@
       String(dt.getDate()).padStart(2,'0');
   }
   function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  // ── ATTENDANCE ──
+  const ATTENDANCE_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTuEQK7B71W5APS55L64RZE1OmtTkItTY1suAOqAoAcUOnWF1WjOc3IT6W0PHsT7ekKD0-RMgHN9RAu/pub?gid=0&single=true&output=csv';
+  let rawAttRows = [], attView = 'daily', _attLoaded = false;
+
+  function parseAttendanceCSV(text) {
+    return text.trim().split('\n').slice(1).map(line => {
+      const c = splitLine(line);
+      return {
+        rawDate:    (c[2]||'').trim(),
+        name:       (c[4]||'').trim(),
+        schedule:   (c[5]||'').trim(),
+        status:     (c[6]||'').trim(),
+        commitment: (c[7]||'').trim(),
+      };
+    }).filter(r => r.rawDate && r.name);
+  }
+
+  async function loadAttendanceData() {
+    try {
+      const res = await fetch(ATTENDANCE_CSV_URL + '&t=' + Date.now());
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      rawAttRows = parseAttendanceCSV(await res.text());
+      _attLoaded = true;
+      $('attErrorBanner').classList.remove('show');
+      renderAttendance();
+    } catch(err) {
+      $('attErrorBanner').textContent = '⚠ Attendance data failed to load: ' + err.message;
+      $('attErrorBanner').classList.add('show');
+    }
+  }
+
+  function setAttView(v) {
+    attView = v;
+    ['Daily','Weekly','Monthly'].forEach(id => {
+      $('attBtn'+id).classList.toggle('active', v === id.toLowerCase());
+    });
+    $('attWeekSelectWrap').style.display  = v === 'weekly'  ? 'block' : 'none';
+    $('attMonthSelectWrap').style.display = v === 'monthly' ? 'block' : 'none';
+    $('attDate').style.display            = v === 'daily'   ? ''      : 'none';
+    if (v === 'weekly')  buildAttWeekSelect();
+    if (v === 'monthly') buildAttMonthSelect();
+    renderAttendance();
+  }
+
+  function buildAttWeekSelect() {
+    const sel = $('attWeekSelect');
+    if (sel.options.length) return;
+    const groups = generateWeekOptions();
+    for (const key of Object.keys(groups).sort().reverse()) {
+      const [y, m] = key.split('-');
+      const optgroup = document.createElement('optgroup');
+      optgroup.label = new Date(+y,+m-1,1).toLocaleDateString('en-US',{month:'long',year:'numeric'});
+      const mondays = groups[key];
+      for (let i = mondays.length-1; i >= 0; i--) {
+        const mon = mondays[i];
+        const [wy,wm,wd] = mon.split('-').map(Number);
+        const friDt = new Date(wy,wm-1,wd+4);
+        const opt = document.createElement('option');
+        opt.value = mon;
+        opt.textContent = `Week ${i+1}  (${new Date(wy,wm-1,wd).toLocaleDateString('en-US',{month:'short',day:'numeric'})} – ${friDt.toLocaleDateString('en-US',{month:'short',day:'numeric'})})`;
+        optgroup.appendChild(opt);
+      }
+      sel.appendChild(optgroup);
+    }
+  }
+
+  function buildAttMonthSelect() {
+    const sel = $('attMonthSelect');
+    if (sel.options.length) return;
+    let [y, m] = localIso(new Date()).split('-').map(Number);
+    while (y > 2026 || (y === 2026 && m >= 1)) {
+      const ym = `${y}-${String(m).padStart(2,'0')}`;
+      const opt = document.createElement('option');
+      opt.value = ym;
+      opt.textContent = new Date(y,m-1,1).toLocaleDateString('en-US',{month:'long',year:'numeric'});
+      sel.appendChild(opt);
+      m--; if (m === 0) { m = 12; y--; }
+    }
+  }
+
+  function attStatusClass(status) {
+    const s = (status||'').toLowerCase();
+    if (s === 'present')  return 'att-present';
+    if (s === 'late' || s === 'undertime') return 'att-late';
+    if (s === 'absent')   return 'att-absent';
+    if (s === 'off' || s === 'rd' || s === 'rest day' || s === 'holiday') return 'att-off';
+    return 'att-none';
+  }
+
+  function attStatusLabel(status) {
+    if (!status) return '—';
+    const s = status.toLowerCase();
+    if (s === 'present')   return 'Present';
+    if (s === 'late')      return 'Late';
+    if (s === 'undertime') return 'Undertime';
+    if (s === 'absent')    return 'Absent';
+    if (s === 'off')       return 'Off';
+    if (s === 'rd' || s === 'rest day') return 'RD';
+    if (s === 'holiday')   return 'Holiday';
+    return status;
+  }
+
+  function isAttended(status) {
+    const s = (status||'').toLowerCase();
+    return s === 'present' || s === 'late' || s === 'undertime';
+  }
+
+  function isScheduled(status) {
+    const s = (status||'').toLowerCase();
+    return s !== '' && s !== 'off' && s !== 'rd' && s !== 'rest day' && s !== 'holiday';
+  }
+
+  function renderAttendance() {
+    if (!_attLoaded) return;
+    const c = $('attContainer');
+    c.innerHTML = '';
+    if (attView === 'daily') {
+      const date = $('attDate').value;
+      if (!date) return;
+      $('attHeading').textContent = 'Attendance — ' + formatDate(date);
+      const rows = rawAttRows.filter(r => normalizeDate(r.rawDate) === date);
+      renderAttDaily(c, rows);
+    } else if (attView === 'weekly') {
+      const mon = $('attWeekSelect').value;
+      if (!mon) return;
+      const dates = getBusinessDaysFrom(mon);
+      $('attHeading').textContent = 'Attendance — Week of ' + wtdRangeLabel(dates);
+      const rows = rawAttRows.filter(r => { const d = normalizeDate(r.rawDate); return d && dates.includes(d); });
+      renderAttPeriod(c, rows);
+    } else {
+      const ym = $('attMonthSelect').value || localIso(new Date()).slice(0,7);
+      const [y, m] = ym.split('-').map(Number);
+      $('attHeading').textContent = 'Attendance — ' + new Date(y,m-1,1).toLocaleDateString('en-US',{month:'long',year:'numeric'});
+      const rows = rawAttRows.filter(r => {
+        const d = normalizeDate(r.rawDate); if (!d) return false;
+        const [dy,dm] = d.split('-').map(Number); return dy===y && dm===m;
+      });
+      renderAttPeriod(c, rows);
+    }
+  }
+
+  function renderAttDaily(container, rows) {
+    const statusMap = {};
+    for (const row of rows) {
+      const id = resolveAgent(row.name);
+      if (id && !statusMap[id]) statusMap[id] = row;
+    }
+    const allVisible = TEAMS.flatMap(t => t.members.filter(m => !m.hidden));
+    const attended   = allVisible.filter(m => isAttended(statusMap[m.id]?.status));
+    const absent     = allVisible.filter(m => (statusMap[m.id]?.status||'').toLowerCase() === 'absent');
+    const withData   = allVisible.filter(m => statusMap[m.id]);
+
+    const sumEl = document.createElement('div');
+    sumEl.className = 'day-summary';
+    sumEl.innerHTML = `
+      <span class="day-summary-label">Attendance</span>
+      <div class="day-summary-stat">
+        <span class="day-summary-num">${attended.length}</span>
+        <span class="day-summary-sub">attended</span>
+      </div>
+      <div class="day-summary-divider"></div>
+      <div class="day-summary-stat">
+        <span class="day-summary-num">${absent.length}</span>
+        <span class="day-summary-sub">absent</span>
+      </div>
+      <div class="day-summary-divider"></div>
+      <div class="day-summary-stat">
+        <span class="day-summary-num">${withData.length} / ${allVisible.length}</span>
+        <span class="day-summary-sub">agents have data</span>
+      </div>`;
+    container.appendChild(sumEl);
+
+    for (const team of TEAMS) {
+      const visible = team.members.filter(m => !m.hidden);
+      const sorted = [...visible].sort((a,b) => {
+        const rank = s => { s=(s||'').toLowerCase(); return s==='absent'?0:s==='late'?1:s==='undertime'?2:s==='present'?3:4; };
+        return rank(statusMap[a.id]?.status) - rank(statusMap[b.id]?.status);
+      });
+      const attCount   = visible.filter(m => isAttended(statusMap[m.id]?.status)).length;
+      const schedCount = visible.filter(m => statusMap[m.id] && isScheduled(statusMap[m.id].status)).length;
+
+      const sec = document.createElement('div');
+      sec.className = 'team-section';
+      sec.innerHTML = `
+        <div class="team-header">
+          <div class="team-label">
+            <div class="team-accent" style="background:${esc(team.color)}"></div>
+            <div class="team-name">${esc(team.name)}</div>
+          </div>
+          <div class="team-stats">
+            <span class="stat-pill stat-total">${attCount} / ${schedCount} attended</span>
+          </div>
+        </div>
+        <div class="member-grid"></div>`;
+      const grid = sec.querySelector('.member-grid');
+      for (const m of sorted) {
+        const row = statusMap[m.id];
+        const status = row?.status || '';
+        const card = document.createElement('div');
+        card.className = 'member-card';
+        card.innerHTML = `
+          <div class="member-info">
+            <div class="member-name">${esc(m.display)}</div>
+            ${row?.commitment ? `<div style="font-size:10px;color:var(--gray);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(row.commitment)}</div>` : ''}
+          </div>
+          <span class="att-status-chip ${attStatusClass(status)}">${esc(attStatusLabel(status))}</span>`;
+        grid.appendChild(card);
+      }
+      container.appendChild(sec);
+    }
+  }
+
+  function renderAttPeriod(container, rows) {
+    const agentStats = {}, seen = new Set();
+    for (const row of rows) {
+      const id = resolveAgent(row.name);
+      if (!id) continue;
+      const d = normalizeDate(row.rawDate);
+      if (!d) continue;
+      const key = id + '|' + d;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (!agentStats[id]) agentStats[id] = { attended: 0, scheduled: 0 };
+      if (isScheduled(row.status)) agentStats[id].scheduled++;
+      if (isAttended(row.status))  agentStats[id].attended++;
+    }
+
+    for (const team of TEAMS) {
+      const visible = team.members.filter(m => !m.hidden);
+      const sorted  = [...visible].sort((a,b) => {
+        const sa = agentStats[a.id]||{attended:0,scheduled:0};
+        const sb = agentStats[b.id]||{attended:0,scheduled:0};
+        const ra = sa.scheduled ? sa.attended/sa.scheduled : -1;
+        const rb = sb.scheduled ? sb.attended/sb.scheduled : -1;
+        return rb - ra;
+      });
+      const totals = visible.reduce((acc,m) => {
+        const s = agentStats[m.id]||{attended:0,scheduled:0};
+        acc.attended += s.attended; acc.scheduled += s.scheduled; return acc;
+      }, {attended:0,scheduled:0});
+      const teamRate = totals.scheduled ? Math.round(totals.attended/totals.scheduled*100) : 0;
+
+      const sec = document.createElement('div');
+      sec.className = 'team-section';
+      sec.innerHTML = `
+        <div class="team-header">
+          <div class="team-label">
+            <div class="team-accent" style="background:${esc(team.color)}"></div>
+            <div class="team-name">${esc(team.name)}</div>
+          </div>
+          <div class="team-stats">
+            <span class="stat-pill stat-total">${totals.attended}/${totals.scheduled} days · ${teamRate}%</span>
+          </div>
+        </div>
+        <div class="member-grid"></div>`;
+      const grid = sec.querySelector('.member-grid');
+      for (const m of sorted) {
+        const s = agentStats[m.id]||{attended:0,scheduled:0};
+        const pct = s.scheduled ? Math.round(s.attended/s.scheduled*100) : null;
+        const color = pct===null ? '#9ca3af' : pct>=90 ? '#16a34a' : pct>=75 ? '#ea580c' : '#dc2626';
+        const card = document.createElement('div');
+        card.className = 'member-card';
+        card.innerHTML = `
+          <div class="member-info">
+            <div class="member-name">${esc(m.display)}</div>
+            <div class="att-rate-bar">
+              <div class="att-rate-fill" style="width:${pct||0}%;background:${color}"></div>
+            </div>
+          </div>
+          <div style="text-align:right;flex-shrink:0;min-width:52px">
+            ${s.scheduled ? `
+              <div style="font-size:15px;font-weight:800;font-family:'Plus Jakarta Sans',sans-serif;color:${color};line-height:1">${s.attended}/${s.scheduled}</div>
+              <div style="font-size:9px;color:var(--gray);letter-spacing:0.5px;text-transform:uppercase;margin-top:2px">${pct}%</div>
+            ` : `<div style="font-size:12px;color:var(--gray)">—</div>`}
+          </div>`;
+        grid.appendChild(card);
+      }
+      container.appendChild(sec);
+    }
+  }
 </script>
 </body>
 </html>
