@@ -1599,14 +1599,24 @@
   let rawAttRows = [], attView = 'daily', _attLoaded = false, _attLoading = false;
 
   function parseAttendanceCSV(text) {
-    return text.trim().split('\n').slice(1).map(line => {
+    const lines = text.trim().split('\n');
+    if (lines.length < 2) return [];
+    const headers = splitLine(lines[0]).map(h => h.trim().toLowerCase().replace(/\s+/g,' '));
+    const col = (...needles) => {
+      const i = headers.findIndex(h => needles.some(n => h === n || h.includes(n)));
+      return i >= 0 ? i : null;
+    };
+    const dIdx = col('date') ?? 2;
+    const nIdx = col('sdr name','agent name','name') ?? 4;
+    const sIdx = col('attendance status','status') ?? 6;
+    const cIdx = col('attendance commitment','commitment') ?? 7;
+    return lines.slice(1).map(line => {
       const c = splitLine(line);
       return {
-        rawDate:    (c[2]||'').trim(),
-        name:       (c[4]||'').trim(),
-        schedule:   (c[5]||'').trim(),
-        status:     (c[6]||'').trim(),
-        commitment: (c[7]||'').trim(),
+        rawDate:    (c[dIdx]||'').trim(),
+        name:       (c[nIdx]||'').trim(),
+        status:     (c[sIdx]||'').trim(),
+        commitment: (c[cIdx]||'').trim(),
       };
     }).filter(r => r.rawDate && r.name);
   }
@@ -1854,38 +1864,53 @@
 
     weeks.forEach((mon, i) => {
       const dates = getBusinessDaysFrom(mon);
-      const seen = new Set(); let att = 0, sch = 0;
+      const seen = new Set();
+      let att = 0, sch = 0, lateN = 0, undertimeN = 0, absentN = 0;
       const dayDots = dates.map(date => {
-        const row = rawAttRows.find(r => normalizeDate(r.rawDate)===date && resolveAgent(r.name)===memberId);
-        const status = row?.status || '';
+        const rowData = rawAttRows.find(r => normalizeDate(r.rawDate)===date && resolveAgent(r.name)===memberId);
+        const status = rowData?.status || '';
         if (!seen.has(date)) {
           seen.add(date);
           if (isScheduled(status)) sch++;
           if (isAttended(status))  att++;
+          const sl = status.toLowerCase();
+          if (sl==='late')      lateN++;
+          if (sl==='undertime') undertimeN++;
+          if (sl==='absent')    absentN++;
         }
-        const s = status.toLowerCase();
-        const dotColor = s==='present' ? '#16a34a'
-          : (s==='late'||s==='undertime') ? '#ea580c'
-          : s==='absent' ? '#dc2626'
-          : '#dde0ec';
-        const [,,d] = date.split('-');
-        return `<span title="${attStatusLabel(status)||'No data'}" style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:var(--gray);cursor:default">
+        const sl = status.toLowerCase();
+        const dotColor = sl==='present' ? '#16a34a'
+          : (sl==='late'||sl==='undertime') ? '#ea580c'
+          : sl==='absent' ? '#dc2626' : '#dde0ec';
+        const [,, dNum] = date.split('-');
+        const dateLabel = new Date(+date.split('-')[0],+date.split('-')[1]-1,+date.split('-')[2])
+          .toLocaleDateString('en-US',{month:'short',day:'numeric'});
+        const tip = `${dateLabel}: ${attStatusLabel(status)||'No data'}`;
+        return `<span title="${esc(tip)}" style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:var(--gray);cursor:default">
           <span style="width:9px;height:9px;border-radius:50%;background:${dotColor};display:inline-block;flex-shrink:0"></span>
-          ${+d}
+          ${+dNum}
         </span>`;
       }).join('');
 
       const pct = sch ? Math.round(att/sch*100) : null;
       const rateColor = pct===null ? '#9ca3af' : pct>=90 ? '#16a34a' : pct>=75 ? '#ea580c' : '#dc2626';
-      const row = document.createElement('div');
-      row.style.cssText = 'display:flex;align-items:center;gap:14px;padding:9px 0;border-bottom:1px solid var(--border)';
-      row.innerHTML = `
+
+      const badges = [
+        lateN      ? `<span style="background:#fff7ed;color:#ea580c;border:1px solid #fed7aa;font-size:9px;font-weight:700;padding:2px 6px;letter-spacing:0.3px">${lateN} Late</span>` : '',
+        undertimeN ? `<span style="background:#fff7ed;color:#ea580c;border:1px solid #fed7aa;font-size:9px;font-weight:700;padding:2px 6px;letter-spacing:0.3px">${undertimeN} UT</span>` : '',
+        absentN    ? `<span style="background:#fef2f2;color:#dc2626;border:1px solid #fca5a5;font-size:9px;font-weight:700;padding:2px 6px;letter-spacing:0.3px">${absentN} Absent</span>` : '',
+      ].filter(Boolean).join(' ');
+
+      const rowEl = document.createElement('div');
+      rowEl.style.cssText = 'display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--border)';
+      rowEl.innerHTML = `
         <div style="min-width:36px;font-size:11px;font-weight:700;color:var(--navy);font-family:'Plus Jakarta Sans',sans-serif">W${i+1}</div>
-        <div style="flex:1;display:flex;gap:10px;flex-wrap:wrap;align-items:center">${dayDots}</div>
-        <div style="text-align:right;min-width:52px">
+        <div style="flex:1;display:flex;gap:8px;flex-wrap:wrap;align-items:center">${dayDots}</div>
+        ${badges ? `<div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">${badges}</div>` : ''}
+        <div style="text-align:right;min-width:52px;flex-shrink:0">
           ${sch ? `<span style="font-size:14px;font-weight:800;font-family:'Plus Jakarta Sans',sans-serif;color:${rateColor}">${att}/${sch}</span>` : '<span style="color:var(--gray);font-size:12px">—</span>'}
         </div>`;
-      wrap.appendChild(row);
+      wrap.appendChild(rowEl);
     });
 
     el.appendChild(wrap);
@@ -1901,9 +1926,13 @@
       const key = id + '|' + d;
       if (seen.has(key)) continue;
       seen.add(key);
-      if (!agentStats[id]) agentStats[id] = { attended: 0, scheduled: 0 };
+      if (!agentStats[id]) agentStats[id] = { attended:0, scheduled:0, late:0, undertime:0, absent:0 };
+      const sl = (row.status||'').toLowerCase();
       if (isScheduled(row.status)) agentStats[id].scheduled++;
       if (isAttended(row.status))  agentStats[id].attended++;
+      if (sl==='late')             agentStats[id].late++;
+      if (sl==='undertime')        agentStats[id].undertime++;
+      if (sl==='absent')           agentStats[id].absent++;
     }
 
     for (const team of TEAMS) {
@@ -1941,12 +1970,18 @@
         const color = pct===null ? '#9ca3af' : pct>=90 ? '#16a34a' : pct>=75 ? '#ea580c' : '#dc2626';
         const card = document.createElement('div');
         card.className = 'member-card';
+        const issueChips = [
+          s.absent    ? `<span title="${s.absent} Absent day${s.absent>1?'s':''}"    style="background:#fef2f2;color:#dc2626;border:1px solid #fca5a5;font-size:8px;font-weight:700;padding:1px 5px;white-space:nowrap">${s.absent}A</span>` : '',
+          s.late      ? `<span title="${s.late} Late"                                  style="background:#fff7ed;color:#ea580c;border:1px solid #fed7aa;font-size:8px;font-weight:700;padding:1px 5px;white-space:nowrap">${s.late}L</span>` : '',
+          s.undertime ? `<span title="${s.undertime} Undertime"                        style="background:#fff7ed;color:#ea580c;border:1px solid #fed7aa;font-size:8px;font-weight:700;padding:1px 5px;white-space:nowrap">${s.undertime}UT</span>` : '',
+        ].filter(Boolean).join('');
         card.innerHTML = `
           <div class="member-info">
             <div class="member-name">${esc(m.display)}</div>
             <div class="att-rate-bar">
               <div class="att-rate-fill" style="width:${pct||0}%;background:${color}"></div>
             </div>
+            ${issueChips ? `<div style="display:flex;gap:3px;margin-top:4px;flex-wrap:wrap">${issueChips}</div>` : ''}
           </div>
           <div style="text-align:right;flex-shrink:0;min-width:52px">
             ${s.scheduled ? `
