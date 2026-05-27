@@ -750,7 +750,7 @@
         </div>
         <div class="profile-stat-box">
           <div class="profile-stat-num" id="profileStatShowup" style="font-size:22px;color:#4f46e5">—</div>
-          <div class="profile-stat-lbl">MTD Show-up</div>
+          <div class="profile-stat-lbl">Show-up Rate</div>
         </div>
       </div>
       <div class="profile-chart-area">
@@ -1531,15 +1531,21 @@
       $('profileStatAtt').textContent = '—';
     }
 
-    // Show-up rate MTD
-    const mtdDates = aggregateMonth(`${ty}-${String(tm).padStart(2,'0')}`, true).dates;
-    const suMTD = aggregateShowupForDates(mtdDates)[memberId] || { yes: 0, happened: 0 };
-    $('profileStatShowup').textContent = suMTD.happened > 0
-      ? Math.round((suMTD.yes / suMTD.happened) * 100) + '%'
+    // Show-up rate — all loaded data for this agent
+    const suAll = { yes: 0, happened: 0 };
+    for (const row of rawRows) {
+      if (resolveAgent(row.agent) !== memberId) continue;
+      for (const st of [row.sp1status, row.sp2status]) {
+        if (st === 'yes')     { suAll.yes++; suAll.happened++; }
+        else if (st === 'no') { suAll.happened++; }
+      }
+    }
+    $('profileStatShowup').textContent = suAll.happened > 0
+      ? Math.round((suAll.yes / suAll.happened) * 100) + '%'
       : '—';
-    $('profileStatShowup').title = suMTD.happened > 0
-      ? `${suMTD.yes} showed up out of ${suMTD.happened} scheduled`
-      : 'No completed meetings this month';
+    $('profileStatShowup').title = suAll.happened > 0
+      ? `${suAll.yes} showed up out of ${suAll.happened} total completed`
+      : 'No completed meetings in loaded data';
 
     _profileView = 'daily';
     ['Daily','Weekly','Monthly'].forEach(v => {
