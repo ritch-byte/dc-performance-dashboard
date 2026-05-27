@@ -280,6 +280,11 @@
     }
     .dc-hit  { color: #16a34a; }
     .dc-miss { color: #dc2626; }
+    .showup-rate {
+      font-size: 10px; font-weight: 600; color: #6366f1;
+      margin-top: 3px; letter-spacing: 0.2px;
+    }
+    .stat-showup { background: #ede9fe; color: #4f46e5; }
 
     /* ── DAY SUMMARY ── */
     .day-summary {
@@ -875,7 +880,7 @@
   const WEEKLY_TARGET  = 10;
   const MONTHLY_TARGET = 40;
   const $ = id => document.getElementById(id);
-  let rawRows = [], refreshTimer = null, currentView = 'daily', _aggCache = {};
+  let rawRows = [], refreshTimer = null, currentView = 'daily', _aggCache = {}, _showupCache = {};
 
   function setView(v) {
     currentView = v;
@@ -966,7 +971,7 @@
     try {
       const res = await fetch(CSV_URL + '&t=' + Date.now());
       if (!res.ok) throw new Error('HTTP ' + res.status);
-      rawRows = parseCSV(await res.text()); _aggCache = {};
+      rawRows = parseCSV(await res.text()); _aggCache = {}; _showupCache = {};
       hideError();
       $('btnRefresh').disabled = false;
       $('lastUpdated').textContent = 'Updated ' + new Date().toLocaleTimeString();
@@ -985,9 +990,22 @@
   function scheduleRefresh() { clearTimeout(refreshTimer); refreshTimer = setTimeout(loadData, REFRESH_MS); }
 
   function parseCSV(text) {
-    return text.trim().split('\n').slice(1).map(line => {
+    const lines = text.trim().split('\n');
+    if (lines.length < 2) return [];
+    const hdrs = splitLine(lines[0]).map(h => h.trim().toLowerCase());
+    const exact = name => { const i = hdrs.indexOf(name); return i >= 0 ? i : null; };
+    const sp1sIdx = exact('sp 1 status') ?? exact('sp1 status');
+    const sp2sIdx = exact('sp 2 status') ?? exact('sp2 status');
+    return lines.slice(1).map(line => {
       const c = splitLine(line);
-      return { rawDate:(c[0]||'').trim(), agent:(c[1]||'').trim(), sp1:(c[2]||'').trim(), sp2:(c[3]||'').trim() };
+      return {
+        rawDate:   (c[0]||'').trim(),
+        agent:     (c[1]||'').trim(),
+        sp1:       (c[2]||'').trim(),
+        sp2:       (c[3]||'').trim(),
+        sp1status: sp1sIdx !== null ? (c[sp1sIdx]||'').trim().toLowerCase() : '',
+        sp2status: sp2sIdx !== null ? (c[sp2sIdx]||'').trim().toLowerCase() : '',
+      };
     }).filter(r => r.rawDate && r.agent);
   }
 
@@ -1005,6 +1023,34 @@
     return (_aggCache[date] = counts);
   }
 
+  function aggregateShowupForDate(date) {
+    if (_showupCache[date]) return _showupCache[date];
+    const result = {};
+    for (const row of rawRows) {
+      if (normalizeDate(row.rawDate) !== date) continue;
+      const id = resolveAgent(row.agent);
+      if (!id) continue;
+      if (!result[id]) result[id] = { yes: 0, happened: 0 };
+      for (const st of [row.sp1status, row.sp2status]) {
+        if (st === 'yes')      { result[id].yes++; result[id].happened++; }
+        else if (st === 'no')  { result[id].happened++; }
+      }
+    }
+    return (_showupCache[date] = result);
+  }
+
+  function aggregateShowupForDates(dates) {
+    const result = {};
+    for (const date of dates) {
+      for (const [id, s] of Object.entries(aggregateShowupForDate(date))) {
+        if (!result[id]) result[id] = { yes: 0, happened: 0 };
+        result[id].yes      += s.yes;
+        result[id].happened += s.happened;
+      }
+    }
+    return result;
+  }
+
   function renderDashboard() {
     const date = $('selectedDate').value;
     const c = $('teamsContainer');
@@ -1012,33 +1058,37 @@
 
     if (currentView === 'daily') {
       const counts = aggregateForDate(date);
+      const showup = aggregateShowupForDate(date);
       $('dateHeading').textContent = formatDate(date);
-      c.appendChild(buildSummary('Day Total', counts, DAILY_TARGET, 'hit target'));
-      for (const team of TEAMS) c.appendChild(buildTeamSection(team, counts, 'daily'));
+      c.appendChild(buildSummary('Day Total', counts, DAILY_TARGET, 'hit target', showup));
+      for (const team of TEAMS) c.appendChild(buildTeamSection(team, counts, 'daily', showup));
     } else if (currentView === 'wtd') {
       const { dates, counts } = aggregateWTD(date);
+      const showup = aggregateShowupForDates(dates);
       $('dateHeading').textContent = 'Week to Date — ' + wtdRangeLabel(dates);
-      c.appendChild(buildSummary('Week Total', counts, WEEKLY_TARGET, 'hit weekly target'));
-      for (const team of TEAMS) c.appendChild(buildTeamSection(team, counts, 'wtd'));
+      c.appendChild(buildSummary('Week Total', counts, WEEKLY_TARGET, 'hit weekly target', showup));
+      for (const team of TEAMS) c.appendChild(buildTeamSection(team, counts, 'wtd', showup));
     } else if (currentView === 'mtd') {
       const today = localIso(new Date());
       const [ty, tm] = today.split('-');
       const { dates, counts } = aggregateMonth(`${ty}-${tm}`, true);
+      const showup = aggregateShowupForDates(dates);
       $('dateHeading').textContent = 'Month to Date — ' + wtdRangeLabel(dates);
-      c.appendChild(buildSummary('Month Total', counts, MONTHLY_TARGET, 'hit monthly target'));
-      for (const team of TEAMS) c.appendChild(buildTeamSection(team, counts, 'mtd'));
+      c.appendChild(buildSummary('Month Total', counts, MONTHLY_TARGET, 'hit monthly target', showup));
+      for (const team of TEAMS) c.appendChild(buildTeamSection(team, counts, 'mtd', showup));
     } else if (currentView === 'permonth') {
       const ym = $('monthSelect').value || localIso(new Date()).slice(0,7);
       const { dates, counts } = aggregateMonth(ym, false);
+      const showup = aggregateShowupForDates(dates);
       const [y, m] = ym.split('-').map(Number);
       const label = new Date(y, m-1, 1).toLocaleDateString('en-US', { month:'long', year:'numeric' });
       $('dateHeading').textContent = label + ' — ' + wtdRangeLabel(dates);
-      c.appendChild(buildSummary(label, counts, MONTHLY_TARGET, 'hit monthly target'));
-      for (const team of TEAMS) c.appendChild(buildTeamSection(team, counts, 'permonth'));
+      c.appendChild(buildSummary(label, counts, MONTHLY_TARGET, 'hit monthly target', showup));
+      for (const team of TEAMS) c.appendChild(buildTeamSection(team, counts, 'permonth', showup));
     }
   }
 
-  function buildSummary(label, counts, target, targetLabel) {
+  function buildSummary(label, counts, target, targetLabel, showup = {}) {
     const memberMap = new Map();
     for (const t of TEAMS) for (const m of t.members)
       if (!memberMap.has(m.id) || !m.hidden) memberMap.set(m.id, m);
@@ -1046,6 +1096,9 @@
     const total      = uniq.reduce((s,m) => s + (counts[m.id] || 0), 0);
     const onTarget   = uniq.filter(m => !m.hidden && (counts[m.id]||0) >= target).length;
     const visible    = uniq.filter(m => !m.hidden).length;
+    const totYes     = uniq.reduce((s,m) => s + (showup[m.id]?.yes || 0), 0);
+    const totHap     = uniq.reduce((s,m) => s + (showup[m.id]?.happened || 0), 0);
+    const showupStr  = totHap > 0 ? Math.round((totYes / totHap) * 100) + '%' : '—';
     const el = document.createElement('div');
     el.className = 'day-summary';
     el.innerHTML = `
@@ -1058,6 +1111,11 @@
       <div class="day-summary-stat">
         <span class="day-summary-num">${onTarget}</span>
         <span class="day-summary-sub">of ${visible} ${esc(targetLabel)}</span>
+      </div>
+      <div class="day-summary-divider"></div>
+      <div class="day-summary-stat">
+        <span class="day-summary-num">${showupStr}</span>
+        <span class="day-summary-sub">show-up rate${totHap > 0 ? ' ('+totYes+'/'+totHap+')' : ''}</span>
       </div>`;
     return el;
   }
@@ -1149,14 +1207,17 @@
       : fmt(dates[0]) + ' – ' + fmt(dates[dates.length-1]);
   }
 
-  function buildTeamSection(team, counts, view) {
+  function buildTeamSection(team, counts, view, showup = {}) {
     const target   = view === 'daily' ? DAILY_TARGET : view === 'wtd' ? WEEKLY_TARGET : MONTHLY_TARGET;
     const hitLabel = { daily:'on target', wtd:'on weekly target', mtd:'on monthly target', permonth:'on monthly target' }[view];
     const allCounts = team.members.map(m => ({ m, count: counts[m.id] || 0 }));
     const visible   = allCounts.filter(x => !x.m.hidden);
     const sorted    = [...visible].sort((a,b) => b.count - a.count);
-    const total     = allCounts.reduce((s,x) => s + x.count, 0); // includes hidden DCs
+    const total     = allCounts.reduce((s,x) => s + x.count, 0);
     const hits      = visible.filter(x => x.count >= target).length;
+    const teamYes   = visible.reduce((s,x) => s + (showup[x.m.id]?.yes || 0), 0);
+    const teamHap   = visible.reduce((s,x) => s + (showup[x.m.id]?.happened || 0), 0);
+    const teamSUStr = teamHap > 0 ? Math.round((teamYes/teamHap)*100)+'%' : '';
 
     const sec = document.createElement('div');
     sec.className = 'team-section';
@@ -1169,22 +1230,27 @@
         <div class="team-stats">
           <span class="stat-pill stat-total">${total} DCs</span>
           <span class="stat-pill stat-hits">${hits} / ${visible.length} ${hitLabel}</span>
+          ${teamSUStr ? `<span class="stat-pill stat-showup">${teamSUStr} show-up</span>` : ''}
         </div>
       </div>
       <div class="member-grid"></div>`;
 
     const grid = sec.querySelector('.member-grid');
     for (const { m, count } of sorted) {
-      grid.appendChild(view === 'daily' ? buildCard(m, count) : buildPeriodCard(m, count, target));
+      const su = showup[m.id] || { yes: 0, happened: 0 };
+      grid.appendChild(view === 'daily' ? buildCard(m, count, su) : buildPeriodCard(m, count, target, su));
     }
     return sec;
   }
 
-  function buildCard(m, count) {
+  function buildCard(m, count, showup = { yes: 0, happened: 0 }) {
     const hit = count >= DAILY_TARGET;
     const pct = Math.round((count / DAILY_TARGET) * 100);
     const color = hit ? '#16a34a' : count >= 1 ? '#ea580c' : '#dc2626';
     const labelColor = pct >= 40 ? 'white' : color;
+    const suStr = showup.happened > 0
+      ? Math.round((showup.yes / showup.happened) * 100) + '% show-up'
+      : '';
     const card = document.createElement('div');
     card.className = 'member-card';
     card.onclick = () => openProfile(m.id);
@@ -1195,18 +1261,22 @@
           <div class="bar-fill" style="width:${Math.min(pct,100)}%;background:${color}"></div>
           <span class="bar-pct-label" style="color:${labelColor}">${pct}%</span>
         </div>
+        ${suStr ? `<div class="showup-rate">${suStr}</div>` : ''}
       </div>
       <div class="dc-badge ${hit ? 'dc-hit' : 'dc-miss'}">${count}</div>`;
     return card;
   }
 
-  function buildPeriodCard(m, count, target) {
+  function buildPeriodCard(m, count, target, showup = { yes: 0, happened: 0 }) {
     let badgeCls, color;
     if (count >= target)          { badgeCls='dc-wtd-green';  color='#16a34a'; }
     else if (count >= target / 2) { badgeCls='dc-wtd-orange'; color='#ea580c'; }
     else                          { badgeCls='dc-wtd-red';    color='#dc2626'; }
     const pct = Math.round((count / target) * 100);
     const labelColor = pct >= 40 ? 'white' : color;
+    const suStr = showup.happened > 0
+      ? Math.round((showup.yes / showup.happened) * 100) + '% show-up'
+      : '';
     const card = document.createElement('div');
     card.className = 'member-card';
     card.onclick = () => openProfile(m.id);
@@ -1217,6 +1287,7 @@
           <div class="bar-fill" style="width:${Math.min(pct,100)}%;background:${color}"></div>
           <span class="bar-pct-label" style="color:${labelColor}">${pct}%</span>
         </div>
+        ${suStr ? `<div class="showup-rate">${suStr}</div>` : ''}
       </div>
       <div class="dc-badge ${badgeCls}">${count}</div>`;
     return card;
@@ -1745,7 +1816,7 @@
 
     _sheetDates = dates;
 
-    // Build per-agent per-day counts
+    // Build per-agent per-day counts and show-up data
     const agentDay = {};
     for (const date of dates) {
       for (const [id, n] of Object.entries(aggregateForDate(date))) {
@@ -1754,6 +1825,7 @@
       }
     }
     _sheetData = agentDay;
+    const sheetShowup = aggregateShowupForDates(dates);
 
     // Date header labels
     const colHeaders = dates.map(d => {
@@ -1814,7 +1886,7 @@
       const hRow = document.createElement('tr');
       hRow.innerHTML = `<th class="sh-name">Agent</th>` +
         colHeaders.map(h => `<th class="${h.sep?'sh-week-sep':''}" title="${h.bot}">${h.top}<br><span style="font-size:8px;font-weight:400;opacity:0.7">${h.bot}</span></th>`).join('') +
-        `<th>Total</th>`;
+        `<th>Total</th><th style="color:#4f46e5">Show-up</th>`;
       thead.appendChild(hRow);
       table.appendChild(thead);
 
@@ -1834,6 +1906,11 @@
           html += `<td class="${cls} ${sepCls}">${n||'—'}</td>`;
         }
         html += `<td class="sh-cell-total">${rowTot||'—'}</td>`;
+        const su = sheetShowup[m.id] || { yes: 0, happened: 0 };
+        const suCell = su.happened > 0
+          ? `${su.yes}/${su.happened} · ${Math.round((su.yes/su.happened)*100)}%`
+          : '—';
+        html += `<td style="color:#4f46e5;font-weight:600;font-size:11px;white-space:nowrap">${suCell}</td>`;
         tr.innerHTML = html;
         tbody.appendChild(tr);
       }
@@ -1849,6 +1926,13 @@
         totHtml += `<td class="${sepCls}" style="font-weight:800;color:var(--blue)">${n||'—'}</td>`;
       }
       totHtml += `<td class="sh-cell-total" style="color:var(--blue)">${teamTot||'—'}</td>`;
+      const teamVisIds = visible.map(m => m.id);
+      const teamSuYes = teamVisIds.reduce((s,id) => s + (sheetShowup[id]?.yes || 0), 0);
+      const teamSuHap = teamVisIds.reduce((s,id) => s + (sheetShowup[id]?.happened || 0), 0);
+      const teamSuCell = teamSuHap > 0
+        ? `${teamSuYes}/${teamSuHap} · ${Math.round((teamSuYes/teamSuHap)*100)}%`
+        : '—';
+      totHtml += `<td style="color:#4f46e5;font-weight:800;font-size:11px;white-space:nowrap">${teamSuCell}</td>`;
       totRow.innerHTML = totHtml;
       tbody.appendChild(totRow);
 
@@ -1862,16 +1946,22 @@
   function downloadSheetCSV() {
     if (!_sheetDates.length) { alert('No data to export.'); return; }
     const colFmt = d => { const [y,m,dy]=d.split('-').map(Number); return new Date(y,m-1,dy).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}); };
-    const rows = [['Team','Agent',..._sheetDates.map(colFmt),'Total']];
+    const csvShowup = aggregateShowupForDates(_sheetDates);
+    const rows = [['Team','Agent',..._sheetDates.map(colFmt),'Total','Show-up Rate']];
     for (const team of TEAMS) {
       const visible = team.members.filter(m => !m.hidden);
       const totFor = m => _sheetDates.reduce((s,d)=>s+(_sheetData[m.id]?.[d]||0),0);
       const sorted = [...visible].sort((a,b) => totFor(b)-totFor(a));
       for (const m of sorted) {
-        rows.push([team.name, m.display, ..._sheetDates.map(d=>_sheetData[m.id]?.[d]||0), totFor(m)]);
+        const su = csvShowup[m.id] || { yes:0, happened:0 };
+        const suStr = su.happened > 0 ? `${su.yes}/${su.happened} (${Math.round(su.yes/su.happened*100)}%)` : '—';
+        rows.push([team.name, m.display, ..._sheetDates.map(d=>_sheetData[m.id]?.[d]||0), totFor(m), suStr]);
       }
       const teamDayTots = _sheetDates.map(d => visible.reduce((s,m)=>s+(_sheetData[m.id]?.[d]||0),0));
-      rows.push([team.name,'TEAM TOTAL',...teamDayTots, teamDayTots.reduce((s,n)=>s+n,0)]);
+      const tYes = visible.reduce((s,m)=>s+(csvShowup[m.id]?.yes||0),0);
+      const tHap = visible.reduce((s,m)=>s+(csvShowup[m.id]?.happened||0),0);
+      const tSu = tHap > 0 ? `${tYes}/${tHap} (${Math.round(tYes/tHap*100)}%)` : '—';
+      rows.push([team.name,'TEAM TOTAL',...teamDayTots, teamDayTots.reduce((s,n)=>s+n,0), tSu]);
       rows.push([]);
     }
     const csv = rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\r\n');
