@@ -2344,13 +2344,16 @@
     const totColor = totPct===null ? '#9ca3af' : totPct>=90 ? '#16a34a' : totPct>=75 ? '#ea580c' : '#dc2626';
     const summaryEl = document.createElement('div');
     summaryEl.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 0;flex-wrap:wrap';
+    const noData = totSch === 0;
     summaryEl.innerHTML = `
       <span style="font-size:11px;font-weight:700;color:var(--navy);font-family:'Plus Jakarta Sans',sans-serif;min-width:32px">MTD</span>
-      <span style="background:#dcfce7;color:#15803d;border:1px solid #86efac;font-size:10px;font-weight:700;padding:3px 8px;border-radius:3px">${totPresent} Present</span>
-      ${totLate   ? `<span style="background:#fff7ed;color:#c2410c;border:1px solid #fdba74;font-size:10px;font-weight:700;padding:3px 8px;border-radius:3px">${totLate} Late</span>` : ''}
-      ${totUT     ? `<span style="background:#fff7ed;color:#c2410c;border:1px solid #fdba74;font-size:10px;font-weight:700;padding:3px 8px;border-radius:3px">${totUT} Undertime</span>` : ''}
-      ${totAbsent ? `<span style="background:#fef2f2;color:#dc2626;border:1px solid #fca5a5;font-size:10px;font-weight:700;padding:3px 8px;border-radius:3px">${totAbsent} Absent</span>` : ''}
-      <span style="margin-left:auto;font-size:16px;font-weight:800;font-family:'Plus Jakarta Sans',sans-serif;color:${totColor}">${totSch ? totAtt+'/'+totSch+' ('+totPct+'%)' : '—'}</span>`;
+      ${noData ? `<span style="color:#9ca3af;font-size:12px">No attendance data recorded this month</span>` : `
+        ${totPresent ? `<span style="background:#dcfce7;color:#15803d;border:1px solid #86efac;font-size:10px;font-weight:700;padding:3px 8px;border-radius:3px">${totPresent} Present</span>` : ''}
+        ${totLate    ? `<span style="background:#fff7ed;color:#c2410c;border:1px solid #fdba74;font-size:10px;font-weight:700;padding:3px 8px;border-radius:3px">${totLate} Late</span>` : ''}
+        ${totUT      ? `<span style="background:#fff7ed;color:#c2410c;border:1px solid #fdba74;font-size:10px;font-weight:700;padding:3px 8px;border-radius:3px">${totUT} Undertime</span>` : ''}
+        ${totAbsent  ? `<span style="background:#fef2f2;color:#dc2626;border:1px solid #fca5a5;font-size:10px;font-weight:700;padding:3px 8px;border-radius:3px">${totAbsent} Absent</span>` : ''}
+        <span style="margin-left:auto;font-size:16px;font-weight:800;font-family:'Plus Jakarta Sans',sans-serif;color:${totColor}">${totAtt}/${totSch} (${totPct}%)</span>
+      `}`;
     wrap.appendChild(summaryEl);
 
     el.appendChild(wrap);
