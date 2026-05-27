@@ -2281,56 +2281,77 @@
     const wrap = document.createElement('div');
     wrap.style.cssText = 'display:flex;flex-direction:column;gap:0';
 
+    let totPresent = 0, totLate = 0, totUT = 0, totAbsent = 0, totSch = 0;
+
     weeks.forEach((mon, i) => {
       const dates = getBusinessDaysFrom(mon);
-      const seen = new Set();
-      let att = 0, sch = 0, lateN = 0, undertimeN = 0, absentN = 0;
-      const dayDots = dates.map(date => {
+      let wPresent = 0, wLate = 0, wUT = 0, wAbsent = 0, wSch = 0;
+
+      const chips = dates.map(date => {
         const rowData = rawAttRows.find(r => normalizeDate(r.rawDate)===date && resolveAgent(r.name)===memberId);
-        const status = rowData?.status || '';
-        if (!seen.has(date)) {
-          seen.add(date);
-          if (isScheduled(status)) sch++;
-          if (isAttended(status))  att++;
-          const sl = status.toLowerCase();
-          if (sl==='late')      lateN++;
-          if (sl==='undertime') undertimeN++;
-          if (sl==='absent')    absentN++;
-        }
-        const sl = status.toLowerCase();
-        const dotColor = sl==='present' ? '#16a34a'
-          : (sl==='late'||sl==='undertime') ? '#ea580c'
-          : sl==='absent' ? '#dc2626' : '#dde0ec';
+        const status = (rowData?.status || '').toLowerCase();
         const [,, dNum] = date.split('-');
-        const dateLabel = new Date(+date.split('-')[0],+date.split('-')[1]-1,+date.split('-')[2])
-          .toLocaleDateString('en-US',{month:'short',day:'numeric'});
-        const tip = `${dateLabel}: ${attStatusLabel(status)||'No data'}`;
-        return `<span title="${esc(tip)}" style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:var(--gray);cursor:default">
-          <span style="width:9px;height:9px;border-radius:50%;background:${dotColor};display:inline-block;flex-shrink:0"></span>
-          ${+dNum}
+        const dt = new Date(+date.split('-')[0], +date.split('-')[1]-1, +date.split('-')[2]);
+        const dayName = dt.toLocaleDateString('en-US',{weekday:'short'});
+        const dateLabel = dt.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+
+        if (status === 'present')   { wPresent++; wSch++; totPresent++; totSch++; }
+        else if (status === 'late') { wLate++;    wSch++; totLate++;    totSch++; }
+        else if (status === 'undertime') { wUT++; wSch++; totUT++;      totSch++; }
+        else if (status === 'absent')    { wAbsent++;wSch++;totAbsent++;totSch++; }
+
+        let bg, color, label, border;
+        if (status === 'present')        { bg='#dcfce7'; color='#15803d'; label='P'; border='#86efac'; }
+        else if (status === 'late')      { bg='#fff7ed'; color='#c2410c'; label='L'; border='#fdba74'; }
+        else if (status === 'undertime') { bg='#fff7ed'; color='#c2410c'; label='UT';border='#fdba74'; }
+        else if (status === 'absent')    { bg='#fef2f2'; color='#dc2626'; label='A'; border='#fca5a5'; }
+        else                             { bg='#f1f5f9'; color='#94a3b8'; label=+dNum; border='#e2e8f0'; }
+
+        const tip = `${dayName} ${dateLabel}: ${status ? attStatusLabel(status) : 'No data'}`;
+        return `<span title="${esc(tip)}" style="display:inline-flex;flex-direction:column;align-items:center;gap:1px;cursor:default">
+          <span style="font-size:9px;color:#94a3b8;font-weight:500">${+dNum}</span>
+          <span style="min-width:26px;padding:3px 4px;text-align:center;font-size:10px;font-weight:700;background:${bg};color:${color};border:1px solid ${border};border-radius:3px;line-height:1.2">${label}</span>
         </span>`;
       }).join('');
 
-      const pct = sch ? Math.round(att/sch*100) : null;
-      const rateColor = pct===null ? '#9ca3af' : pct>=90 ? '#16a34a' : pct>=75 ? '#ea580c' : '#dc2626';
+      const wAtt = wPresent + wLate + wUT;
+      const rateColor = !wSch ? '#9ca3af' : (wAtt/wSch)>=0.9 ? '#16a34a' : (wAtt/wSch)>=0.75 ? '#ea580c' : '#dc2626';
 
-      const badges = [
-        lateN      ? `<span style="background:#fff7ed;color:#ea580c;border:1px solid #fed7aa;font-size:9px;font-weight:700;padding:2px 6px;letter-spacing:0.3px">${lateN} Late</span>` : '',
-        undertimeN ? `<span style="background:#fff7ed;color:#ea580c;border:1px solid #fed7aa;font-size:9px;font-weight:700;padding:2px 6px;letter-spacing:0.3px">${undertimeN} UT</span>` : '',
-        absentN    ? `<span style="background:#fef2f2;color:#dc2626;border:1px solid #fca5a5;font-size:9px;font-weight:700;padding:2px 6px;letter-spacing:0.3px">${absentN} Absent</span>` : '',
-      ].filter(Boolean).join(' ');
+      // per-week issue badges (only show if there's something to flag)
+      const issueBadges = [
+        wLate   ? `<span style="background:#fff7ed;color:#c2410c;border:1px solid #fdba74;font-size:10px;font-weight:700;padding:2px 7px;border-radius:3px">${wLate} Late</span>` : '',
+        wUT     ? `<span style="background:#fff7ed;color:#c2410c;border:1px solid #fdba74;font-size:10px;font-weight:700;padding:2px 7px;border-radius:3px">${wUT} UT</span>` : '',
+        wAbsent ? `<span style="background:#fef2f2;color:#dc2626;border:1px solid #fca5a5;font-size:10px;font-weight:700;padding:2px 7px;border-radius:3px">${wAbsent} Absent</span>` : '',
+      ].filter(Boolean).join('');
 
       const rowEl = document.createElement('div');
-      rowEl.style.cssText = 'display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--border)';
+      rowEl.style.cssText = 'display:flex;align-items:center;gap:14px;padding:10px 0;border-bottom:1px solid var(--border)';
       rowEl.innerHTML = `
-        <div style="min-width:36px;font-size:11px;font-weight:700;color:var(--navy);font-family:'Plus Jakarta Sans',sans-serif">W${i+1}</div>
-        <div style="flex:1;display:flex;gap:8px;flex-wrap:wrap;align-items:center">${dayDots}</div>
-        ${badges ? `<div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">${badges}</div>` : ''}
-        <div style="text-align:right;min-width:52px;flex-shrink:0">
-          ${sch ? `<span style="font-size:14px;font-weight:800;font-family:'Plus Jakarta Sans',sans-serif;color:${rateColor}">${att}/${sch}</span>` : '<span style="color:var(--gray);font-size:12px">—</span>'}
+        <div style="min-width:32px;font-size:11px;font-weight:700;color:var(--navy);font-family:'Plus Jakarta Sans',sans-serif">W${i+1}</div>
+        <div style="flex:1;display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end">${chips}</div>
+        <div style="display:flex;gap:5px;align-items:center;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;min-width:120px">
+          ${issueBadges || '<span style="color:#9ca3af;font-size:11px">—</span>'}
+        </div>
+        <div style="text-align:right;min-width:40px;flex-shrink:0">
+          ${wSch ? `<span style="font-size:15px;font-weight:800;font-family:'Plus Jakarta Sans',sans-serif;color:${rateColor}">${wAtt}/${wSch}</span>` : '<span style="color:var(--gray);font-size:12px">—</span>'}
         </div>`;
       wrap.appendChild(rowEl);
     });
+
+    // Monthly summary row
+    const totAtt = totPresent + totLate + totUT;
+    const totPct = totSch ? Math.round(totAtt/totSch*100) : null;
+    const totColor = totPct===null ? '#9ca3af' : totPct>=90 ? '#16a34a' : totPct>=75 ? '#ea580c' : '#dc2626';
+    const summaryEl = document.createElement('div');
+    summaryEl.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 0;flex-wrap:wrap';
+    summaryEl.innerHTML = `
+      <span style="font-size:11px;font-weight:700;color:var(--navy);font-family:'Plus Jakarta Sans',sans-serif;min-width:32px">MTD</span>
+      <span style="background:#dcfce7;color:#15803d;border:1px solid #86efac;font-size:10px;font-weight:700;padding:3px 8px;border-radius:3px">${totPresent} Present</span>
+      ${totLate   ? `<span style="background:#fff7ed;color:#c2410c;border:1px solid #fdba74;font-size:10px;font-weight:700;padding:3px 8px;border-radius:3px">${totLate} Late</span>` : ''}
+      ${totUT     ? `<span style="background:#fff7ed;color:#c2410c;border:1px solid #fdba74;font-size:10px;font-weight:700;padding:3px 8px;border-radius:3px">${totUT} Undertime</span>` : ''}
+      ${totAbsent ? `<span style="background:#fef2f2;color:#dc2626;border:1px solid #fca5a5;font-size:10px;font-weight:700;padding:3px 8px;border-radius:3px">${totAbsent} Absent</span>` : ''}
+      <span style="margin-left:auto;font-size:16px;font-weight:800;font-family:'Plus Jakarta Sans',sans-serif;color:${totColor}">${totSch ? totAtt+'/'+totSch+' ('+totPct+'%)' : '—'}</span>`;
+    wrap.appendChild(summaryEl);
 
     el.appendChild(wrap);
   }
