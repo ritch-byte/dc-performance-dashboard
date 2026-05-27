@@ -1036,8 +1036,8 @@
       if (!id) continue;
       if (!result[id]) result[id] = { yes: 0, happened: 0 };
       for (const st of [row.sp1status, row.sp2status]) {
-        if (st === 'yes')      { result[id].yes++; result[id].happened++; }
-        else if (st === 'no')  { result[id].happened++; }
+        if (st === 'yes')                          { result[id].yes++; result[id].happened++; }
+        else if (st === 'no' || st === 'cancelled') { result[id].happened++; }
       }
     }
     return (_showupCache[date] = result);
@@ -1536,8 +1536,8 @@
     for (const row of rawRows) {
       if (resolveAgent(row.agent) !== memberId) continue;
       for (const st of [row.sp1status, row.sp2status]) {
-        if (st === 'yes')     { suAll.yes++; suAll.happened++; }
-        else if (st === 'no') { suAll.happened++; }
+        if (st === 'yes')                          { suAll.yes++; suAll.happened++; }
+        else if (st === 'no' || st === 'cancelled') { suAll.happened++; }
       }
     }
     $('profileStatShowup').textContent = suAll.happened > 0
