@@ -748,6 +748,10 @@
           <div class="profile-stat-num" id="profileStatAtt" style="font-size:22px">—</div>
           <div class="profile-stat-lbl">MTD Attendance</div>
         </div>
+        <div class="profile-stat-box">
+          <div class="profile-stat-num" id="profileStatShowup" style="font-size:22px;color:#4f46e5">—</div>
+          <div class="profile-stat-lbl">MTD Show-up</div>
+        </div>
       </div>
       <div class="profile-chart-area">
         <div class="profile-chart-toggle">
@@ -1526,6 +1530,16 @@
     } else {
       $('profileStatAtt').textContent = '—';
     }
+
+    // Show-up rate MTD
+    const mtdDates = aggregateMonth(`${ty}-${String(tm).padStart(2,'0')}`, true).dates;
+    const suMTD = aggregateShowupForDates(mtdDates)[memberId] || { yes: 0, happened: 0 };
+    $('profileStatShowup').textContent = suMTD.happened > 0
+      ? Math.round((suMTD.yes / suMTD.happened) * 100) + '%'
+      : '—';
+    $('profileStatShowup').title = suMTD.happened > 0
+      ? `${suMTD.yes} showed up out of ${suMTD.happened} scheduled`
+      : 'No completed meetings this month';
 
     _profileView = 'daily';
     ['Daily','Weekly','Monthly'].forEach(v => {
