@@ -887,7 +887,7 @@
   const WEEKLY_TARGET  = 10;
   const MONTHLY_TARGET = 40;
   const $ = id => document.getElementById(id);
-  let rawRows = [], refreshTimer = null, currentView = 'daily', _aggCache = {}, _showupCache = {};
+  let rawRows = [], refreshTimer = null, currentView = 'daily', _aggCache = {}, _showupCache = {}, _leadsCache = {};
 
   function setView(v) {
     currentView = v;
@@ -978,7 +978,7 @@
     try {
       const res = await fetch(CSV_URL + '&t=' + Date.now());
       if (!res.ok) throw new Error('HTTP ' + res.status);
-      rawRows = parseCSV(await res.text()); _aggCache = {}; _showupCache = {};
+      rawRows = parseCSV(await res.text()); _aggCache = {}; _showupCache = {}; _leadsCache = {};
       hideError();
       $('btnRefresh').disabled = false;
       $('lastUpdated').textContent = 'Updated ' + new Date().toLocaleTimeString();
@@ -1028,6 +1028,18 @@
       counts[id] = (counts[id] || 0) + dcs;
     }
     return (_aggCache[date] = counts);
+  }
+
+  function aggregateLeadsForDate(date) {
+    if (_leadsCache[date]) return _leadsCache[date];
+    const counts = {};
+    for (const row of rawRows) {
+      if (normalizeDate(row.rawDate) !== date) continue;
+      const id = resolveAgent(row.agent);
+      if (!id || !row.sp1) continue;  // 1 lead = 1 row with at least SP1
+      counts[id] = (counts[id] || 0) + 1;
+    }
+    return (_leadsCache[date] = counts);
   }
 
   function aggregateShowupForDate(date) {
@@ -1779,7 +1791,7 @@
   function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
   // ── PERFORMANCE SHEET ──
-  let sheetView = 'weekly', _sheetDates = [], _sheetData = {};
+  let sheetView = 'weekly', _sheetDates = [], _sheetData = {}, _sheetLeadsData = {};
 
   function setSheetView(v) {
     sheetView = v;
@@ -1850,15 +1862,20 @@
 
     _sheetDates = dates;
 
-    // Build per-agent per-day counts and show-up data
-    const agentDay = {};
+    // Build per-agent per-day counts (DCs and leads) and show-up data
+    const agentDay = {}, agentDayLeads = {};
     for (const date of dates) {
       for (const [id, n] of Object.entries(aggregateForDate(date))) {
         if (!agentDay[id]) agentDay[id] = {};
         agentDay[id][date] = n;
       }
+      for (const [id, n] of Object.entries(aggregateLeadsForDate(date))) {
+        if (!agentDayLeads[id]) agentDayLeads[id] = {};
+        agentDayLeads[id][date] = n;
+      }
     }
     _sheetData = agentDay;
+    _sheetLeadsData = agentDayLeads;
     const sheetShowup = aggregateShowupForDates(dates);
 
     // Date header labels
@@ -1932,8 +1949,12 @@
         hRow.appendChild(th);
       }
       const totTh = document.createElement('th');
-      totTh.textContent = 'Total';
+      totTh.textContent = 'Total DCs';
       hRow.appendChild(totTh);
+      const leadsTh = document.createElement('th');
+      leadsTh.textContent = 'Leads';
+      leadsTh.style.color = '#6ee7b7';
+      hRow.appendChild(leadsTh);
       const suTh = document.createElement('th');
       suTh.textContent = 'Show-up';
       suTh.style.color = '#c4b5fd';
@@ -1948,12 +1969,16 @@
         let html = `<td class="sh-name">${esc(m.display)}</td>`;
         for (const {iso, sep} of colHeaders) {
           const n = agentDay[m.id]?.[iso] || 0;
+          const l = agentDayLeads[m.id]?.[iso] || 0;
           dayTeamTot[iso] = (dayTeamTot[iso]||0) + n;
           const cls = n >= DAILY_TARGET ? 'sh-cell-hit' : n >= 1 ? 'sh-cell-part' : 'sh-cell-zero';
           const sepCls = sep ? 'sh-week-sep' : '';
-          html += `<td class="${cls} ${sepCls}">${n||'—'}</td>`;
+          const leadsHint = l > 0 ? `<div style="font-size:9px;color:#6b7280;font-weight:500;line-height:1;margin-top:1px">${l}L</div>` : '';
+          html += `<td class="${cls} ${sepCls}" style="line-height:1.2;padding:4px 9px">${n ? `<div>${n}</div>${leadsHint}` : '—'}</td>`;
         }
+        const rowLeads = dates.reduce((s,d) => s+(agentDayLeads[m.id]?.[d]||0), 0);
         html += `<td class="sh-cell-total">${rowTot||'—'}</td>`;
+        html += `<td style="background:#f0fdf8;color:#065f46;font-weight:700;font-size:13px;font-family:'Plus Jakarta Sans',sans-serif;border-left:2px solid var(--border)">${rowLeads||'—'}</td>`;
         const su = sheetShowup[m.id] || { yes: 0, happened: 0 };
         const suCell = su.happened > 0
           ? `${su.yes}/${su.happened} · ${Math.round((su.yes/su.happened)*100)}%`
@@ -1974,6 +1999,8 @@
         totHtml += `<td class="${sepCls}" style="font-weight:800;color:var(--blue)">${n||'—'}</td>`;
       }
       totHtml += `<td class="sh-cell-total" style="color:var(--blue)">${teamTot||'—'}</td>`;
+      const teamLeadsTot = visible.reduce((s,m) => s + dates.reduce((s2,d)=>s2+(agentDayLeads[m.id]?.[d]||0),0), 0);
+      totHtml += `<td style="background:#d1fae5;color:#065f46;font-weight:800;font-size:13px;font-family:'Plus Jakarta Sans',sans-serif;border-left:2px solid var(--border)">${teamLeadsTot||'—'}</td>`;
       const teamVisIds = visible.map(m => m.id);
       const teamSuYes = teamVisIds.reduce((s,id) => s + (sheetShowup[id]?.yes || 0), 0);
       const teamSuHap = teamVisIds.reduce((s,id) => s + (sheetShowup[id]?.happened || 0), 0);
@@ -1995,21 +2022,23 @@
     if (!_sheetDates.length) { alert('No data to export.'); return; }
     const colFmt = d => { const [y,m,dy]=d.split('-').map(Number); return new Date(y,m-1,dy).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}); };
     const csvShowup = aggregateShowupForDates(_sheetDates);
-    const rows = [['Team','Agent',..._sheetDates.map(colFmt),'Total','Show-up Rate']];
+    const rows = [['Team','Agent',..._sheetDates.map(colFmt),'Total DCs','Leads','Show-up Rate']];
     for (const team of TEAMS) {
       const visible = team.members.filter(m => !m.hidden);
       const totFor = m => _sheetDates.reduce((s,d)=>s+(_sheetData[m.id]?.[d]||0),0);
+      const leadsFor = m => _sheetDates.reduce((s,d)=>s+(_sheetLeadsData[m.id]?.[d]||0),0);
       const sorted = [...visible].sort((a,b) => totFor(b)-totFor(a));
       for (const m of sorted) {
         const su = csvShowup[m.id] || { yes:0, happened:0 };
         const suStr = su.happened > 0 ? `${su.yes}/${su.happened} (${Math.round(su.yes/su.happened*100)}%)` : '—';
-        rows.push([team.name, m.display, ..._sheetDates.map(d=>_sheetData[m.id]?.[d]||0), totFor(m), suStr]);
+        rows.push([team.name, m.display, ..._sheetDates.map(d=>_sheetData[m.id]?.[d]||0), totFor(m), leadsFor(m), suStr]);
       }
       const teamDayTots = _sheetDates.map(d => visible.reduce((s,m)=>s+(_sheetData[m.id]?.[d]||0),0));
+      const teamLeadsTot = visible.reduce((s,m)=>s+leadsFor(m),0);
       const tYes = visible.reduce((s,m)=>s+(csvShowup[m.id]?.yes||0),0);
       const tHap = visible.reduce((s,m)=>s+(csvShowup[m.id]?.happened||0),0);
       const tSu = tHap > 0 ? `${tYes}/${tHap} (${Math.round(tYes/tHap*100)}%)` : '—';
-      rows.push([team.name,'TEAM TOTAL',...teamDayTots, teamDayTots.reduce((s,n)=>s+n,0), tSu]);
+      rows.push([team.name,'TEAM TOTAL',...teamDayTots, teamDayTots.reduce((s,n)=>s+n,0), teamLeadsTot, tSu]);
       rows.push([]);
     }
     const csv = rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\r\n');
