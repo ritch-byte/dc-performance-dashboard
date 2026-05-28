@@ -472,16 +472,16 @@
       border-collapse: collapse; font-size: 12px;
       width: 100%; min-width: 400px;
     }
-    .sheet-table thead th {
+    .sheet-table .sh-header-row th {
       background: var(--navy); color: white;
       padding: 8px 10px; text-align: center;
       font-family: 'Plus Jakarta Sans', sans-serif;
       font-size: 9px; font-weight: 700;
       letter-spacing: 0.6px; text-transform: uppercase;
-      white-space: nowrap; position: sticky; top: 116px;
+      white-space: nowrap;
       border-right: 1px solid rgba(255,255,255,0.1);
     }
-    .sheet-table thead th.sh-name { text-align: left; min-width: 150px; position: sticky; left: 0; z-index: 2; background: var(--navy); }
+    .sheet-table .sh-header-row th.sh-name { text-align: left; min-width: 150px; position: sticky; left: 0; z-index: 3; background: var(--navy); }
     .sheet-table td { padding: 6px 9px; text-align: center; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); white-space: nowrap; }
     .sheet-table td.sh-name { text-align: left; font-weight: 600; color: var(--navy); font-size: 12px; padding-left: 14px; background: white; position: sticky; left: 0; z-index: 1; border-right: 2px solid var(--border); }
     .sh-cell-hit  { background: #f0fdf4; color: #16a34a; font-weight: 700; }
@@ -1915,16 +1915,30 @@
       const table = document.createElement('table');
       table.className = 'sheet-table';
 
-      // Header
-      const thead = document.createElement('thead');
-      const hRow = document.createElement('tr');
-      hRow.innerHTML = `<th class="sh-name">Agent</th>` +
-        colHeaders.map(h => `<th class="${h.sep?'sh-week-sep':''}" title="${h.bot}">${h.top}<br><span style="font-size:8px;font-weight:400;opacity:0.7">${h.bot}</span></th>`).join('') +
-        `<th>Total</th><th style="color:#4f46e5">Show-up</th>`;
-      thead.appendChild(hRow);
-      table.appendChild(thead);
-
       const tbody = document.createElement('tbody');
+
+      // Header row — inside tbody to avoid thead/overflow rendering quirks
+      const hRow = document.createElement('tr');
+      hRow.className = 'sh-header-row';
+      const hNameTh = document.createElement('th');
+      hNameTh.className = 'sh-name';
+      hNameTh.textContent = 'Agent';
+      hRow.appendChild(hNameTh);
+      for (const h of colHeaders) {
+        const th = document.createElement('th');
+        if (h.sep) th.className = 'sh-week-sep';
+        th.title = h.bot;
+        th.innerHTML = `${esc(h.top)}<br><span style="font-size:8px;font-weight:400;opacity:0.7">${esc(h.bot)}</span>`;
+        hRow.appendChild(th);
+      }
+      const totTh = document.createElement('th');
+      totTh.textContent = 'Total';
+      hRow.appendChild(totTh);
+      const suTh = document.createElement('th');
+      suTh.textContent = 'Show-up';
+      suTh.style.color = '#c4b5fd';
+      hRow.appendChild(suTh);
+      tbody.appendChild(hRow);
 
       // Agent rows
       const dayTeamTot = {};
