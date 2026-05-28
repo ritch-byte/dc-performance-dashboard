@@ -1298,10 +1298,21 @@
   }
 
   function normalizeDate(raw) {
+    if (!raw) return null;
     if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
     if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(raw)) {
       const [m,d,y] = raw.split('/');
       return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+    }
+    // Handle "27-May" or "27-May-2026" (Google Sheets DD-Mon format)
+    const MON = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+    const m = raw.match(/^(\d{1,2})-([A-Za-z]{3})(?:-(\d{4}))?$/);
+    if (m) {
+      const mo = MON[m[2].toLowerCase()];
+      if (mo) {
+        const yr = m[3] || new Date().getFullYear();
+        return `${yr}-${String(mo).padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+      }
     }
     return null;
   }
