@@ -1894,6 +1894,8 @@
     const allVisible = TEAMS.flatMap(t => t.members.filter(m => !m.hidden));
     const grandDayTotals = dates.map(d => allVisible.reduce((s,m) => s+(agentDay[m.id]?.[d]||0), 0));
     const grandTotal = grandDayTotals.reduce((s,n) => s+n, 0);
+    const grandLeadsTotal = allVisible.reduce((s,m) => s + dates.reduce((s2,d) => s2+(agentDayLeads[m.id]?.[d]||0), 0), 0);
+    const agentDays = Math.max(allVisible.length * dates.length, 1);
 
     const summary = document.createElement('div');
     summary.className = 'day-summary';
@@ -1906,8 +1908,13 @@
       </div>
       <div class="day-summary-divider"></div>
       <div class="day-summary-stat">
-        <span class="day-summary-num">${Math.round(grandTotal/Math.max(allVisible.length*dates.length,1)*10)/10}</span>
+        <span class="day-summary-num">${Math.round(grandTotal/agentDays*10)/10}</span>
         <span class="day-summary-sub">avg DCs / agent-day</span>
+      </div>
+      <div class="day-summary-divider"></div>
+      <div class="day-summary-stat">
+        <span class="day-summary-num" style="color:#059669">${Math.round(grandLeadsTotal/agentDays*10)/10}</span>
+        <span class="day-summary-sub">avg leads / agent-day</span>
       </div>`;
     c.appendChild(summary);
 
