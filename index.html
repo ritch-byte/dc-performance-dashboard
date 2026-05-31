@@ -1070,6 +1070,24 @@
     return result;
   }
 
+  function getAttendanceForDates(agentId, dates) {
+    const dateSet = new Set(dates);
+    let present = 0, late = 0, undertime = 0, absent = 0, scheduled = 0;
+    for (const row of rawAttRows) {
+      const d = normalizeDate(row.rawDate);
+      if (!d || !dateSet.has(d)) continue;
+      if (resolveAgent(row.name) !== agentId) continue;
+      const s = (row.status || '').toLowerCase().trim();
+      if (s === 'present')        { present++;   scheduled++; }
+      else if (s === 'late')      { late++;      scheduled++; }
+      else if (s === 'undertime') { undertime++; scheduled++; }
+      else if (s === 'absent')    { absent++;    scheduled++; }
+    }
+    const attended = present + late + undertime;
+    const rate = scheduled > 0 ? Math.round(attended / scheduled * 100) : null;
+    return { present, late, undertime, absent, scheduled, attended, rate };
+  }
+
   function renderDashboard() {
     const date = $('selectedDate').value;
     const c = $('teamsContainer');
@@ -1966,6 +1984,15 @@
       suTh.textContent = 'Show-up';
       suTh.style.color = '#c4b5fd';
       hRow.appendChild(suTh);
+      const avgLTh = document.createElement('th');
+      avgLTh.textContent = 'Avg L/Day';
+      avgLTh.style.color = '#6ee7b7';
+      hRow.appendChild(avgLTh);
+      const attTh = document.createElement('th');
+      attTh.textContent = 'Att';
+      attTh.style.color = '#93c5fd';
+      attTh.title = 'Attendance rate for this period (Present+Late+UT ÷ Scheduled)';
+      hRow.appendChild(attTh);
       tbody.appendChild(hRow);
 
       // Agent rows
@@ -1991,6 +2018,12 @@
           ? `${su.yes}/${su.happened} · ${Math.round((su.yes/su.happened)*100)}%`
           : '—';
         html += `<td style="color:#4f46e5;font-weight:600;font-size:11px;white-space:nowrap">${suCell}</td>`;
+        const avgL = dates.length > 0 ? (rowLeads / dates.length).toFixed(1) : '—';
+        html += `<td style="background:#f0fdf8;color:#065f46;font-weight:600;font-size:12px;border-left:1px solid var(--border)">${rowLeads > 0 ? avgL : '—'}</td>`;
+        const att = getAttendanceForDates(m.id, dates);
+        const attTip = att.scheduled > 0 ? `${att.attended}/${att.scheduled} · ${att.present}P ${att.late}L ${att.undertime}UT ${att.absent}A` : '';
+        const attCell = att.rate !== null ? `<span title="${attTip}" style="cursor:default">${att.rate}%<span style="font-size:9px;opacity:0.65;margin-left:3px">${att.scheduled}d</span></span>` : '—';
+        html += `<td style="color:#1d4ed8;font-weight:600;font-size:11px;white-space:nowrap">${attCell}</td>`;
         tr.innerHTML = html;
         tbody.appendChild(tr);
       }
@@ -2015,6 +2048,20 @@
         ? `${teamSuYes}/${teamSuHap} · ${Math.round((teamSuYes/teamSuHap)*100)}%`
         : '—';
       totHtml += `<td style="color:#4f46e5;font-weight:800;font-size:11px;white-space:nowrap">${teamSuCell}</td>`;
+      const teamAvgL = dates.length > 0 && teamLeadsTot > 0
+        ? (teamLeadsTot / (visible.length * dates.length)).toFixed(1)
+        : '—';
+      totHtml += `<td style="background:#d1fae5;color:#065f46;font-weight:800;font-size:12px;border-left:1px solid var(--border)">${teamAvgL}</td>`;
+      const teamAtt = visible.reduce((acc, m) => {
+        const a = getAttendanceForDates(m.id, dates);
+        acc.attended  += a.attended;
+        acc.scheduled += a.scheduled;
+        return acc;
+      }, { attended: 0, scheduled: 0 });
+      const teamAttCell = teamAtt.scheduled > 0
+        ? `${Math.round(teamAtt.attended/teamAtt.scheduled*100)}%<span style="font-size:9px;opacity:0.65;margin-left:3px">${teamAtt.scheduled}d</span>`
+        : '—';
+      totHtml += `<td style="color:#1d4ed8;font-weight:800;font-size:11px;white-space:nowrap">${teamAttCell}</td>`;
       totRow.innerHTML = totHtml;
       tbody.appendChild(totRow);
 
@@ -2029,7 +2076,7 @@
     if (!_sheetDates.length) { alert('No data to export.'); return; }
     const colFmt = d => { const [y,m,dy]=d.split('-').map(Number); return new Date(y,m-1,dy).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}); };
     const csvShowup = aggregateShowupForDates(_sheetDates);
-    const rows = [['Team','Agent',..._sheetDates.map(colFmt),'Total DCs','Leads','Show-up Rate']];
+    const rows = [['Team','Agent',..._sheetDates.map(colFmt),'Total DCs','Leads','Avg L/Day','Show-up Rate','Att %','Present','Late','Undertime','Absent','Scheduled']];
     for (const team of TEAMS) {
       const visible = team.members.filter(m => !m.hidden);
       const totFor = m => _sheetDates.reduce((s,d)=>s+(_sheetData[m.id]?.[d]||0),0);
@@ -2038,14 +2085,21 @@
       for (const m of sorted) {
         const su = csvShowup[m.id] || { yes:0, happened:0 };
         const suStr = su.happened > 0 ? `${su.yes}/${su.happened} (${Math.round(su.yes/su.happened*100)}%)` : '—';
-        rows.push([team.name, m.display, ..._sheetDates.map(d=>_sheetData[m.id]?.[d]||0), totFor(m), leadsFor(m), suStr]);
+        const lTot = leadsFor(m);
+        const avgL = _sheetDates.length > 0 && lTot > 0 ? (_sheetDates.length > 0 ? (lTot / _sheetDates.length).toFixed(2) : '—') : '—';
+        const att = getAttendanceForDates(m.id, _sheetDates);
+        const attPct = att.rate !== null ? att.rate + '%' : '—';
+        rows.push([team.name, m.display, ..._sheetDates.map(d=>_sheetData[m.id]?.[d]||0), totFor(m), lTot, avgL, suStr, attPct, att.present, att.late, att.undertime, att.absent, att.scheduled]);
       }
       const teamDayTots = _sheetDates.map(d => visible.reduce((s,m)=>s+(_sheetData[m.id]?.[d]||0),0));
       const teamLeadsTot = visible.reduce((s,m)=>s+leadsFor(m),0);
+      const teamAvgL = _sheetDates.length > 0 && teamLeadsTot > 0 ? (teamLeadsTot / (visible.length * _sheetDates.length)).toFixed(2) : '—';
       const tYes = visible.reduce((s,m)=>s+(csvShowup[m.id]?.yes||0),0);
       const tHap = visible.reduce((s,m)=>s+(csvShowup[m.id]?.happened||0),0);
       const tSu = tHap > 0 ? `${tYes}/${tHap} (${Math.round(tYes/tHap*100)}%)` : '—';
-      rows.push([team.name,'TEAM TOTAL',...teamDayTots, teamDayTots.reduce((s,n)=>s+n,0), teamLeadsTot, tSu]);
+      const tAtt = visible.reduce((acc,m)=>{ const a=getAttendanceForDates(m.id,_sheetDates); acc.attended+=a.attended; acc.scheduled+=a.scheduled; acc.present+=a.present; acc.late+=a.late; acc.undertime+=a.undertime; acc.absent+=a.absent; return acc; }, {attended:0,scheduled:0,present:0,late:0,undertime:0,absent:0});
+      const tAttPct = tAtt.scheduled > 0 ? Math.round(tAtt.attended/tAtt.scheduled*100)+'%' : '—';
+      rows.push([team.name,'TEAM TOTAL',...teamDayTots, teamDayTots.reduce((s,n)=>s+n,0), teamLeadsTot, teamAvgL, tSu, tAttPct, tAtt.present, tAtt.late, tAtt.undertime, tAtt.absent, tAtt.scheduled]);
       rows.push([]);
     }
     const csv = rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\r\n');
