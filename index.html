@@ -1384,7 +1384,7 @@
     $('navAttendance').classList.toggle('active',  page === 'attendance');
     if (page === 'team')       renderTeamRoster();
     if (page === 'reports')    { buildReportMonthSelect(); renderReports(); }
-    if (page === 'sheet')      { buildSheetWeekSelect(); renderSheet(); }
+    if (page === 'sheet')      { buildSheetWeekSelect(); renderSheet(); if (!_attLoaded && !_attLoading) loadAttendanceData(); }
     if (page === 'attendance') { if (!_attLoaded) loadAttendanceData(); else renderAttendance(); }
   }
 
@@ -2148,6 +2148,7 @@
       _attLoaded = true;
       if ($('attErrorBanner')) $('attErrorBanner').classList.remove('show');
       if ($('attendanceSection').style.display !== 'none') renderAttendance();
+      if ($('sheetSection') && $('sheetSection').style.display !== 'none') renderSheet();
       if (_profileMember) {
         const today = localIso(new Date());
         const [ty, tm] = today.split('-').map(Number);
