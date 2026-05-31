@@ -2021,9 +2021,15 @@
         const avgL = dates.length > 0 ? (rowLeads / dates.length).toFixed(1) : '—';
         html += `<td style="background:#f0fdf8;color:#065f46;font-weight:600;font-size:12px;border-left:1px solid var(--border)">${rowLeads > 0 ? avgL : '—'}</td>`;
         const att = getAttendanceForDates(m.id, dates);
-        const attTip = att.scheduled > 0 ? `${att.attended}/${att.scheduled} · ${att.present}P ${att.late}L ${att.undertime}UT ${att.absent}A` : '';
-        const attCell = att.rate !== null ? `<span title="${attTip}" style="cursor:default">${att.rate}%<span style="font-size:9px;opacity:0.65;margin-left:3px">${att.scheduled}d</span></span>` : '—';
-        html += `<td style="color:#1d4ed8;font-weight:600;font-size:11px;white-space:nowrap">${attCell}</td>`;
+        const attIssues = [
+          att.late      > 0 ? `<span style="color:#c2410c;font-size:9px;font-weight:700">${att.late}L</span>`      : '',
+          att.undertime > 0 ? `<span style="color:#c2410c;font-size:9px;font-weight:700">${att.undertime}UT</span>` : '',
+          att.absent    > 0 ? `<span style="color:#dc2626;font-size:9px;font-weight:700">${att.absent}A</span>`    : '',
+        ].filter(Boolean).join('<span style="opacity:0.35;margin:0 2px">·</span>');
+        const attCell = att.rate !== null
+          ? `<div style="line-height:1.3"><div style="color:#1d4ed8;font-weight:700;font-size:11px">${att.rate}%</div>${attIssues ? `<div style="margin-top:1px">${attIssues}</div>` : ''}</div>`
+          : '—';
+        html += `<td style="white-space:nowrap;vertical-align:middle">${attCell}</td>`;
         tr.innerHTML = html;
         tbody.appendChild(tr);
       }
@@ -2056,12 +2062,20 @@
         const a = getAttendanceForDates(m.id, dates);
         acc.attended  += a.attended;
         acc.scheduled += a.scheduled;
+        acc.late      += a.late;
+        acc.undertime += a.undertime;
+        acc.absent    += a.absent;
         return acc;
-      }, { attended: 0, scheduled: 0 });
+      }, { attended: 0, scheduled: 0, late: 0, undertime: 0, absent: 0 });
+      const teamAttIssues = [
+        teamAtt.late      > 0 ? `<span style="color:#c2410c;font-size:9px;font-weight:700">${teamAtt.late}L</span>`      : '',
+        teamAtt.undertime > 0 ? `<span style="color:#c2410c;font-size:9px;font-weight:700">${teamAtt.undertime}UT</span>` : '',
+        teamAtt.absent    > 0 ? `<span style="color:#dc2626;font-size:9px;font-weight:700">${teamAtt.absent}A</span>`    : '',
+      ].filter(Boolean).join('<span style="opacity:0.35;margin:0 2px">·</span>');
       const teamAttCell = teamAtt.scheduled > 0
-        ? `${Math.round(teamAtt.attended/teamAtt.scheduled*100)}%<span style="font-size:9px;opacity:0.65;margin-left:3px">${teamAtt.scheduled}d</span>`
+        ? `<div style="line-height:1.3"><div style="color:#1d4ed8;font-weight:800;font-size:11px">${Math.round(teamAtt.attended/teamAtt.scheduled*100)}%</div>${teamAttIssues ? `<div style="margin-top:1px">${teamAttIssues}</div>` : ''}</div>`
         : '—';
-      totHtml += `<td style="color:#1d4ed8;font-weight:800;font-size:11px;white-space:nowrap">${teamAttCell}</td>`;
+      totHtml += `<td style="white-space:nowrap;vertical-align:middle">${teamAttCell}</td>`;
       totRow.innerHTML = totHtml;
       tbody.appendChild(totRow);
 
