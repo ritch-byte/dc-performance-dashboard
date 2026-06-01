@@ -788,63 +788,71 @@
 
   const TEAMS = [
     {
-      id: 'jetlica', name: 'JETLICA', color: '#059669',
-      members: [
-        { id: 'malavega', display: 'Jose Carlos Malavega',  ln: 'malavega' },
-        { id: 'rees',     display: 'Jean Rees',             ln: 'rees' },
-        { id: 'lentija',  display: 'Jefferson Lentija',     ln: 'lentija' },
-        { id: 'decamora', display: 'Maureen Decamora',      ln: 'decamora' },
-        { id: 'tupaz',    display: 'Rommel Tupaz',          ln: 'tupaz' },
-        { id: 'ruiz',     display: 'Renz Ruiz',             ln: 'ruiz' },
-        { id: 'silang',   display: 'Summer Silang',         ln: 'silang' },
-        { id: 'garcia',   display: 'Chin Garcia',           ln: 'garcia' },
-        { id: 'saminado', display: 'Jervin Saminado',       ln: 'saminado' },
-        { id: 'jetdel',   display: 'Jetdel Ybanez',           ln: 'ybanez',  hidden: true },
-        { id: 'tanate',   display: 'Angelica Tanate',        ln: 'tanate',  hidden: true },
-      ]
-    },
-    {
-      id: 'ritchcent', name: 'RITCHCENT', color: '#1A2DB5',
-      members: [
-        { id: 'valenzuela',  display: 'Aaron Kyle Valenzuela', ln: 'valenzuela' },
-        { id: 'velasco',     display: 'Edward Velasco',        ln: 'velasco' },
-        { id: 'melo',        display: 'Alvin Melo',            ln: 'melo' },
-        { id: 'vosotros',    display: 'Diana Vosotros',        ln: 'vosotros' },
-        { id: 'arcena',      display: 'Charlito Arcena',       ln: 'arcena' },
-        { id: 'petras',      display: 'Art Joseph Petras',     ln: 'petras' },
-        { id: 'galoso',      display: 'Lawrence Galoso',       ln: 'galoso' },
-        { id: 'pabiona',     display: 'Cristina Pabiona',      ln: 'pabiona' },
-        { id: 'sarmiento_c', display: 'Charles Sarmiento',     ln: 'sarmiento', fn: 'charles' },
-        { id: 'pastor',      display: 'Alelie Pastor',         ln: 'pastor' },
-        { id: 'mamaclay',    display: 'Bem Mamaclay',          ln: 'mamaclay' },
-        { id: 'sindac',      display: 'Renz Sindac',           ln: 'sindac' },
-        { id: 'catolico',    display: 'Pedro Catolico',        ln: 'catolico' },
-        { id: 'sarmiento_j', display: 'Julius Sarmiento',      ln: 'sarmiento', fn: 'julius' },
-        { id: 'baliuag',     display: 'Charlon Baliuag',       ln: 'baliuag' },
-        { id: 'fortez',      display: 'Charlie Fortez',         ln: 'fortez' },
-        { id: 'gadier',      display: 'Vincent Gadier',        ln: 'gadier',  hidden: true },
-      ]
-    },
-    {
       id: 'jumhon', name: 'JUMHON', color: '#d97706',
       members: [
-        { id: 'anos',        display: 'Marc Anos',              ln: 'anos' },
-        { id: 'demayo',      display: 'Devi Demayo',           ln: 'demayo' },
-        { id: 'delos_reyes', display: 'Joy Delos Reyes',       ln: 'reyes', ln2: 'delos reyes' },
-        { id: 'biron',       display: 'Anne Biron',            ln: 'biron' },
-        { id: 'cavinta',     display: 'Steven Kurt Cavinta',   ln: 'cavinta' },
-        { id: 'verastigue',  display: 'Bedier Verastigue',     ln: 'verastigue' },
-        { id: 'tapiador',    display: 'Quin Fernandez',        ln: 'fernandez' },
-        { id: 'bondad',      display: 'Joshua Bondad',         ln: 'bondad' },
-        { id: 'benjamin',    display: 'Russell Benjamin',      ln: 'benjamin' },
-        { id: 'silva',       display: 'Godwin Silva',          ln: 'silva' },
-        { id: 'escabillas',  display: 'Kenneth Escabillas',    ln: 'escabillas' },
-        { id: 'bautista',    display: 'Samara Bautista',       ln: 'bautista' },
-        { id: 'lavares',     display: 'Gian Lavares',          ln: 'lavares' },
+        { id: 'bayhon',        display: 'Alvin Bayhon',           ln: 'bayhon' },
+        { id: 'delos_reyes',   display: 'Joy Delos Reyes',        ln: 'reyes',    ln2: 'delos reyes' },
+        { id: 'escabillas',    display: 'Kenneth Escabillas',     ln: 'escabillas' },
+        { id: 'pabiona',       display: 'Cristina Pabiona',       ln: 'pabiona' },
+        { id: 'garcia',        display: 'Katherine Garcia',       ln: 'garcia' },
+        { id: 'tapiador',      display: 'Quin Tapiador',          ln: 'tapiador', fn: 'juaquin' },
+        { id: 'anos',          display: 'Marc Anos',              ln: 'anos' },
+        { id: 'benjamin',      display: 'Russell Benjamin',       ln: 'benjamin' },
+        { id: 'lavares',       display: 'Gian Lavares',           ln: 'lavares' },
+        { id: 'arespacochaga', display: 'Mervin Arespacochaga',   ln: 'arespacochaga' },
+        { id: 'bangalan',      display: 'Roderico Bangalan',      ln: 'bangalan' },
+        { id: 'berenguer',     display: 'Chenseen Berenguer',     ln: 'berenguer' },
+        { id: 'cagampan',      display: 'Rachel Cagampan',        ln: 'cagampan' },
+        { id: 'jabonete',      display: 'Jonathan Jabonete',      ln: 'jabonete' },
+        { id: 'javier',        display: 'John Steven Javier',     ln: 'javier' },
+        { id: 'susana',        display: 'John Christian Susana',  ln: 'susana' },
+        { id: 'villaruel',     display: 'Lance Villaruel',        ln: 'villaruel' },
+        { id: 'biron',         display: 'Anne Biron',             ln: 'biron',    hidden: true },
+        { id: 'jumar',         display: 'Jumar Vere',             ln: 'vere',     hidden: true },
+      ]
+    },
+    {
+      id: 'rv', name: 'RV', color: '#1A2DB5',
+      members: [
+        { id: 'melo',        display: 'Alvin Melo',            ln: 'melo' },
+        { id: 'vosotros',    display: 'Diana Vosotros',        ln: 'vosotros' },
+        { id: 'catolico',    display: 'Pedro Catolico',        ln: 'catolico' },
+        { id: 'bautista',    display: 'Dan Marc Bautista',     ln: 'bautista' },
+        { id: 'fortez',      display: 'Charlie Fortez',        ln: 'fortez' },
+        { id: 'silang',      display: 'Gian Carlo Silang',     ln: 'silang' },
         { id: 'ramirez',     display: 'Mark Lauren Ramirez',   ln: 'ramirez' },
+        { id: 'baliuag',     display: 'Charlon Baliuag',       ln: 'baliuag' },
+        { id: 'ruiz',        display: 'Renz Ruiz',             ln: 'ruiz' },
+        { id: 'sarmiento_j', display: 'Julius Sarmiento',      ln: 'sarmiento', fn: 'julius' },
+        { id: 'silva',       display: 'Godwin Silva',          ln: 'silva' },
+        { id: 'valenzuela',  display: 'Aaron Kyle Valenzuela', ln: 'valenzuela' },
+        { id: 'velasco',     display: 'Edward Velasco',        ln: 'velasco' },
+        { id: 'demayo',      display: 'Jerry Demayo',          ln: 'demayo' },
+        { id: 'petras',      display: 'Art Joseph Petras',     ln: 'petras' },
+        { id: 'gadier',      display: 'Vincent Gadier',        ln: 'gadier',   hidden: true },
+        { id: 'pastor',      display: 'Alelie Pastor',         ln: 'pastor',   hidden: true },
+        { id: 'mamaclay',    display: 'Bem Mamaclay',          ln: 'mamaclay', hidden: true },
+      ]
+    },
+    {
+      id: 'ace', name: 'ACE', color: '#059669',
+      members: [
+        { id: 'saminado',    display: 'Jervin Saminado',       ln: 'saminado' },
+        { id: 'rees',        display: 'Jean Rees',             ln: 'rees' },
+        { id: 'arcena',      display: 'Charlito Arcena',       ln: 'arcena' },
+        { id: 'cavinta',     display: 'Steven Kurt Cavinta',   ln: 'cavinta' },
+        { id: 'lentija',     display: 'Jefferson Lentija',     ln: 'lentija' },
+        { id: 'decamora',    display: 'Maureen Decamora',      ln: 'decamora' },
+        { id: 'malavega',    display: 'Jose Carlos Malavega',  ln: 'malavega' },
+        { id: 'verastigue',  display: 'Bedier Verastigue',     ln: 'verastigue' },
         { id: 'bascos',      display: 'Jessica Bascos',        ln: 'bascos' },
-        { id: 'jumar',       display: 'Jumar Vere',             ln: 'vere',    hidden: true },
-        { id: 'bayhon',      display: 'Ali Bayhon',            ln: 'bayhon',  hidden: true },
+        { id: 'galoso',      display: 'Lawrence Galoso',       ln: 'galoso' },
+        { id: 'sarmiento_c', display: 'Charles Sarmiento',     ln: 'sarmiento', fn: 'charles' },
+        { id: 'tupaz',       display: 'Rommel Tupaz',          ln: 'tupaz' },
+        { id: 'sindac',      display: 'Renz Sindac',           ln: 'sindac' },
+        { id: 'bondad',      display: 'Joshua Bondad',         ln: 'bondad' },
+        { id: 'tanate',      display: 'Angelica Tanate',       ln: 'tanate',  hidden: true },
+        { id: 'jetdel',      display: 'Jetdel Ybanez',         ln: 'ybanez',  hidden: true },
       ]
     },
     {
@@ -853,8 +861,8 @@
         { id: 'jetdel',  display: 'Jetdel Ybanez',   ln: 'ybanez' },
         { id: 'tanate',  display: 'Angelica Tanate',  ln: 'tanate' },
         { id: 'gadier',  display: 'Vincent Gadier',   ln: 'gadier' },
-        { id: 'bayhon',  display: 'Ali Bayhon',       ln: 'bayhon' },
-        { id: 'jumar',   display: 'Jumar Vere',        ln: 'vere'   },
+        { id: 'bayhon',  display: 'Alvin Bayhon',     ln: 'bayhon' },
+        { id: 'jumar',   display: 'Jumar Vere',       ln: 'vere'   },
       ]
     }
   ];
@@ -866,6 +874,11 @@
       (LN_MAP[m.ln] = LN_MAP[m.ln] || []).push({ m, team });
       if (m.ln2) (LN2_MAP[m.ln2] = LN2_MAP[m.ln2] || []).push({ m, team });
     }
+  }
+  // Aliases for names that appear differently across sheets
+  const LN_ALIASES = { 'fernandez': 'tapiador', 'samara': 'bautista', 'devi': 'demayo', 'summer': 'silang', 'chin': 'garcia' };
+  for (const [alias, targetLn] of Object.entries(LN_ALIASES)) {
+    if (LN_MAP[targetLn] && !LN_MAP[alias]) LN_MAP[alias] = LN_MAP[targetLn];
   }
 
   function resolveAgent(rawName) {
