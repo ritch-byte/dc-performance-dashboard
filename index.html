@@ -529,6 +529,36 @@
     @media (max-width: 700px) {
       .sidebar { display: none; }
       .member-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+      #coachingBody { grid-template-columns: 1fr !important; }
+    }
+
+    /* ── Coaching Log ── */
+    .cl-field { margin-bottom: 10px; }
+    .cl-label {
+      display: block; font-size: 10px; font-weight: 800;
+      letter-spacing: 0.8px; text-transform: uppercase;
+      color: var(--navy); margin-bottom: 3px;
+    }
+    .cl-input {
+      width: 100%; border: 1px solid var(--border); border-radius: 8px;
+      padding: 6px 10px; font-size: 13px; color: var(--ink);
+      font-family: 'Inter', sans-serif; outline: none; background: #fff;
+      box-sizing: border-box;
+    }
+    .cl-input:focus { border-color: var(--blue); }
+    textarea.cl-input { resize: vertical; }
+    .cl-chip {
+      border-radius: 20px; padding: 4px 11px; font-size: 11px;
+      font-weight: 700; border: 1px solid var(--border); cursor: pointer;
+      background: #fff; color: var(--slate); transition: all .15s;
+    }
+    .cl-chip.on-navy  { background: var(--navy);    color: #fff; border-color: var(--navy); }
+    .cl-chip.on-mag   { background: #D6006D;        color: #fff; border-color: #D6006D; }
+    .cl-chip.on-blue  { background: var(--blue);    color: #fff; border-color: var(--blue); }
+    .cl-copy-btn {
+      font-size: 11px; font-weight: 700; padding: 4px 14px;
+      border-radius: 20px; border: 1px solid; cursor: pointer;
+      font-family: 'Inter', sans-serif;
     }
   </style>
 </head>
@@ -597,6 +627,13 @@
         <path d="M5 10l1.5 1.5L11 8"/>
       </svg>
       Attendance
+    </a>
+
+    <a class="nav-item" id="navCoaching" href="#" onclick="showPage('coaching');return false;">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M2 2h12v9H2z"/><path d="M5 6h6M5 8.5h4"/><path d="M5 13l3-2 3 2"/>
+      </svg>
+      Coaching Log
     </a>
 
     <div class="sidebar-divider"></div>
@@ -767,6 +804,112 @@
           <button id="attReloadBtn" onclick="attReload()" style="font-size:11px;font-weight:600;color:var(--blue);background:none;border:1px solid var(--border);padding:4px 10px;cursor:pointer;font-family:'Inter',sans-serif">↻ Reload</button>
         </div>
         <div id="profileAttContent"></div>
+      </div>
+    </div>
+
+    <!-- ── Coaching Log Section ── -->
+    <div id="coachingSection" style="display:none;">
+      <div class="content-header">
+        <div class="page-title">Coaching Log Generator</div>
+        <div class="ch-right" style="font-size:12px;color:var(--slate);font-weight:500">Post-Booking Cadence · 6-Step Standard</div>
+      </div>
+      <div id="coachingBody" style="padding:0 24px 32px;display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start">
+
+        <!-- Form -->
+        <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:18px">
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px">
+            <div class="cl-field">
+              <label class="cl-label">Squad</label>
+              <select id="clSquad" class="cl-input" onchange="clSetSquad()">
+                <option>JUMHON</option><option>RV</option><option>ACE</option><option>POC TEAM</option><option>Other</option>
+              </select>
+            </div>
+            <div class="cl-field">
+              <label class="cl-label">Team member</label>
+              <div style="position:relative">
+                <input id="clTmName" class="cl-input" placeholder="Type to search…" autocomplete="off"
+                  oninput="clTmInput()" onfocus="clTmInput()" onblur="setTimeout(clHideSug,150)">
+                <div id="clSugBox" style="display:none;position:absolute;left:0;right:0;top:100%;margin-top:2px;background:#fff;border:1px solid var(--border);border-radius:8px;z-index:100;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,.1)"></div>
+              </div>
+            </div>
+            <div class="cl-field">
+              <label class="cl-label">Lead name (optional)</label>
+              <input id="clLeadName" class="cl-input" placeholder="Leave blank for general" oninput="clRender()">
+            </div>
+            <div class="cl-field">
+              <label class="cl-label">HubSpot link (optional)</label>
+              <input id="clHubspot" class="cl-input" placeholder="https://app.hubspot.com/…" oninput="clRender()">
+            </div>
+            <div class="cl-field">
+              <label class="cl-label">Conversation date</label>
+              <input type="date" id="clConvoDate" class="cl-input" oninput="clRender()">
+            </div>
+            <div class="cl-field">
+              <label class="cl-label">Violation date (optional)</label>
+              <input type="date" id="clBehaviorDate" class="cl-input" oninput="clRender()">
+            </div>
+          </div>
+
+          <div class="cl-field" style="margin-top:4px">
+            <label class="cl-label">Cadence steps missed (tap to toggle)</label>
+            <div id="clStepChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px"></div>
+          </div>
+
+          <div class="cl-field">
+            <label class="cl-label">Discipline level</label>
+            <div id="clLevelBtns" style="display:flex;gap:6px"></div>
+          </div>
+
+          <div class="cl-field">
+            <label class="cl-label">What was observed (auto-built · editable)</label>
+            <textarea id="clBehavior" class="cl-input" rows="3" oninput="clBehaviorEdited()"></textarea>
+          </div>
+          <div class="cl-field">
+            <label class="cl-label">Impact</label>
+            <textarea id="clImpact" class="cl-input" rows="2" oninput="clRender()"></textarea>
+          </div>
+          <div class="cl-field">
+            <label class="cl-label">Expectations (effective immediately)</label>
+            <textarea id="clExpectations" class="cl-input" rows="3" oninput="clRender()"></textarea>
+          </div>
+          <div class="cl-field">
+            <label class="cl-label">Support offered</label>
+            <input id="clSupport" class="cl-input" oninput="clRender()">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px">
+            <div class="cl-field">
+              <label class="cl-label">Prior coaching (blank if first)</label>
+              <input id="clPrior" class="cl-input" placeholder="e.g. Verbal coaching May 14" oninput="clRender()">
+            </div>
+            <div class="cl-field">
+              <label class="cl-label">Follow-up review date</label>
+              <input type="date" id="clFollowUp" class="cl-input" oninput="clRender()">
+            </div>
+          </div>
+        </div>
+
+        <!-- Preview -->
+        <div style="position:sticky;top:16px">
+          <div style="border:1px solid var(--border);border-radius:12px;overflow:hidden">
+            <div style="background:#0C1F42;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;gap:8px">
+              <span style="font-size:13px;font-weight:700;color:#fff">Email preview</span>
+              <div style="display:flex;gap:6px">
+                <button onclick="clCopySubject()" class="cl-copy-btn" style="background:transparent;color:#C7D4EC;border-color:rgba(255,255,255,0.3)">Copy subject</button>
+                <button onclick="clCopyEmail()" id="clCopyBtn" class="cl-copy-btn" style="background:#D6006D;color:#fff;border-color:#D6006D">Copy email</button>
+              </div>
+            </div>
+            <div style="padding:8px 14px;background:#F9FAFD;border-bottom:1px solid var(--border)">
+              <span style="font-size:11px;font-weight:600;color:var(--slate)">Subject: </span>
+              <span id="clSubjectLine" style="font-size:11px;font-weight:700;color:var(--ink)"></span>
+            </div>
+            <div id="clEmailPreview" style="padding:14px;background:#fff;overflow:auto;max-height:70vh"></div>
+          </div>
+          <div style="margin-top:10px;background:#EEF3FB;border:1px solid #C9D8F0;border-radius:10px;padding:10px 14px;font-size:11px;color:#142E5C">
+            <b style="color:#D6006D">Copy email</b> copies the full design — paste straight into Gmail and the formatting carries over. Check each TM's prior record so the discipline level matches their history.
+          </div>
+        </div>
+
       </div>
     </div>
 
@@ -1389,16 +1532,18 @@
     $('sheetSection').style.display        = page === 'sheet'      ? '' : 'none';
     $('attendanceSection').style.display   = page === 'attendance' ? '' : 'none';
     $('profileSection').style.display      = page === 'profile'    ? '' : 'none';
-    $('sheetSection').style.display        = page === 'sheet'      ? '' : 'none';
+    $('coachingSection').style.display     = page === 'coaching'   ? '' : 'none';
     $('navDashboard').classList.toggle('active',   page === 'dashboard');
     $('navTeam').classList.toggle('active',        page === 'team');
     $('navReports').classList.toggle('active',     page === 'reports');
     $('navSheet').classList.toggle('active',       page === 'sheet');
     $('navAttendance').classList.toggle('active',  page === 'attendance');
+    $('navCoaching').classList.toggle('active',    page === 'coaching');
     if (page === 'team')       renderTeamRoster();
     if (page === 'reports')    { buildReportMonthSelect(); renderReports(); }
     if (page === 'sheet')      { buildSheetWeekSelect(); renderSheet(); if (!_attLoaded && !_attLoading) loadAttendanceData(); }
     if (page === 'attendance') { if (!_attLoaded) loadAttendanceData(); else renderAttendance(); }
+    if (page === 'coaching')   clInit();
   }
 
   // ── Reports ──
@@ -2582,6 +2727,256 @@
       }
       container.appendChild(sec);
     }
+  }
+
+  // ── COACHING LOG ──────────────────────────────────────────────────────────
+  const CL_ROSTER = {
+    JUMHON: ['Lance Villaruel','Mervin Arespacochaga','Cristina Pabiona','Marc Anos','Joy Delos Reyes',
+             'Kenneth Escabillas','Katherine Garcia','Quin Tapiador','Russell Benjamin','Gian Lavares',
+             'Roderico Bangalan','Chenseen Berenguer','Rachel Cagampan','Jonathan Jabonete',
+             'John Steven Javier','John Christian Susana','Alvin Bayhon'],
+    RV: ['Gian Carlo Silang','Godwin Silva','Diana Vosotros','Mark Lauren Ramirez','Charlon Baliuag',
+         'Edward Velasco','Jerry Demayo','Samara Bautista','Charlie Fortez','Alvin Melo',
+         'Pedro Catolico','Renz Ruiz','Julius Sarmiento','Aaron Kyle Valenzuela','Art Joseph Petras'],
+    ACE: ['Bedier Verastigue','Charlito Arcena','Steven Kurt Cavinta','Jose Carlos Malavega',
+          'Charles Sarmiento','Jervin Saminado','Jean Rees','Jefferson Lentija','Maureen Decamora',
+          'Jessica Bascos','Lawrence Galoso','Rommel Tupaz','Renz Sindac','Joshua Bondad'],
+    'POC TEAM': ['Jetdel Ybanez','Angelica Tanate','Vincent Gadier','Alvin Bayhon','Jumar Vere'],
+  };
+  const CL_ALL_TMS = Object.entries(CL_ROSTER).flatMap(([squad,names]) => names.map(name => ({name,squad})));
+
+  const CL_CADENCE = [
+    { id:1, short:'Step 1', chip:'Booking text',    desc:'immediate post-booking confirmation text (invite acceptance + meeting details)' },
+    { id:2, short:'Step 2', chip:'3-day email',     desc:'3-days-before reminder email (schedule-send for far-out bookings)' },
+    { id:3, short:'Step 3', chip:'1-day reminder',  desc:'1-day-before reminder via text, email, and LinkedIn where applicable' },
+    { id:4, short:'Step 4', chip:'1-hour reminder', desc:'1-hour-before reminder via text and email' },
+    { id:5, short:'Step 5', chip:'3-min in-room',   desc:'3-minutes-before message sent from inside the meeting room' },
+    { id:6, short:'Step 6', chip:'No-show protocol',desc:'no-show protocol (call at minute 0, text/email at minutes 1 and 5, final call and reschedule email at minute 10)' },
+  ];
+  const CL_LEVELS = [
+    { id:'verbal',  label:'Verbal',       banner:'COACHING NOTE: FORMAL DOCUMENTATION',
+      consequence:'This note is now part of your coaching record. Any further failure to execute the post-booking cadence will move this matter to the next stage of our progressive discipline process.' },
+    { id:'written', label:'Written',      banner:'WRITTEN WARNING: PERSONNEL FILE',
+      consequence:'This is a formal written warning and will be placed in your personnel file. Any further failure to execute the post-booking cadence will result in a final written warning.' },
+    { id:'final',   label:'Final Written',banner:'FINAL WRITTEN WARNING: PERSONNEL FILE',
+      consequence:'This is a final written warning and will be placed in your personnel file. Any further violation will result in suspension or termination of employment.' },
+  ];
+  const CL_IMPACT_DEFAULT = 'Skipped reminders directly drive no-shows: a lost opportunity for the Source Partner, wasted SP calendar time, and a hit to the squad\'s show-up rate and the service standard we commit to.';
+  const CL_EXPECT_DEFAULT = 'Effective immediately, you are required to execute the full 6-step post-booking cadence for every booked DC, per the Post Booking Steps standard: (1) confirmation text immediately after booking, (2) reminder email 3 days before, (3) reminder via text/email/LinkedIn 1 day before, (4) text and email reminder 1 hour before, (5) the 3-minutes-before message sent from inside the meeting room, and (6) the full no-show protocol when a lead does not appear. This is mandatory and non-negotiable.';
+  const CL_SUPPORT_DEFAULT = 'The Post Booking Steps document and message templates will be resent to you today for reference. Your next bookings will be reviewed for full compliance.';
+
+  let _clInited = false;
+  let _clState = {
+    tmName:'', squad:'JUMHON', leadName:'', hubspot:'', convoDate:'', behaviorDate:'',
+    missed:[], general:true, behaviorEdited:'', useEdited:false, level:'verbal',
+    impact:CL_IMPACT_DEFAULT, expectations:CL_EXPECT_DEFAULT, support:CL_SUPPORT_DEFAULT,
+    prior:'', followUp:'',
+  };
+
+  function clInit() {
+    if (_clInited) return;
+    _clInited = true;
+    // Build cadence step chips
+    const chips = $('clStepChips');
+    const genBtn = document.createElement('button');
+    genBtn.className = 'cl-chip on-navy'; genBtn.dataset.id = 'general';
+    genBtn.textContent = 'General · missed step(s)';
+    genBtn.onclick = () => { _clState.general = true; _clState.missed = []; _clState.useEdited = false; clSyncChips(); clBuildBehavior(); clRender(); };
+    chips.appendChild(genBtn);
+    CL_CADENCE.forEach(c => {
+      const btn = document.createElement('button');
+      btn.className = 'cl-chip'; btn.dataset.id = c.id;
+      btn.textContent = `${c.short} · ${c.chip}`;
+      btn.onclick = () => {
+        _clState.general = false; _clState.useEdited = false;
+        const idx = _clState.missed.indexOf(c.id);
+        if (idx >= 0) _clState.missed.splice(idx, 1); else _clState.missed.push(c.id);
+        _clState.missed.sort((a,b) => a-b);
+        clSyncChips(); clBuildBehavior(); clRender();
+      };
+      chips.appendChild(btn);
+    });
+    // Build level buttons
+    const lvls = $('clLevelBtns');
+    CL_LEVELS.forEach(l => {
+      const btn = document.createElement('button');
+      btn.className = 'cl-chip'; btn.dataset.id = l.id;
+      btn.textContent = l.label;
+      btn.onclick = () => { _clState.level = l.id; clSyncLevels(); clRender(); };
+      lvls.appendChild(btn);
+    });
+    // Set defaults
+    $('clImpact').value = CL_IMPACT_DEFAULT;
+    $('clExpectations').value = CL_EXPECT_DEFAULT;
+    $('clSupport').value = CL_SUPPORT_DEFAULT;
+    clSyncChips(); clSyncLevels(); clBuildBehavior(); clRender();
+  }
+
+  function clSyncChips() {
+    $('clStepChips').querySelectorAll('.cl-chip').forEach(btn => {
+      btn.classList.remove('on-navy','on-mag');
+      if (btn.dataset.id === 'general') {
+        if (_clState.general) btn.classList.add('on-navy');
+      } else {
+        if (_clState.missed.includes(Number(btn.dataset.id))) btn.classList.add('on-mag');
+      }
+    });
+  }
+  function clSyncLevels() {
+    $('clLevelBtns').querySelectorAll('.cl-chip').forEach(btn => {
+      btn.classList.remove('on-blue');
+      if (btn.dataset.id === _clState.level) btn.classList.add('on-blue');
+    });
+  }
+
+  function clTmInput() {
+    const q = $('clTmName').value.trim().toLowerCase();
+    const squad = $('clSquad').value;
+    const matches = CL_ALL_TMS.filter(t => q === '' ? t.squad === squad : t.name.toLowerCase().includes(q)).slice(0, 8);
+    const box = $('clSugBox');
+    if (!matches.length) { box.style.display = 'none'; return; }
+    box.innerHTML = '';
+    matches.forEach(t => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.style.cssText = 'width:100%;text-align:left;padding:7px 12px;font-size:13px;background:none;border:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;color:#1A2233';
+      btn.innerHTML = `<span>${esc(t.name)}</span><span style="font-size:10px;font-weight:800;color:#D6006D">${esc(t.squad)}</span>`;
+      btn.onmousedown = e => { e.preventDefault(); $('clTmName').value = t.name; _clState.tmName = t.name; $('clSquad').value = t.squad; box.style.display = 'none'; clRender(); };
+      btn.onmouseover = () => { btn.style.background = '#F4F5FA'; };
+      btn.onmouseout  = () => { btn.style.background = 'none'; };
+      box.appendChild(btn);
+    });
+    box.style.display = 'block';
+  }
+  function clHideSug() { if ($('clSugBox')) $('clSugBox').style.display = 'none'; }
+  function clSetSquad() { _clState.squad = $('clSquad').value; $('clTmName').value = ''; clRender(); }
+
+  function clBuildBehavior() {
+    const ref = _clState.leadName ? `the DC booked with ${_clState.leadName}` : 'the booked DC(s)';
+    const missed = _clState.missed;
+    let text;
+    if (_clState.general || !missed.length) {
+      text = `The mandatory 6-step post-booking cadence was not consistently followed for ${ref}. One or more of the required steps (confirmation text, scheduled reminders, in-room message, or no-show protocol) was not completed.`;
+    } else if (missed.length === 6) {
+      text = `None of the mandatory 6-step post-booking cadence was completed for ${ref}: no confirmation text, no scheduled reminders, no in-room message, and the no-show protocol was not initiated.`;
+    } else {
+      const parts = missed.map(id => { const c = CL_CADENCE.find(x => x.id === id); return `${c.short} (${c.desc})`; });
+      text = `The mandatory post-booking cadence was not fully completed for ${ref}. Specifically, the following required steps were missed: ${parts.join('; ')}.`;
+    }
+    $('clBehavior').value = text;
+    _clState.behaviorEdited = text; _clState.useEdited = false;
+  }
+  function clBehaviorEdited() { _clState.useEdited = true; _clState.behaviorEdited = $('clBehavior').value; clRender(); }
+
+  function clFmtDate(iso) {
+    if (!iso) return '';
+    return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' });
+  }
+
+  function clRender() {
+    const f = {
+      tmName:       $('clTmName').value.trim(),
+      leadName:     $('clLeadName').value.trim(),
+      hubspot:      $('clHubspot').value.trim(),
+      convoDate:    $('clConvoDate').value,
+      behaviorDate: $('clBehaviorDate').value,
+      impact:       $('clImpact').value,
+      expectations: $('clExpectations').value,
+      support:      $('clSupport').value,
+      prior:        $('clPrior').value,
+      followUp:     $('clFollowUp').value,
+      behavior:     _clState.useEdited ? _clState.behaviorEdited : $('clBehavior').value,
+    };
+    const lvl = CL_LEVELS.find(l => l.id === _clState.level);
+    const NAVY = '#0C1F42', MAG = '#D6006D', INK = '#1A2233', LINE = '#DDE4EF', SLATE = '#5B6678';
+
+    const subject = `${lvl.label} ${lvl.id === 'verbal' ? 'Coaching Note' : 'Warning'} - Post-Booking Cadence${f.leadName ? ' - ' + f.leadName : ''} - ${clFmtDate(f.convoDate) || '[Date]'}`;
+    $('clSubjectLine').textContent = subject;
+
+    const sect = (label, body) => `
+      <tr><td style="padding:12px 20px 0">
+        <div style="font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:${MAG};margin-bottom:3px">${label}</div>
+        <div style="font-size:13px;line-height:1.55;color:${INK}">${body}</div>
+      </td></tr>`;
+
+    const html = `
+<table cellpadding="0" cellspacing="0" border="0" width="100%" style="font-family:'Segoe UI',Arial,sans-serif;border:1px solid ${LINE};border-radius:8px;overflow:hidden;background:#fff">
+  <tr><td style="background:${NAVY};padding:14px 20px">
+    <div style="font-size:10px;font-weight:800;letter-spacing:2px;color:#9FB4DA;text-transform:uppercase">Outsource Accelerator · Sales Operations</div>
+    <div style="font-size:16px;font-weight:800;color:#fff;margin-top:2px">${lvl.banner}</div>
+  </td></tr>
+  <tr><td style="background:${MAG};padding:6px 20px">
+    <div style="font-size:11px;font-weight:700;color:#fff">Post-Booking Cadence Violation${f.convoDate ? ' · Documented ' + clFmtDate(f.convoDate) : ''}</div>
+  </td></tr>
+  <tr><td style="padding:16px 20px 0">
+    <div style="font-size:13px;line-height:1.55;color:${INK}">
+      <b>${esc(f.tmName) || '[Name]'}</b>,<br><br>
+      This email serves as <b>formal documentation</b> of our conversation${f.convoDate ? ' on <b>' + clFmtDate(f.convoDate) + '</b>' : ' today'} regarding your non-compliance with the mandatory post-booking process.
+    </div>
+  </td></tr>
+  ${f.leadName || f.hubspot ? sect('Lead reference', `${esc(f.leadName) || '[Lead]'}${f.hubspot ? ` — <a href="${esc(f.hubspot)}" style="color:${MAG};font-weight:600">HubSpot record</a>` : ''}`) : ''}
+  ${sect(`What was observed${f.behaviorDate ? ' · ' + clFmtDate(f.behaviorDate) : ''}`, esc(f.behavior) || '[Observable facts]')}
+  ${sect('Policy / standard', 'The <b>6-step post-booking cadence</b> in the Post Booking Steps document is <b>mandatory for every booked DC</b>: confirmation text immediately after booking, reminders at 3 days, 1 day, 1 hour, and 3 minutes before the meeting, and the no-show protocol. This standard was communicated to the entire team; full awareness and execution are expected of every rep.')}
+  ${sect('Impact', esc(f.impact))}
+  ${f.prior ? sect('Prior coaching on record', esc(f.prior)) : ''}
+  <tr><td style="padding:12px 20px 0">
+    <div style="border-left:4px solid ${MAG};background:#FDF0F7;padding:10px 12px;border-radius:0 6px 6px 0">
+      <div style="font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:${MAG};margin-bottom:2px">Expectations (effective immediately)</div>
+      <div style="font-size:13px;line-height:1.55;color:${INK}">${esc(f.expectations)}</div>
+    </div>
+  </td></tr>
+  ${sect('Support', esc(f.support))}
+  ${sect('Follow-up', `Your compliance will be reviewed on <b>${f.followUp ? clFmtDate(f.followUp) : '[date]'}</b>. Every booking between now and then is expected to show the full cadence completed.`)}
+  <tr><td style="padding:14px 20px 0">
+    <div style="background:${NAVY};border-radius:6px;padding:12px 14px">
+      <div style="font-size:12px;line-height:1.55;color:#fff;font-weight:600">${lvl.consequence}</div>
+    </div>
+  </td></tr>
+  <tr><td style="padding:12px 20px 16px">
+    <div style="font-size:13px;line-height:1.55;color:${INK}">Executing this cadence is a core requirement of your role, not an optional step. If anything is preventing you from completing it, raise it with your manager directly. Otherwise, full compliance is expected starting with your next booking.</div>
+  </td></tr>
+</table>`;
+
+    $('clEmailPreview').innerHTML = html;
+    // store for copy
+    window._clEmailHtml = html;
+    window._clEmailSubject = subject;
+    window._clEmailPlain = clBuildPlain(f, lvl);
+  }
+
+  function clBuildPlain(f, lvl) {
+    const L = [];
+    L.push(`Subject: ${window._clEmailSubject}`); L.push('');
+    L.push(`${f.tmName || '[Name]'},`); L.push('');
+    L.push(`This email serves as formal documentation of our conversation${f.convoDate ? ' on ' + clFmtDate(f.convoDate) : ' today'} regarding your non-compliance with the mandatory post-booking process.`);
+    if (f.leadName) { L.push(''); L.push(`Lead reference: ${f.leadName}${f.hubspot ? ' - ' + f.hubspot : ''}`); }
+    L.push(''); L.push(`WHAT WAS OBSERVED${f.behaviorDate ? ' (' + clFmtDate(f.behaviorDate) + ')' : ''}:`);
+    L.push(f.behavior || '[Observable facts]');
+    L.push(''); L.push('POLICY / STANDARD: The 6-step post-booking cadence in the Post Booking Steps document is mandatory for every booked DC.');
+    L.push(''); L.push('IMPACT:'); L.push(f.impact);
+    if (f.prior) { L.push(''); L.push('PRIOR COACHING ON RECORD: ' + f.prior); }
+    L.push(''); L.push('EXPECTATIONS (EFFECTIVE IMMEDIATELY):'); L.push(f.expectations);
+    L.push(''); L.push('SUPPORT: ' + f.support);
+    L.push(''); L.push(`FOLLOW-UP: Your compliance will be reviewed on ${f.followUp ? clFmtDate(f.followUp) : '[date]'}.`);
+    L.push(''); L.push(lvl.consequence);
+    return L.join('\n');
+  }
+
+  async function clCopyEmail() {
+    const btn = $('clCopyBtn');
+    try {
+      await navigator.clipboard.write([new ClipboardItem({
+        'text/html':  new Blob([window._clEmailHtml  || ''], { type: 'text/html' }),
+        'text/plain': new Blob([window._clEmailPlain || ''], { type: 'text/plain' }),
+      })]);
+    } catch {
+      try { await navigator.clipboard.writeText(window._clEmailPlain || ''); } catch {}
+    }
+    btn.textContent = 'Copied ✓'; btn.style.background = '#0E9F6E';
+    setTimeout(() => { btn.textContent = 'Copy email'; btn.style.background = '#D6006D'; }, 1800);
+  }
+  async function clCopySubject() {
+    try { await navigator.clipboard.writeText(window._clEmailSubject || ''); } catch {}
   }
 </script>
 </body>
