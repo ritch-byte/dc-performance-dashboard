@@ -811,12 +811,17 @@
     <div id="coachingSection" style="display:none;">
       <div class="content-header">
         <div class="page-title">Coaching Log Generator</div>
-        <div class="ch-right" style="font-size:12px;color:var(--slate);font-weight:500">Post-Booking Cadence · 6-Step Standard</div>
+        <div id="clModeSubtitle" class="ch-right" style="font-size:12px;color:var(--slate);font-weight:500">Post-Booking Cadence · 6-Step Standard</div>
       </div>
       <div id="coachingBody" style="padding:0 24px 32px;display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start">
 
         <!-- Form -->
         <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:18px">
+
+          <div style="display:flex;gap:6px;margin-bottom:14px">
+            <button id="clModeViolation" class="cl-chip on-navy" onclick="clSetMode('violation')">Post-Booking Cadence</button>
+            <button id="clModeWeekly" class="cl-chip" onclick="clSetMode('weekly')">Weekly Coaching</button>
+          </div>
 
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px">
             <div class="cl-field">
@@ -833,58 +838,89 @@
                 <div id="clSugBox" style="display:none;position:absolute;left:0;right:0;top:100%;margin-top:2px;background:#fff;border:1px solid var(--border);border-radius:8px;z-index:100;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,.1)"></div>
               </div>
             </div>
-            <div class="cl-field">
+            <div class="cl-field cl-violation-cell">
               <label class="cl-label">Lead name (optional)</label>
               <input id="clLeadName" class="cl-input" placeholder="Leave blank for general" oninput="clRender()">
             </div>
-            <div class="cl-field">
+            <div class="cl-field cl-violation-cell">
               <label class="cl-label">HubSpot link (optional)</label>
               <input id="clHubspot" class="cl-input" placeholder="https://app.hubspot.com/…" oninput="clRender()">
             </div>
             <div class="cl-field">
-              <label class="cl-label">Conversation date</label>
+              <label id="clConvoDateLabel" class="cl-label">Conversation date</label>
               <input type="date" id="clConvoDate" class="cl-input" oninput="clRender()">
             </div>
-            <div class="cl-field">
+            <div class="cl-field cl-violation-cell">
               <label class="cl-label">Violation date (optional)</label>
               <input type="date" id="clBehaviorDate" class="cl-input" oninput="clRender()">
             </div>
           </div>
 
-          <div class="cl-field" style="margin-top:4px">
-            <label class="cl-label">Cadence steps missed (tap to toggle)</label>
-            <div id="clStepChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px"></div>
-          </div>
+          <!-- Violation-specific fields -->
+          <div id="clViolationFields">
+            <div class="cl-field" style="margin-top:4px">
+              <label class="cl-label">Cadence steps missed (tap to toggle)</label>
+              <div id="clStepChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px"></div>
+            </div>
 
-          <div class="cl-field">
-            <label class="cl-label">Discipline level</label>
-            <div id="clLevelBtns" style="display:flex;gap:6px"></div>
-          </div>
-
-          <div class="cl-field">
-            <label class="cl-label">What was observed (auto-built · editable)</label>
-            <textarea id="clBehavior" class="cl-input" rows="3" oninput="clBehaviorEdited()"></textarea>
-          </div>
-          <div class="cl-field">
-            <label class="cl-label">Impact</label>
-            <textarea id="clImpact" class="cl-input" rows="2" oninput="clRender()"></textarea>
-          </div>
-          <div class="cl-field">
-            <label class="cl-label">Expectations (effective immediately)</label>
-            <textarea id="clExpectations" class="cl-input" rows="3" oninput="clRender()"></textarea>
-          </div>
-          <div class="cl-field">
-            <label class="cl-label">Support offered</label>
-            <input id="clSupport" class="cl-input" oninput="clRender()">
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px">
             <div class="cl-field">
-              <label class="cl-label">Prior coaching (blank if first)</label>
-              <input id="clPrior" class="cl-input" placeholder="e.g. Verbal coaching May 14" oninput="clRender()">
+              <label class="cl-label">Discipline level</label>
+              <div id="clLevelBtns" style="display:flex;gap:6px"></div>
+            </div>
+
+            <div class="cl-field">
+              <label class="cl-label">What was observed (auto-built · editable)</label>
+              <textarea id="clBehavior" class="cl-input" rows="3" oninput="clBehaviorEdited()"></textarea>
             </div>
             <div class="cl-field">
-              <label class="cl-label">Follow-up review date</label>
-              <input type="date" id="clFollowUp" class="cl-input" oninput="clRender()">
+              <label class="cl-label">Impact</label>
+              <textarea id="clImpact" class="cl-input" rows="2" oninput="clRender()"></textarea>
+            </div>
+            <div class="cl-field">
+              <label class="cl-label">Expectations (effective immediately)</label>
+              <textarea id="clExpectations" class="cl-input" rows="3" oninput="clRender()"></textarea>
+            </div>
+            <div class="cl-field">
+              <label class="cl-label">Support offered</label>
+              <input id="clSupport" class="cl-input" oninput="clRender()">
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px">
+              <div class="cl-field">
+                <label class="cl-label">Prior coaching (blank if first)</label>
+                <input id="clPrior" class="cl-input" placeholder="e.g. Verbal coaching May 14" oninput="clRender()">
+              </div>
+              <div class="cl-field">
+                <label class="cl-label">Follow-up review date</label>
+                <input type="date" id="clFollowUp" class="cl-input" oninput="clRender()">
+              </div>
+            </div>
+          </div>
+
+          <!-- Weekly coaching fields -->
+          <div id="clWeeklyFields" style="display:none">
+            <div class="cl-field" style="margin-top:4px">
+              <label class="cl-label">Coaching focus</label>
+              <textarea id="clWkFocus" class="cl-input" rows="2" placeholder="Main topic(s) covered this session…" oninput="clRender()"></textarea>
+            </div>
+            <div class="cl-field">
+              <label class="cl-label">Strengths observed</label>
+              <textarea id="clWkStrengths" class="cl-input" rows="2" placeholder="What the TM is doing well…" oninput="clRender()"></textarea>
+            </div>
+            <div class="cl-field">
+              <label class="cl-label">Development areas</label>
+              <textarea id="clWkDevelopment" class="cl-input" rows="2" placeholder="Specific areas for improvement…" oninput="clRender()"></textarea>
+            </div>
+            <div class="cl-field">
+              <label class="cl-label">Action items / commitments</label>
+              <textarea id="clWkActions" class="cl-input" rows="2" placeholder="What the TM commits to doing…" oninput="clRender()"></textarea>
+            </div>
+            <div class="cl-field">
+              <label class="cl-label">Support offered</label>
+              <input id="clWkSupport" class="cl-input" placeholder="Resources, tools, or follow-up from supervisor…" oninput="clRender()">
+            </div>
+            <div class="cl-field">
+              <label class="cl-label">Next session date</label>
+              <input type="date" id="clWkNextDate" class="cl-input" oninput="clRender()">
             </div>
           </div>
         </div>
@@ -2769,7 +2805,7 @@
     tmName:'', squad:'JUMHON', leadName:'', hubspot:'', convoDate:'', behaviorDate:'',
     missed:[], general:true, behaviorEdited:'', useEdited:false, level:'verbal',
     impact:CL_IMPACT_DEFAULT, expectations:CL_EXPECT_DEFAULT, support:CL_SUPPORT_DEFAULT,
-    prior:'', followUp:'',
+    prior:'', followUp:'', mode:'violation',
   };
 
   function clInit() {
@@ -2872,7 +2908,91 @@
     return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' });
   }
 
+  function clSetMode(mode) {
+    _clState.mode = mode;
+    $('clViolationFields').style.display = mode === 'violation' ? '' : 'none';
+    $('clWeeklyFields').style.display    = mode === 'weekly'    ? '' : 'none';
+    $('clModeViolation').classList.toggle('on-navy', mode === 'violation');
+    $('clModeWeekly').classList.toggle('on-navy',    mode === 'weekly');
+    $('clConvoDateLabel').textContent = mode === 'weekly' ? 'Session date' : 'Conversation date';
+    $('clModeSubtitle').textContent   = mode === 'weekly' ? 'Weekly Coaching · 1-on-1 Session' : 'Post-Booking Cadence · 6-Step Standard';
+    document.querySelectorAll('.cl-violation-cell').forEach(el => {
+      el.style.display = mode === 'violation' ? '' : 'none';
+    });
+    clRender();
+  }
+
+  function clRenderWeekly() {
+    const f = {
+      tmName:      $('clTmName').value.trim(),
+      sessionDate: $('clConvoDate').value,
+      focus:       $('clWkFocus').value,
+      strengths:   $('clWkStrengths').value,
+      development: $('clWkDevelopment').value,
+      actions:     $('clWkActions').value,
+      support:     $('clWkSupport').value,
+      nextDate:    $('clWkNextDate').value,
+    };
+    const NAVY = '#0C1F42', BLUE = '#1A2DB5', INK = '#1A2233', LINE = '#DDE4EF', GREEN = '#16a34a';
+    const subject = `Weekly Coaching Note — ${f.tmName || '[Name]'} — ${clFmtDate(f.sessionDate) || '[Date]'}`;
+    $('clSubjectLine').textContent = subject;
+
+    const sect = (label, body, accent) => `
+      <tr><td style="padding:12px 20px 0">
+        <div style="font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:${accent||BLUE};margin-bottom:3px">${label}</div>
+        <div style="font-size:13px;line-height:1.55;color:${INK}">${body}</div>
+      </td></tr>`;
+
+    const html = `
+<table cellpadding="0" cellspacing="0" border="0" width="100%" style="font-family:'Segoe UI',Arial,sans-serif;border:1px solid ${LINE};border-radius:8px;overflow:hidden;background:#fff">
+  <tr><td style="background:${NAVY};padding:14px 20px">
+    <div style="font-size:10px;font-weight:800;letter-spacing:2px;color:#9FB4DA;text-transform:uppercase">Outsource Accelerator · Sales Operations</div>
+    <div style="font-size:16px;font-weight:800;color:#fff;margin-top:2px">WEEKLY COACHING NOTE</div>
+  </td></tr>
+  <tr><td style="background:${BLUE};padding:6px 20px">
+    <div style="font-size:11px;font-weight:700;color:#fff">Weekly 1-on-1${f.sessionDate ? ' · ' + clFmtDate(f.sessionDate) : ''}</div>
+  </td></tr>
+  <tr><td style="padding:16px 20px 0">
+    <div style="font-size:13px;line-height:1.55;color:${INK}">
+      <b>${esc(f.tmName) || '[Name]'}</b>,<br><br>
+      Here's a summary of our weekly coaching session${f.sessionDate ? ' on <b>' + clFmtDate(f.sessionDate) + '</b>' : ' today'}.
+    </div>
+  </td></tr>
+  ${f.focus ? sect('Coaching focus', esc(f.focus)) : ''}
+  ${f.strengths ? sect('Strengths observed', esc(f.strengths), GREEN) : ''}
+  ${f.development ? sect('Areas for development', esc(f.development)) : ''}
+  ${f.actions ? `<tr><td style="padding:12px 20px 0"><div style="border-left:4px solid ${BLUE};background:#EEF3FB;padding:10px 12px;border-radius:0 6px 6px 0"><div style="font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:${BLUE};margin-bottom:2px">Action items / commitments</div><div style="font-size:13px;line-height:1.55;color:${INK}">${esc(f.actions)}</div></div></td></tr>` : ''}
+  ${f.support ? sect('Support offered', esc(f.support)) : ''}
+  ${sect('Next session', f.nextDate ? `Our next weekly coaching session is scheduled for <b>${clFmtDate(f.nextDate)}</b>.` : 'Next session date to be confirmed.')}
+  <tr><td style="padding:12px 20px 16px">
+    <div style="font-size:12px;line-height:1.55;color:#5B6678">Keep up the momentum — consistent execution is the key to hitting targets. See you at our next session.</div>
+  </td></tr>
+</table>`;
+
+    $('clEmailPreview').innerHTML = html;
+    window._clEmailHtml = html;
+    window._clEmailSubject = subject;
+    window._clEmailPlain = clBuildWeeklyPlain(f);
+  }
+
+  function clBuildWeeklyPlain(f) {
+    const L = [];
+    L.push(`Subject: ${window._clEmailSubject}`); L.push('');
+    L.push(`${f.tmName || '[Name]'},`); L.push('');
+    L.push(`Here's a summary of our weekly coaching session${f.sessionDate ? ' on ' + clFmtDate(f.sessionDate) : ' today'}.`);
+    if (f.focus)       { L.push(''); L.push('COACHING FOCUS:');              L.push(f.focus); }
+    if (f.strengths)   { L.push(''); L.push('STRENGTHS OBSERVED:');          L.push(f.strengths); }
+    if (f.development) { L.push(''); L.push('AREAS FOR DEVELOPMENT:');       L.push(f.development); }
+    if (f.actions)     { L.push(''); L.push('ACTION ITEMS / COMMITMENTS:');  L.push(f.actions); }
+    if (f.support)     { L.push(''); L.push('SUPPORT OFFERED:');             L.push(f.support); }
+    L.push(''); L.push('NEXT SESSION:');
+    L.push(f.nextDate ? `Our next weekly coaching session is scheduled for ${clFmtDate(f.nextDate)}.` : 'Next session date to be confirmed.');
+    L.push(''); L.push('Keep up the momentum — consistent execution is the key to hitting targets. See you at our next session.');
+    return L.join('\n');
+  }
+
   function clRender() {
+    if (_clState.mode === 'weekly') { clRenderWeekly(); return; }
     const f = {
       tmName:       $('clTmName').value.trim(),
       leadName:     $('clLeadName').value.trim(),
