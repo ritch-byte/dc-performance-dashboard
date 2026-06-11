@@ -896,32 +896,43 @@
             </div>
           </div>
 
-          <!-- Weekly coaching fields (GROW → template) -->
+          <!-- Weekly coaching fields (GROW → AI → template) -->
           <div id="clWeeklyFields" style="display:none">
             <div class="cl-field" style="margin-top:4px">
               <label class="cl-label">Observation <span style="font-weight:400;color:var(--slate)">— what did you observe about this rep?</span></label>
-              <textarea id="clWkObs" class="cl-input" rows="2" placeholder="e.g. Cadence compliance is inconsistent — Steps 3 & 4 missed on 2 bookings this week." oninput="clRender()"></textarea>
+              <textarea id="clWkObs" class="cl-input" rows="2" placeholder="e.g. Cadence compliance is inconsistent — Steps 3 & 4 missed on 2 bookings this week."></textarea>
             </div>
             <div class="cl-field">
               <label class="cl-label">Goal <span style="font-weight:400;color:var(--slate)">— what do they want to achieve?</span></label>
-              <textarea id="clWkGoal" class="cl-input" rows="2" placeholder="e.g. Book 3 DCs this week and complete the full cadence for each one." oninput="clRender()"></textarea>
+              <textarea id="clWkGoal" class="cl-input" rows="2" placeholder="e.g. Book 3 DCs this week and complete the full cadence for each one."></textarea>
             </div>
             <div class="cl-field">
               <label class="cl-label">Reality <span style="font-weight:400;color:var(--slate)">— what is the current situation?</span></label>
-              <textarea id="clWkReality" class="cl-input" rows="2" placeholder="e.g. Averaging 1.5 DCs/day. Cadence steps are being skipped under pressure." oninput="clRender()"></textarea>
+              <textarea id="clWkReality" class="cl-input" rows="2" placeholder="e.g. Averaging 1.5 DCs/day. Cadence steps are being skipped under pressure."></textarea>
             </div>
             <div class="cl-field">
               <label class="cl-label">Options <span style="font-weight:400;color:var(--slate)">— what could they do? (one per line)</span></label>
-              <textarea id="clWkOptions" class="cl-input" rows="3" placeholder="e.g. Schedule-send reminder emails right after booking&#10;Use the cadence checklist before closing HubSpot" oninput="clRender()"></textarea>
+              <textarea id="clWkOptions" class="cl-input" rows="3" placeholder="e.g. Schedule-send reminder emails right after booking&#10;Use the cadence checklist before closing HubSpot"></textarea>
             </div>
             <div class="cl-field">
               <label class="cl-label">Will <span style="font-weight:400;color:var(--slate)">— what will they commit to?</span></label>
-              <textarea id="clWkWill" class="cl-input" rows="2" placeholder="e.g. I will complete all 6 cadence steps for every booking and check off the list before closing HubSpot." oninput="clRender()"></textarea>
+              <textarea id="clWkWill" class="cl-input" rows="2" placeholder="e.g. I will complete all 6 cadence steps for every booking and check off the list before closing HubSpot."></textarea>
             </div>
-            <div class="cl-field">
-              <label class="cl-label">Next session date</label>
-              <input type="date" id="clWkNextDate" class="cl-input" oninput="clRender()">
+            <div style="display:flex;gap:12px">
+              <div class="cl-field" style="flex:1">
+                <label class="cl-label">Coach name</label>
+                <input type="text" id="clWkCoachName" class="cl-input" placeholder="e.g. Ritch" value="Ritch">
+              </div>
+              <div class="cl-field" style="flex:1">
+                <label class="cl-label">Next session date</label>
+                <input type="date" id="clWkNextDate" class="cl-input" oninput="clRender()">
+              </div>
             </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px">
+              <button id="clBtnGenerate" onclick="clGenerateWeekly()" style="background:#E91E8C;color:#fff;border:none;border-radius:8px;padding:11px 26px;font-size:14px;font-weight:700;cursor:pointer;letter-spacing:.3px;transition:opacity .15s">Generate with AI ✨</button>
+              <a href="#" onclick="clSetApiKey();return false" style="font-size:11px;color:var(--slate);text-decoration:underline">Set API key</a>
+            </div>
+            <div id="clGenerateStatus" style="font-size:11px;margin-top:6px;min-height:16px"></div>
           </div>
         </div>
 
@@ -2807,6 +2818,7 @@
     impact:CL_IMPACT_DEFAULT, expectations:CL_EXPECT_DEFAULT, support:CL_SUPPORT_DEFAULT,
     prior:'', followUp:'', mode:'violation',
   };
+  window._clGeneratedWeekly = null;
 
   function clInit() {
     if (_clInited) return;
@@ -2910,6 +2922,7 @@
 
   function clSetMode(mode) {
     _clState.mode = mode;
+    window._clGeneratedWeekly = null;
     $('clViolationFields').style.display = mode === 'violation' ? '' : 'none';
     $('clWeeklyFields').style.display    = mode === 'weekly'    ? '' : 'none';
     $('clModeViolation').classList.toggle('on-navy', mode === 'violation');
@@ -2923,83 +2936,112 @@
   }
 
   function clRenderWeekly() {
-    const raw = {
-      obs:     $('clWkObs').value.trim(),
-      goal:    $('clWkGoal').value.trim(),
-      reality: $('clWkReality').value.trim(),
-      options: $('clWkOptions').value.trim(),
-      will:    $('clWkWill').value.trim(),
-    };
-    // Map GROW fields → template sections
-    const f = {
-      tmName:     $('clTmName').value.trim(),
-      sessionDate:$('clConvoDate').value,
-      nextDate:   $('clWkNextDate').value,
-      observation: raw.obs,           // → PERFORMANCE
-      goal:        raw.goal,          // → GOAL
-      reality:     raw.reality,       // → GAP & FOCUS (Gap side)
-      options:     raw.options,       // → HOW TO EXECUTE
-      will:        raw.will,          // → COMMITMENT
-    };
+    const tmName      = $('clTmName').value.trim();
+    const sessionDate = $('clConvoDate').value;
+    const nextDate    = $('clWkNextDate').value;
+    const coachName   = ($('clWkCoachName') && $('clWkCoachName').value.trim()) || 'Your Coach';
     const NAVY = '#0D1F6F', MAG = '#E91E8C', INK = '#2C3E50';
-    const subject = `Weekly Coaching Note — ${f.tmName || '[Name]'} — ${clFmtDate(f.sessionDate) || '[Date]'}`;
+
+    const subject = `Weekly Coaching Note — ${tmName || '[Name]'} — ${clFmtDate(sessionDate) || '[Date]'}`;
     $('clSubjectLine').textContent = subject;
+    window._clEmailSubject = subject;
+
+    const g = window._clGeneratedWeekly;
+
+    if (!g) {
+      $('clEmailPreview').innerHTML = `<div style="text-align:center;padding:60px 20px;font-family:sans-serif">
+        <div style="font-size:40px;margin-bottom:14px">✨</div>
+        <div style="font-size:15px;font-weight:600;color:#555;margin-bottom:8px">Fill in the GROW fields and click Generate</div>
+        <div style="font-size:12px;color:#aaa">AI will write the full coaching email for you</div>
+      </div>`;
+      window._clEmailHtml  = '';
+      window._clEmailPlain = '';
+      return;
+    }
 
     const secHdr = (label, bg) =>
       `<div style="background:${bg};color:#fff;padding:10px 16px;border-radius:4px 4px 0 0;font-size:13px;font-weight:800;letter-spacing:.5px;text-transform:uppercase">${label}</div>`;
 
-    const bulletList = (text) => `<ul style="margin:0;padding-left:20px">${
-      text.split('\n').filter(l=>l.trim()).map(l=>`<li style="margin-bottom:8px;font-size:14px;line-height:1.7;color:${INK}">${esc(l)}</li>`).join('')
-    }</ul>`;
+    const bulletItems = (arr) => (arr && arr.length)
+      ? `<ul style="margin:0;padding-left:20px">${arr.map(l=>`<li style="margin-bottom:8px;font-size:14px;line-height:1.7;color:${INK}">${esc(l)}</li>`).join('')}</ul>`
+      : '';
+
+    const ratingColor = (r) => r==='CONSISTENT' ? '#0A7A0A' : r==='MISS' ? '#C00' : '#C97000';
+
+    const ratingsRows = (g.ratings||[]).map((r,i) => `
+      <tr style="background:${i%2===0?'#fff':'#f9f9f9'}">
+        <td style="padding:9px 10px;border:1px solid #ddd;font-size:13px;color:${INK}">${esc(r.skill||'')}</td>
+        <td style="padding:9px 10px;border:1px solid #ddd;font-size:13px;font-weight:700;color:${ratingColor(r.rating)}">${esc(r.rating||'')}</td>
+        <td style="padding:9px 10px;border:1px solid #ddd;font-size:13px;color:${INK}">${esc(r.notes||'')}</td>
+      </tr>`).join('');
 
     const html = `<div style="font-family:'Calibri','Segoe UI',Arial,sans-serif;max-width:800px;background:#f5f5f5;padding:20px">
 <div style="background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.1)">
 
   <!-- Header -->
   <div style="background:${NAVY};padding:32px 40px;text-align:center">
-    <div style="font-size:30px;font-weight:bold;color:${MAG};margin-bottom:8px">${esc(f.tmName)||'[Name]'}</div>
-    <div style="font-size:13px;color:#E7F0F7">Date: ${clFmtDate(f.sessionDate)||'[Date]'}</div>
+    <div style="font-size:30px;font-weight:bold;color:${MAG};margin-bottom:8px">${esc(tmName)||'[Name]'}</div>
+    <div style="font-size:13px;color:#E7F0F7">Date: ${clFmtDate(sessionDate)||'[Date]'} | Coach: ${esc(coachName)}</div>
   </div>
 
   <div style="padding:30px 40px">
 
-    <!-- PERFORMANCE (← Observation) -->
-    ${f.observation ? `<div style="margin-bottom:28px">
-      ${secHdr('Performance',NAVY)}
-      <div style="border:1px solid #ddd;border-top:none;padding:14px 16px;font-size:14px;line-height:1.7;color:${INK}">${esc(f.observation)}</div>
+    <!-- PERFORMANCE RATING -->
+    ${ratingsRows ? `<div style="margin-bottom:28px">
+      ${secHdr('Performance Rating',NAVY)}
+      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;border:1px solid #ddd;border-top:none">
+        <tr>
+          <th style="background:#1a3080;color:#fff;padding:9px 10px;text-align:left;font-size:12px;font-weight:700;width:35%">Skill / Behavior</th>
+          <th style="background:#1a3080;color:#fff;padding:9px 10px;text-align:left;font-size:12px;font-weight:700;width:30%">Rating</th>
+          <th style="background:#1a3080;color:#fff;padding:9px 10px;text-align:left;font-size:12px;font-weight:700">Notes</th>
+        </tr>${ratingsRows}
+      </table>
     </div>` : ''}
 
-    <!-- GOAL (← Goal) -->
-    ${f.goal ? `<div style="margin-bottom:28px">
+    <!-- GOAL -->
+    ${(g.goalStatement||g.target) ? `<div style="margin-bottom:28px">
       ${secHdr('Goal',MAG)}
       <div style="background:#F5F2FF;border-left:4px solid ${MAG};border-right:1px solid #ddd;border-bottom:1px solid #ddd;padding:16px">
-        <p style="font-weight:bold;color:${NAVY};font-size:15px;margin:0">${esc(f.goal)}</p>
+        ${g.goalStatement ? `<p style="font-weight:bold;color:${NAVY};font-size:15px;margin:0 0 ${g.target?'6px':'0'}">${esc(g.goalStatement)}</p>` : ''}
+        ${g.target ? `<p style="font-style:italic;color:${NAVY};font-size:13px;margin:0">Target: ${esc(g.target)}</p>` : ''}
       </div>
     </div>` : ''}
 
-    <!-- GAP & FOCUS (← Reality) -->
-    ${f.reality ? `<div style="margin-bottom:28px">
+    <!-- WINS -->
+    ${g.wins && g.wins.length ? `<div style="margin-bottom:28px">
+      ${secHdr('Wins',NAVY)}
+      <div style="border:1px solid #ddd;border-top:none;padding:14px 16px">${bulletItems(g.wins)}</div>
+    </div>` : ''}
+
+    <!-- GAP & FOCUS -->
+    ${(g.gap||g.thisWeek) ? `<div style="margin-bottom:28px">
       ${secHdr('Gap &amp; Focus',MAG)}
-      <div style="border:1px solid #ddd;border-top:none;padding:16px">
-        <div style="background:#f9f9f9;border-left:3px solid ${MAG};padding:12px 14px;border-radius:0 4px 4px 0">
-          <p style="font-weight:bold;color:${NAVY};font-size:13px;margin:0 0 5px">Current Reality:</p>
-          <p style="font-size:14px;line-height:1.6;margin:0;color:${INK}">${esc(f.reality)}</p>
-        </div>
-      </div>
+      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;border:1px solid #ddd;border-top:none">
+        <tr>
+          ${g.gap ? `<td style="width:50%;padding:16px;border-right:1px solid #ddd;vertical-align:top">
+            <p style="font-weight:bold;color:${NAVY};font-size:13px;margin:0 0 6px">Gap:</p>
+            <p style="font-size:14px;line-height:1.6;margin:0;color:${INK}">${esc(g.gap)}</p>
+          </td>` : ''}
+          ${g.thisWeek ? `<td style="width:50%;padding:16px;vertical-align:top">
+            <p style="font-weight:bold;color:${NAVY};font-size:13px;margin:0 0 6px">This Week:</p>
+            <p style="font-size:14px;line-height:1.6;margin:0;color:${INK}">${esc(g.thisWeek)}</p>
+          </td>` : ''}
+        </tr>
+      </table>
     </div>` : ''}
 
-    <!-- HOW TO EXECUTE (← Options) -->
-    ${f.options ? `<div style="margin-bottom:28px">
+    <!-- HOW TO EXECUTE -->
+    ${g.howToExecute && g.howToExecute.length ? `<div style="margin-bottom:28px">
       ${secHdr('How to Execute',NAVY)}
-      <div style="border:1px solid #ddd;border-top:none;padding:14px 16px">${bulletList(f.options)}</div>
+      <div style="border:1px solid #ddd;border-top:none;padding:14px 16px">${bulletItems(g.howToExecute)}</div>
     </div>` : ''}
 
-    <!-- COMMITMENT & NEXT STEPS (← Will) -->
-    ${(f.will||f.nextDate) ? `<div style="margin-bottom:20px">
+    <!-- COMMITMENT & NEXT STEPS -->
+    ${(g.commitment||nextDate||g.nextSessionFocus) ? `<div style="margin-bottom:20px">
       ${secHdr('Commitment &amp; Next Steps',MAG)}
       <div style="border:1px solid #ddd;border-top:none;padding:14px 16px">
-        ${f.will ? bulletList(f.will) : ''}
-        ${f.nextDate ? `<p style="margin:${f.will?'12px':'0'} 0 0;font-size:13px;color:${NAVY}"><strong>Next Session:</strong> ${clFmtDate(f.nextDate)}</p>` : ''}
+        ${g.commitment ? `<ul style="margin:0 0 ${nextDate||g.nextSessionFocus?'12px':'0'};padding-left:20px"><li style="font-size:14px;line-height:1.7;color:${INK}">${esc(g.commitment)}</li></ul>` : ''}
+        ${(nextDate||g.nextSessionFocus) ? `<p style="margin:0;font-size:13px;color:${NAVY}"><strong>Next Session:</strong> ${nextDate?clFmtDate(nextDate):'TBD'}${g.nextSessionFocus?` &nbsp;|&nbsp; <strong>Focus:</strong> ${esc(g.nextSessionFocus)}`:''}</p>` : ''}
       </div>
     </div>` : ''}
 
@@ -3008,7 +3050,7 @@
   <!-- Footer -->
   <div style="background:${NAVY};color:#fff;padding:20px 40px;text-align:center">
     <p style="font-size:13px;margin:0 0 10px">Please acknowledge receipt and confirm commitment.</p>
-    <p style="font-size:13px;margin:0">Best regards,<br><strong>Your Coach</strong></p>
+    <p style="font-size:13px;margin:0">Best regards,<br><strong>${esc(coachName)}</strong></p>
   </div>
 
 </div></div>`;
@@ -3016,24 +3058,140 @@
     $('clEmailPreview').innerHTML = html;
     window._clEmailHtml = html;
     window._clEmailSubject = subject;
-    window._clEmailPlain = clBuildWeeklyPlain(f);
+    window._clEmailPlain = clBuildWeeklyPlain(g, { tmName, sessionDate, nextDate, coachName });
   }
 
-  function clBuildWeeklyPlain(f) {
+  function clBuildWeeklyPlain(g, meta) {
     const L = [];
     L.push(`Subject: ${window._clEmailSubject}`); L.push('');
-    L.push(f.tmName || '[Name]'); L.push('');
-    if (f.observation) { L.push('PERFORMANCE:'); L.push(f.observation); L.push(''); }
-    if (f.goal) { L.push('GOAL:'); L.push(f.goal); L.push(''); }
-    if (f.reality) { L.push('GAP & FOCUS:'); L.push('Current Reality: ' + f.reality); L.push(''); }
-    if (f.options) { L.push('HOW TO EXECUTE:'); f.options.split('\n').filter(l=>l.trim()).forEach(l=>L.push('• '+l)); L.push(''); }
-    if (f.will||f.nextDate) {
+    L.push(meta.tmName || '[Name]');
+    L.push(`Date: ${clFmtDate(meta.sessionDate)||'[Date]'} | Coach: ${meta.coachName||'Your Coach'}`);
+    L.push('');
+    if (g.ratings && g.ratings.length) {
+      L.push('PERFORMANCE RATING:');
+      g.ratings.forEach(r => L.push(`  ${r.skill} — ${r.rating}${r.notes?' | '+r.notes:''}`));
+      L.push('');
+    }
+    if (g.goalStatement||g.target) {
+      L.push('GOAL:');
+      if (g.goalStatement) L.push(g.goalStatement);
+      if (g.target) L.push('Target: '+g.target);
+      L.push('');
+    }
+    if (g.wins && g.wins.length) { L.push('WINS:'); g.wins.forEach(w=>L.push('• '+w)); L.push(''); }
+    if (g.gap||g.thisWeek) {
+      L.push('GAP & FOCUS:');
+      if (g.gap) L.push('Gap: '+g.gap);
+      if (g.thisWeek) L.push('This Week: '+g.thisWeek);
+      L.push('');
+    }
+    if (g.howToExecute && g.howToExecute.length) { L.push('HOW TO EXECUTE:'); g.howToExecute.forEach(s=>L.push('• '+s)); L.push(''); }
+    if (g.commitment||meta.nextDate||g.nextSessionFocus) {
       L.push('COMMITMENT & NEXT STEPS:');
-      if (f.will) f.will.split('\n').filter(l=>l.trim()).forEach(l=>L.push('• '+l));
-      if (f.nextDate) L.push('Next Session: ' + clFmtDate(f.nextDate));
+      if (g.commitment) L.push('• '+g.commitment);
+      let ns = 'Next Session: '+(meta.nextDate?clFmtDate(meta.nextDate):'TBD');
+      if (g.nextSessionFocus) ns += ' | Focus: '+g.nextSessionFocus;
+      L.push(ns);
     }
     L.push(''); L.push('Please acknowledge receipt and confirm commitment.');
+    L.push(''); L.push('Best regards,'); L.push(meta.coachName||'Your Coach');
     return L.join('\n');
+  }
+
+  async function clGenerateWeekly() {
+    let apiKey = localStorage.getItem('oa_cl_api_key') || '';
+    if (!apiKey) {
+      apiKey = prompt('Enter your Anthropic API key (saved in this browser only):');
+      if (!apiKey) return;
+      localStorage.setItem('oa_cl_api_key', apiKey.trim());
+      apiKey = apiKey.trim();
+    }
+    const obs     = $('clWkObs').value.trim();
+    const goal    = $('clWkGoal').value.trim();
+    const reality = $('clWkReality').value.trim();
+    const options = $('clWkOptions').value.trim();
+    const will    = $('clWkWill').value.trim();
+    if (!obs && !goal && !reality && !options && !will) {
+      alert('Fill in at least one GROW field before generating.');
+      return;
+    }
+    const btn    = $('clBtnGenerate');
+    const status = $('clGenerateStatus');
+    btn.textContent = 'Generating…';
+    btn.disabled    = true;
+    status.textContent = '';
+
+    const userPrompt = `You are a sales coaching assistant writing a weekly coaching log email for a BDR (Business Development Rep).
+
+Based on the GROW coaching session notes below, generate structured content for each section of the coaching log. Be specific, professional, and actionable. Transform the raw notes into polished coaching language.
+
+GROW SESSION NOTES:
+Observation (what you observed about this rep): ${obs||'(not provided)'}
+Goal (what the rep wants to achieve): ${goal||'(not provided)'}
+Reality (current situation/performance): ${reality||'(not provided)'}
+Options (what they could do): ${options||'(not provided)'}
+Will (what they commit to): ${will||'(not provided)'}
+
+Return ONLY valid JSON with this exact structure (no markdown, no explanation):
+{
+  "ratings": [
+    {"skill": "Skill or behavior name", "rating": "MISS or INCONSISTENT or CONSISTENT", "notes": "Brief context note"}
+  ],
+  "goalStatement": "Clear specific primary goal statement",
+  "target": "Specific timeframe and/or metric target",
+  "wins": ["Specific accomplishment 1", "Specific accomplishment 2"],
+  "gap": "What specifically needs improvement (1-2 sentences)",
+  "thisWeek": "The single most important execution focus this week",
+  "howToExecute": ["Concrete action step 1", "Concrete action step 2", "Concrete action step 3"],
+  "commitment": "The rep's specific commitment statement with measurable outcome",
+  "nextSessionFocus": "Skill or topic to review at next session"
+}
+
+Generate 2-4 rating rows from the observation. Wins should reflect positives from Reality or rep strengths. Keep each field concise and impactful.`;
+
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-allow-browser': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 1200,
+          messages: [{ role: 'user', content: userPrompt }]
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (res.status === 401) { localStorage.removeItem('oa_cl_api_key'); throw new Error('Invalid API key — cleared. Click Generate to try again.'); }
+        throw new Error(data.error?.message || `API error ${res.status}`);
+      }
+      const text = data.content[0].text.trim();
+      const m = text.match(/\{[\s\S]*\}/);
+      if (!m) throw new Error('Could not parse AI response — try again.');
+      window._clGeneratedWeekly = JSON.parse(m[0]);
+      status.style.color = '#0A7A0A';
+      status.textContent = '✓ Generated — preview updated.';
+      clRenderWeekly();
+    } catch (err) {
+      status.style.color = '#C00';
+      status.textContent = 'Error: ' + err.message;
+    } finally {
+      btn.textContent = 'Generate with AI ✨';
+      btn.disabled = false;
+    }
+  }
+
+  function clSetApiKey() {
+    const cur = localStorage.getItem('oa_cl_api_key') || '';
+    const k = prompt('Enter your Anthropic API key (leave blank to clear):', cur ? '••••' : '');
+    if (k === null) return;
+    if (!k.trim() || k.trim() === '••••') { if (!k.trim()) { localStorage.removeItem('oa_cl_api_key'); alert('API key cleared.'); } return; }
+    localStorage.setItem('oa_cl_api_key', k.trim());
+    alert('API key saved.');
   }
 
   function clRender() {
