@@ -896,43 +896,27 @@
             </div>
           </div>
 
-          <!-- Weekly coaching fields -->
+          <!-- Weekly coaching fields (GROW model) -->
           <div id="clWeeklyFields" style="display:none">
             <div class="cl-field" style="margin-top:4px">
-              <label class="cl-label">Performance ratings (optional — one per line: Skill — Rating — Notes)</label>
-              <textarea id="clWkRatings" class="cl-input" rows="3" placeholder="e.g. Cadence compliance — INCONSISTENT — missed Steps 3 &amp; 4" oninput="clRender()"></textarea>
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px">
-              <div class="cl-field">
-                <label class="cl-label">Goal</label>
-                <input id="clWkGoal" class="cl-input" placeholder="Primary goal for this period…" oninput="clRender()">
-              </div>
-              <div class="cl-field">
-                <label class="cl-label">Target / timeframe</label>
-                <input id="clWkTarget" class="cl-input" placeholder="e.g. 3 DCs this week" oninput="clRender()">
-              </div>
+              <label class="cl-label" style="color:#0D1F6F;font-weight:800">G — Goal</label>
+              <div style="font-size:11px;color:var(--slate);margin-bottom:4px">What does the TM want to achieve?</div>
+              <textarea id="clWkGoal" class="cl-input" rows="3" placeholder="e.g. Book 3 DCs this week and complete the full post-booking cadence for each one." oninput="clRender()"></textarea>
             </div>
             <div class="cl-field">
-              <label class="cl-label">Wins (one per line)</label>
-              <textarea id="clWkWins" class="cl-input" rows="2" placeholder="e.g. Booked 4 DCs this week" oninput="clRender()"></textarea>
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px">
-              <div class="cl-field">
-                <label class="cl-label">Gap</label>
-                <textarea id="clWkGap" class="cl-input" rows="2" placeholder="What needs improvement…" oninput="clRender()"></textarea>
-              </div>
-              <div class="cl-field">
-                <label class="cl-label">This week's focus</label>
-                <textarea id="clWkFocus" class="cl-input" rows="2" placeholder="Primary focus for execution…" oninput="clRender()"></textarea>
-              </div>
+              <label class="cl-label" style="color:#E91E8C;font-weight:800">R — Reality</label>
+              <div style="font-size:11px;color:var(--slate);margin-bottom:4px">What is happening right now?</div>
+              <textarea id="clWkReality" class="cl-input" rows="3" placeholder="e.g. Averaging 1.5 DCs/day last week. Steps 3 and 4 of the cadence were missed on 2 bookings." oninput="clRender()"></textarea>
             </div>
             <div class="cl-field">
-              <label class="cl-label">How to execute (one per line)</label>
-              <textarea id="clWkHowTo" class="cl-input" rows="3" placeholder="e.g. Send Step 1 text within 5 min of booking" oninput="clRender()"></textarea>
+              <label class="cl-label" style="color:#0D1F6F;font-weight:800">O — Options</label>
+              <div style="font-size:11px;color:var(--slate);margin-bottom:4px">What could the TM do differently?</div>
+              <textarea id="clWkOptions" class="cl-input" rows="3" placeholder="e.g. Schedule-send reminder emails right after booking. Use the cadence checklist for every DC." oninput="clRender()"></textarea>
             </div>
             <div class="cl-field">
-              <label class="cl-label">Commitment / next steps (one per line)</label>
-              <textarea id="clWkCommitment" class="cl-input" rows="2" placeholder="Specific commitment(s) the TM makes…" oninput="clRender()"></textarea>
+              <label class="cl-label" style="color:#E91E8C;font-weight:800">W — Will</label>
+              <div style="font-size:11px;color:var(--slate);margin-bottom:4px">What will the TM commit to doing?</div>
+              <textarea id="clWkWill" class="cl-input" rows="3" placeholder="e.g. I will complete all 6 cadence steps for every booking this week and check off the list before closing HubSpot." oninput="clRender()"></textarea>
             </div>
             <div class="cl-field">
               <label class="cl-label">Next session date</label>
@@ -2942,98 +2926,52 @@
     const f = {
       tmName:     $('clTmName').value.trim(),
       sessionDate:$('clConvoDate').value,
-      ratings:    $('clWkRatings').value.trim(),
       goal:       $('clWkGoal').value.trim(),
-      target:     $('clWkTarget').value.trim(),
-      wins:       $('clWkWins').value.trim(),
-      gap:        $('clWkGap').value.trim(),
-      focus:      $('clWkFocus').value.trim(),
-      howTo:      $('clWkHowTo').value.trim(),
-      commitment: $('clWkCommitment').value.trim(),
+      reality:    $('clWkReality').value.trim(),
+      options:    $('clWkOptions').value.trim(),
+      will:       $('clWkWill').value.trim(),
       nextDate:   $('clWkNextDate').value,
     };
     const NAVY = '#0D1F6F', MAG = '#E91E8C', INK = '#2C3E50';
-    const subject = `Weekly Coaching Note — ${f.tmName || '[Name]'} — ${clFmtDate(f.sessionDate) || '[Date]'}`;
+    const subject = `GROW Coaching Note — ${f.tmName || '[Name]'} — ${clFmtDate(f.sessionDate) || '[Date]'}`;
     $('clSubjectLine').textContent = subject;
 
-    const secHdr = (label, bg) =>
-      `<div style="background:${bg};color:#fff;padding:10px 16px;border-radius:4px;font-size:16px;font-weight:bold;margin:0 0 14px">${label}</div>`;
+    const growBlock = (letter, title, hint, color, content) => content ? `
+      <div style="margin-bottom:20px">
+        <div style="display:flex;align-items:center;gap:10px;background:${color};padding:10px 16px;border-radius:4px;margin-bottom:12px">
+          <div style="width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,0.25);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:900;color:#fff;flex-shrink:0">${letter}</div>
+          <div>
+            <div style="font-size:14px;font-weight:800;color:#fff;text-transform:uppercase;letter-spacing:1px">${title}</div>
+            <div style="font-size:11px;color:rgba(255,255,255,0.75);margin-top:1px">${hint}</div>
+          </div>
+        </div>
+        <div style="font-size:14px;line-height:1.7;color:${INK};padding:0 4px">${esc(content)}</div>
+      </div>` : '';
 
-    const bullets = (text) => text.split('\n').filter(l=>l.trim())
-      .map(l=>`<li style="margin-bottom:8px;font-size:14px;line-height:1.7;color:${INK}">${esc(l)}</li>`).join('');
-
-    let ratingsRows = '';
-    if (f.ratings) {
-      ratingsRows = f.ratings.split('\n').filter(l=>l.trim()).map((line,i) => {
-        const p = line.split('—').map(s=>s.trim());
-        return `<tr style="background:${i%2===0?'#fff':'#f9f9f9'}">
-          <td style="padding:9px 10px;border:1px solid #ddd;font-size:13px;color:${INK}">${esc(p[0]||'')}</td>
-          <td style="padding:9px 10px;border:1px solid #ddd;font-size:13px;color:${INK};font-weight:600">${esc(p[1]||'')}</td>
-          <td style="padding:9px 10px;border:1px solid #ddd;font-size:13px;color:${INK}">${esc(p[2]||'')}</td>
-        </tr>`;
-      }).join('');
-    }
-
-    const html = `<div style="font-family:'Segoe UI',Calibri,Arial,sans-serif;max-width:700px;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.1)">
-  <!-- Header -->
-  <div style="background:${NAVY};padding:30px 40px;text-align:center">
-    <div style="font-size:28px;font-weight:bold;color:${MAG}">${esc(f.tmName)||'[Name]'}</div>
-    <div style="font-size:13px;color:#E7F0F7;margin-top:6px">Date: ${clFmtDate(f.sessionDate)||'[Date]'}</div>
+    const html = `<div style="font-family:'Segoe UI',Calibri,Arial,sans-serif;max-width:640px;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.1)">
+  <div style="background:${NAVY};padding:28px 36px;text-align:center">
+    <div style="font-size:11px;font-weight:800;letter-spacing:2px;color:#9FB4DA;text-transform:uppercase;margin-bottom:6px">Outsource Accelerator · Sales Operations</div>
+    <div style="font-size:24px;font-weight:bold;color:${MAG}">${esc(f.tmName)||'[Name]'}</div>
+    <div style="font-size:12px;color:#E7F0F7;margin-top:5px">GROW Coaching Session${f.sessionDate ? ' · ' + clFmtDate(f.sessionDate) : ''}</div>
   </div>
-  <!-- Body -->
-  <div style="padding:30px 40px">
-    ${f.ratings ? `<div style="margin-bottom:28px">
-      ${secHdr('PERFORMANCE RATING', NAVY)}
-      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse">
-        <tr>
-          <th style="background:${NAVY};color:#fff;padding:9px 10px;text-align:left;font-size:12px;border:1px solid #ddd">Skill / Behavior</th>
-          <th style="background:${NAVY};color:#fff;padding:9px 10px;text-align:left;font-size:12px;border:1px solid #ddd">Rating</th>
-          <th style="background:${NAVY};color:#fff;padding:9px 10px;text-align:left;font-size:12px;border:1px solid #ddd">Notes</th>
-        </tr>${ratingsRows}
-      </table>
-    </div>` : ''}
-    ${(f.goal||f.target) ? `<div style="margin-bottom:28px">
-      ${secHdr('GOAL', MAG)}
-      <div style="background:#F5F2FF;border-left:4px solid ${MAG};padding:14px;border-radius:4px">
-        ${f.goal ? `<p style="font-weight:bold;color:${NAVY};font-size:14px;margin:0 0 6px">${esc(f.goal)}</p>` : ''}
-        ${f.target ? `<p style="font-style:italic;color:${NAVY};font-size:13px;margin:0">Target: ${esc(f.target)}</p>` : ''}
+  <div style="padding:28px 36px">
+    ${growBlock('G','Goal','What do you want to achieve?',NAVY,f.goal)}
+    ${growBlock('R','Reality','What is happening right now?',MAG,f.reality)}
+    ${growBlock('O','Options','What could you do?',NAVY,f.options)}
+    ${f.will ? `<div style="margin-bottom:20px">
+      <div style="display:flex;align-items:center;gap:10px;background:${MAG};padding:10px 16px;border-radius:4px;margin-bottom:12px">
+        <div style="width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,0.25);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:900;color:#fff;flex-shrink:0">W</div>
+        <div>
+          <div style="font-size:14px;font-weight:800;color:#fff;text-transform:uppercase;letter-spacing:1px">Will</div>
+          <div style="font-size:11px;color:rgba(255,255,255,0.75);margin-top:1px">What will you commit to doing?</div>
+        </div>
       </div>
+      <div style="background:#FFF0F8;border-left:4px solid ${MAG};padding:14px 16px;border-radius:0 6px 6px 0;font-size:14px;line-height:1.7;color:${INK};font-weight:600">${esc(f.will)}</div>
     </div>` : ''}
-    ${f.wins ? `<div style="margin-bottom:28px">
-      ${secHdr('WINS', NAVY)}
-      <ul style="list-style-position:inside;margin:0;padding:0">${bullets(f.wins)}</ul>
-    </div>` : ''}
-    ${(f.gap||f.focus) ? `<div style="margin-bottom:28px">
-      ${secHdr('GAP &amp; FOCUS', MAG)}
-      <table width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
-        ${f.gap ? `<td width="50%" style="padding-right:10px;vertical-align:top">
-          <div style="background:#f9f9f9;border-left:3px solid ${MAG};padding:14px;border-radius:4px">
-            <p style="font-weight:bold;color:${NAVY};margin:0 0 6px;font-size:13px">Gap:</p>
-            <p style="font-size:14px;line-height:1.6;margin:0;color:${INK}">${esc(f.gap)}</p>
-          </div></td>` : ''}
-        ${f.focus ? `<td width="50%" style="padding-left:${f.gap?'10px':'0'};vertical-align:top">
-          <div style="background:#f9f9f9;border-left:3px solid ${MAG};padding:14px;border-radius:4px">
-            <p style="font-weight:bold;color:${NAVY};margin:0 0 6px;font-size:13px">This Week:</p>
-            <p style="font-size:14px;line-height:1.6;margin:0;color:${INK}">${esc(f.focus)}</p>
-          </div></td>` : ''}
-      </tr></table>
-    </div>` : ''}
-    ${f.howTo ? `<div style="margin-bottom:28px">
-      ${secHdr('HOW TO EXECUTE', NAVY)}
-      <ul style="list-style-position:inside;margin:0;padding:0">${bullets(f.howTo)}</ul>
-    </div>` : ''}
-    ${(f.commitment||f.nextDate) ? `<div style="margin-bottom:28px">
-      ${secHdr('COMMITMENT &amp; NEXT STEPS', MAG)}
-      ${f.commitment ? `<ul style="list-style-position:inside;margin:0 0 12px;padding:0">${
-        f.commitment.split('\n').filter(l=>l.trim()).map(l=>`<li style="margin-bottom:8px;font-size:14px;line-height:1.7;font-weight:bold;color:${INK}">${esc(l)}</li>`).join('')
-      }</ul>` : ''}
-      ${f.nextDate ? `<p style="font-size:13px;color:${NAVY};margin:0"><strong>Next Session:</strong> ${clFmtDate(f.nextDate)}</p>` : ''}
-    </div>` : ''}
+    ${f.nextDate ? `<div style="border-top:1px solid #eee;padding-top:14px;font-size:13px;color:${NAVY}"><strong>Next Session:</strong> ${clFmtDate(f.nextDate)}</div>` : ''}
   </div>
-  <!-- Closing -->
-  <div style="background:${NAVY};color:#fff;padding:20px 40px;text-align:center">
-    <p style="font-size:13px;margin:0 0 8px">Please acknowledge receipt and confirm commitment.</p>
-    <p style="font-size:13px;margin:0">Best regards,<br><strong>Your Coach</strong></p>
+  <div style="background:${NAVY};color:#fff;padding:16px 36px;text-align:center">
+    <p style="font-size:12px;margin:0">Please acknowledge receipt and confirm your commitment.</p>
   </div>
 </div>`;
 
@@ -3047,25 +2985,13 @@
     const L = [];
     L.push(`Subject: ${window._clEmailSubject}`); L.push('');
     L.push(`${f.tmName || '[Name]'},`); L.push('');
-    if (f.ratings) {
-      L.push('PERFORMANCE RATING:');
-      f.ratings.split('\n').filter(l=>l.trim()).forEach(l => L.push('  ' + l));
-    }
-    if (f.goal || f.target) {
-      L.push(''); L.push('GOAL:');
-      if (f.goal)   L.push(f.goal);
-      if (f.target) L.push('Target: ' + f.target);
-    }
-    if (f.wins)       { L.push(''); L.push('WINS:');                    f.wins.split('\n').filter(l=>l.trim()).forEach(l=>L.push('• '+l)); }
-    if (f.gap||f.focus) {
-      L.push(''); L.push('GAP & FOCUS:');
-      if (f.gap)   L.push('Gap: ' + f.gap);
-      if (f.focus) L.push('This Week: ' + f.focus);
-    }
-    if (f.howTo)      { L.push(''); L.push('HOW TO EXECUTE:');          f.howTo.split('\n').filter(l=>l.trim()).forEach(l=>L.push('• '+l)); }
-    if (f.commitment) { L.push(''); L.push('COMMITMENT & NEXT STEPS:'); f.commitment.split('\n').filter(l=>l.trim()).forEach(l=>L.push('• '+l)); }
-    if (f.nextDate)   { L.push(''); L.push('Next Session: ' + clFmtDate(f.nextDate)); }
-    L.push(''); L.push('Please acknowledge receipt and confirm commitment.');
+    L.push(`Here's a summary of our GROW coaching session${f.sessionDate ? ' on ' + clFmtDate(f.sessionDate) : ' today'}.`);
+    if (f.goal)    { L.push(''); L.push('G — GOAL (What do you want to achieve?)');        L.push(f.goal); }
+    if (f.reality) { L.push(''); L.push('R — REALITY (What is happening right now?)');     L.push(f.reality); }
+    if (f.options) { L.push(''); L.push('O — OPTIONS (What could you do?)');               L.push(f.options); }
+    if (f.will)    { L.push(''); L.push('W — WILL (What will you commit to doing?)');      L.push(f.will); }
+    if (f.nextDate){ L.push(''); L.push('Next Session: ' + clFmtDate(f.nextDate)); }
+    L.push(''); L.push('Please acknowledge receipt and confirm your commitment.');
     return L.join('\n');
   }
 
