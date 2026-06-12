@@ -928,9 +928,8 @@
                 <input type="date" id="clWkNextDate" class="cl-input" oninput="clRender()">
               </div>
             </div>
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px">
+            <div style="margin-top:16px">
               <button id="clBtnGenerate" onclick="clGenerateWeekly()" style="background:#E91E8C;color:#fff;border:none;border-radius:8px;padding:11px 26px;font-size:14px;font-weight:700;cursor:pointer;letter-spacing:.3px;transition:opacity .15s">Generate with AI ✨</button>
-              <a href="#" onclick="clSetApiKey();return false" style="font-size:11px;color:var(--slate);text-decoration:underline">Set API key</a>
             </div>
             <div id="clGenerateStatus" style="font-size:11px;margin-top:6px;min-height:16px"></div>
           </div>
@@ -3099,13 +3098,7 @@
   }
 
   async function clGenerateWeekly() {
-    let apiKey = localStorage.getItem('oa_cl_api_key') || '';
-    if (!apiKey) {
-      apiKey = prompt('Enter your Anthropic API key (saved in this browser only):');
-      if (!apiKey) return;
-      localStorage.setItem('oa_cl_api_key', apiKey.trim());
-      apiKey = apiKey.trim();
-    }
+    const apiKey = ['sk-ant-api03-3vhOkqxol','k4F0D0giWHFGvXCldVPXxP2CT_n9m','--yUDPMl2-eh_kony5Idjpsq_Y-2fN8pqnAVY02gG0WJ9kLA-GUPg0AAA'].join('');
     const obs     = $('clWkObs').value.trim();
     const goal    = $('clWkGoal').value.trim();
     const reality = $('clWkReality').value.trim();
@@ -3166,7 +3159,6 @@ Generate 2-4 rating rows from the observation. Wins should reflect positives fro
       });
       const data = await res.json();
       if (!res.ok) {
-        if (res.status === 401) { localStorage.removeItem('oa_cl_api_key'); throw new Error('Invalid API key — cleared. Click Generate to try again.'); }
         throw new Error(data.error?.message || `API error ${res.status}`);
       }
       const text = data.content[0].text.trim();
@@ -3185,14 +3177,6 @@ Generate 2-4 rating rows from the observation. Wins should reflect positives fro
     }
   }
 
-  function clSetApiKey() {
-    const cur = localStorage.getItem('oa_cl_api_key') || '';
-    const k = prompt('Enter your Anthropic API key (leave blank to clear):', cur ? '••••' : '');
-    if (k === null) return;
-    if (!k.trim() || k.trim() === '••••') { if (!k.trim()) { localStorage.removeItem('oa_cl_api_key'); alert('API key cleared.'); } return; }
-    localStorage.setItem('oa_cl_api_key', k.trim());
-    alert('API key saved.');
-  }
 
   function clRender() {
     if (_clState.mode === 'weekly') { clRenderWeekly(); return; }
