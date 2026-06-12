@@ -3142,15 +3142,9 @@ Return ONLY valid JSON with this exact structure (no markdown, no explanation):
 Generate 2-4 rating rows from the observation. Wins should reflect positives from Reality or rep strengths. Keep each field concise and impactful.`;
 
     try {
-      const _k = ['sk-ant-api03-uoZML4mB','qeA5EvPijHI-Nn8qxrG0D','vtUHEuaKi-R68gBmDvYxlE','Ylzw4lLo0z5GQOHooFcJHJ','czNBPLD7D_R-w-dDkVMAAA'].join('');
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
+      const res = await fetch('https://silver-cuchufli-071209.netlify.app/.netlify/functions/ai-coach', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': _k,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-allow-browser': 'true'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: 'claude-haiku-4-5-20251001',
           max_tokens: 1200,
@@ -3159,7 +3153,7 @@ Generate 2-4 rating rows from the observation. Wins should reflect positives fro
       });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error?.message || `API error ${res.status}`);
+        throw new Error(data.error?.message || data.error || `API error ${res.status}`);
       }
       const text = data.content[0].text.trim();
       const m = text.match(/\{[\s\S]*\}/);
