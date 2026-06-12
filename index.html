@@ -818,9 +818,11 @@
         <!-- Form -->
         <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:18px">
 
-          <div style="display:flex;gap:6px;margin-bottom:14px">
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
             <button id="clModeWeekly" class="cl-chip on-navy" onclick="clSetMode('weekly')">Weekly Coaching</button>
             <button id="clModeViolation" class="cl-chip" onclick="clSetMode('violation')">Post-Booking Cadence</button>
+            <button id="clModeSBI" class="cl-chip" onclick="clSetMode('sbi')">General Performance</button>
+            <button id="clModePIP" class="cl-chip" onclick="clSetMode('pip')">Improvement Plan (PIP)</button>
           </div>
 
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px">
@@ -933,6 +935,91 @@
             </div>
             <div id="clGenerateStatus" style="font-size:11px;margin-top:6px;min-height:16px"></div>
           </div>
+
+          <!-- General Performance Coaching (SBI) fields -->
+          <div id="clSBIFields" style="display:none">
+            <div class="cl-field" style="margin-top:4px">
+              <label class="cl-label">Discipline level</label>
+              <div id="clSBILevelBtns" style="display:flex;gap:6px"></div>
+            </div>
+            <div class="cl-field">
+              <label class="cl-label">Situation <span style="font-weight:400;color:var(--slate)">— when &amp; where was this observed?</span></label>
+              <textarea id="clSBISituation" class="cl-input" rows="2" oninput="clRender()" placeholder="e.g. On June 10, during the morning call block, I reviewed your activity log…"></textarea>
+            </div>
+            <div class="cl-field">
+              <label class="cl-label">Behavior <span style="font-weight:400;color:var(--slate)">— specific observable actions (no opinions)</span></label>
+              <textarea id="clSBIBehavior" class="cl-input" rows="2" oninput="clRender()" placeholder="e.g. Logged 8 dials against a daily target of 40, with no outreach after 10 AM…"></textarea>
+            </div>
+            <div class="cl-field">
+              <label class="cl-label">Impact <span style="font-weight:400;color:var(--slate)">— effect on team, pipeline, or clients</span></label>
+              <textarea id="clSBIImpact" class="cl-input" rows="2" oninput="clRender()" placeholder="e.g. Left the team pipeline short and shifted call load to other reps…"></textarea>
+            </div>
+            <div class="cl-field">
+              <label class="cl-label">Policy / standard</label>
+              <input id="clSBIPolicy" class="cl-input" oninput="clRender()" placeholder="e.g. Minimum 40 dials/day per team KPI agreement">
+            </div>
+            <div class="cl-field">
+              <label class="cl-label">Rep's response / discussion summary</label>
+              <textarea id="clSBIDiscussion" class="cl-input" rows="2" oninput="clRender()" placeholder="e.g. Acknowledged the gap; attributed to personal distractions this week…"></textarea>
+            </div>
+            <div class="cl-field">
+              <label class="cl-label">Expectations going forward</label>
+              <textarea id="clSBIExpectations" class="cl-input" rows="2" oninput="clRender()" placeholder="e.g. Minimum 40 dials/day starting June 11, reviewed weekly every Friday…"></textarea>
+            </div>
+            <div class="cl-field">
+              <label class="cl-label">Support offered</label>
+              <input id="clSBISupport" class="cl-input" oninput="clRender()" placeholder="e.g. Daily check-in, script coaching session">
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px">
+              <div class="cl-field">
+                <label class="cl-label">Prior coaching (blank if first)</label>
+                <input id="clSBIPrior" class="cl-input" oninput="clRender()" placeholder="e.g. Verbal coaching May 14">
+              </div>
+              <div class="cl-field">
+                <label class="cl-label">Follow-up review date</label>
+                <input type="date" id="clSBIFollowUp" class="cl-input" oninput="clRender()">
+              </div>
+            </div>
+          </div>
+
+          <!-- PIP fields -->
+          <div id="clPIPFields" style="display:none">
+            <div class="cl-field" style="margin-top:4px">
+              <label class="cl-label">PIP duration</label>
+              <div style="display:flex;gap:6px">
+                <button id="clPIP30" class="cl-chip on-navy" onclick="clPIPDur(30)">30 days</button>
+                <button id="clPIP60" class="cl-chip" onclick="clPIPDur(60)">60 days</button>
+                <button id="clPIP90" class="cl-chip" onclick="clPIPDur(90)">90 days</button>
+              </div>
+            </div>
+            <div class="cl-field">
+              <label class="cl-label">Performance gap <span style="font-weight:400;color:var(--slate)">— current vs. expected (facts &amp; numbers)</span></label>
+              <textarea id="clPIPGap" class="cl-input" rows="3" oninput="clRender()" placeholder="e.g. Averaging 1.2 DCs/day over the past 30 days vs. team target of 3 DCs/day. Cadence compliance at 30% vs. 100% standard…"></textarea>
+            </div>
+            <div class="cl-field">
+              <label class="cl-label">Improvement targets <span style="font-weight:400;color:var(--slate)">— specific &amp; measurable (one per line)</span></label>
+              <textarea id="clPIPTargets" class="cl-input" rows="3" oninput="clRender()" placeholder="e.g. Achieve minimum 3 DCs/day for 3 consecutive weeks&#10;Complete all 6 cadence steps for every DC booked&#10;Attend weekly script review session"></textarea>
+            </div>
+            <div class="cl-field">
+              <label class="cl-label">Support &amp; resources provided</label>
+              <textarea id="clPIPSupport" class="cl-input" rows="2" oninput="clRender()" placeholder="e.g. Weekly 1-on-1 coaching&#10;Script review training&#10;Buddy pairing with senior rep"></textarea>
+            </div>
+            <div class="cl-field">
+              <label class="cl-label">Check-in schedule</label>
+              <input id="clPIPCheckin" class="cl-input" oninput="clRender()" placeholder="e.g. Weekly every Friday; formal review at day 15, 30, and final">
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px">
+              <div class="cl-field">
+                <label class="cl-label">PIP start date</label>
+                <input type="date" id="clPIPStart" class="cl-input" oninput="clRender()">
+              </div>
+              <div class="cl-field">
+                <label class="cl-label">Prior discipline on record</label>
+                <input id="clPIPPrior" class="cl-input" oninput="clRender()" placeholder="e.g. Verbal Apr 15, Written May 10">
+              </div>
+            </div>
+          </div>
+
         </div>
 
         <!-- Preview -->
@@ -2855,8 +2942,23 @@
     $('clImpact').value = CL_IMPACT_DEFAULT;
     $('clExpectations').value = CL_EXPECT_DEFAULT;
     $('clSupport').value = CL_SUPPORT_DEFAULT;
+    // Build SBI level buttons
+    const sbiLvls = $('clSBILevelBtns');
+    CL_LEVELS.forEach(l => {
+      const btn = document.createElement('button');
+      btn.className = 'cl-chip'; btn.dataset.id = l.id;
+      btn.textContent = l.label;
+      btn.onclick = () => { _clState.level = l.id; clSyncSBILevels(); clRender(); };
+      sbiLvls.appendChild(btn);
+    });
     clSyncChips(); clSyncLevels(); clBuildBehavior();
     clSetMode('weekly');
+  }
+
+  function clSyncSBILevels() {
+    $('clSBILevelBtns').querySelectorAll('.cl-chip').forEach(btn => {
+      btn.classList.toggle('on-navy', btn.dataset.id === _clState.level);
+    });
   }
 
   function clSyncChips() {
@@ -2920,15 +3022,23 @@
     return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' });
   }
 
+  let _clPIPDur = 30;
+  function clPIPDur(n) { _clPIPDur = n; ['30','60','90'].forEach(v => $('clPIP'+v).classList.toggle('on-navy', Number(v)===n)); clRender(); }
+
   function clSetMode(mode) {
     _clState.mode = mode;
     window._clGeneratedWeekly = null;
     $('clViolationFields').style.display = mode === 'violation' ? '' : 'none';
     $('clWeeklyFields').style.display    = mode === 'weekly'    ? '' : 'none';
+    $('clSBIFields').style.display       = mode === 'sbi'       ? '' : 'none';
+    $('clPIPFields').style.display       = mode === 'pip'       ? '' : 'none';
     $('clModeViolation').classList.toggle('on-navy', mode === 'violation');
     $('clModeWeekly').classList.toggle('on-navy',    mode === 'weekly');
+    $('clModeSBI').classList.toggle('on-navy',       mode === 'sbi');
+    $('clModePIP').classList.toggle('on-navy',       mode === 'pip');
+    const subtitles = { weekly:'Weekly 1-on-1 Coaching Log', violation:'Post-Booking Cadence · 6-Step Standard', sbi:'General Performance Coaching · SBI Model', pip:'Performance Improvement Plan' };
+    $('clModeSubtitle').textContent = subtitles[mode] || '';
     $('clConvoDateLabel').textContent = mode === 'weekly' ? 'Session date' : 'Conversation date';
-    $('clModeSubtitle').textContent   = mode === 'weekly' ? 'Weekly 1-on-1 Coaching Log' : 'Post-Booking Cadence · 6-Step Standard';
     document.querySelectorAll('.cl-violation-cell').forEach(el => {
       el.style.display = mode === 'violation' ? '' : 'none';
     });
@@ -3184,8 +3294,125 @@ Generate 2-4 rating rows from the observation. Wins should reflect positives fro
   }
 
 
+  function clRenderSBI() {
+    const tmName    = $('clTmName').value.trim();
+    const convoDate = $('clConvoDate').value;
+    const lvl       = CL_LEVELS.find(l => l.id === _clState.level);
+    const NAVY = '#0C1F42', MAG = '#D6006D', INK = '#1A2233', LINE = '#DDE4EF', SLATE = '#5B6678';
+    clSyncSBILevels();
+    const subject = `[COACHING-LOG] ${convoDate || '[Date]'} | General Performance · ${lvl.label} | ${tmName || '[Name]'}`;
+    $('clSubjectLine').textContent = subject;
+    window._clEmailSubject = subject;
+    const f = {
+      situation:   $('clSBISituation').value.trim(),
+      behavior:    $('clSBIBehavior').value.trim(),
+      impact:      $('clSBIImpact').value.trim(),
+      policy:      $('clSBIPolicy').value.trim(),
+      discussion:  $('clSBIDiscussion').value.trim(),
+      expectations:$('clSBIExpectations').value.trim(),
+      support:     $('clSBISupport').value.trim(),
+      prior:       $('clSBIPrior').value.trim(),
+      followUp:    $('clSBIFollowUp').value,
+    };
+    const sect = (label, body) => `<tr><td style="padding:12px 20px 0"><div style="font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:${MAG};margin-bottom:3px">${label}</div><div style="font-size:13px;line-height:1.55;color:${INK}">${body || '<span style="color:#aaa;font-style:italic">—</span>'}</div></td></tr>`;
+    const html = `<div style="font-family:Arial,sans-serif;background:#fff;max-width:600px;margin:0 auto">
+      <div style="background:${NAVY};padding:20px 24px 16px;border-radius:6px 6px 0 0">
+        <div style="color:#E91E8C;font-size:20px;font-weight:800;margin-bottom:4px">${tmName || '[Team Member]'}</div>
+        <div style="color:rgba(255,255,255,.7);font-size:12px">Date: ${clFmtDate(convoDate) || '[Date]'} &nbsp;|&nbsp; Coach: Ritch</div>
+      </div>
+      <div style="background:#D6006D;padding:7px 20px;font-size:10px;font-weight:800;letter-spacing:1px;color:#fff;text-transform:uppercase">${lvl.banner}</div>
+      <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${LINE};border-top:none;border-radius:0 0 6px 6px">
+        ${sect('SITUATION', f.situation)}
+        ${sect('BEHAVIOR — WHAT WAS OBSERVED', f.behavior)}
+        ${sect('IMPACT', f.impact)}
+        ${f.policy ? sect('POLICY / STANDARD', f.policy) : ''}
+        ${f.discussion ? sect('OUR DISCUSSION', f.discussion) : ''}
+        ${sect('EXPECTATIONS GOING FORWARD', f.expectations)}
+        ${sect('SUPPORT OFFERED', f.support)}
+        ${f.prior ? sect('PRIOR COACHING ON RECORD', f.prior) : ''}
+        ${f.followUp ? sect('FOLLOW-UP REVIEW', clFmtDate(f.followUp)) : ''}
+        <tr><td style="padding:14px 20px">
+          <div style="background:#FFF4F4;border-left:3px solid ${MAG};padding:10px 14px;font-size:12px;color:${INK};line-height:1.5">
+            ${lvl.consequence}
+          </div>
+        </td></tr>
+        <tr><td style="padding:4px 20px 20px;font-size:13px;color:${SLATE}">I'm confident you can turn this around — let me know how I can help.<br><br><strong>Ritch</strong> &nbsp;|&nbsp; cc: HR</td></tr>
+      </table>
+    </div>`;
+    $('clEmailPreview').innerHTML = html;
+    window._clEmailHtml = html;
+    const plain = [`General Performance Coaching Note — ${lvl.label}`, `${tmName} | ${clFmtDate(convoDate) || '[Date]'}`, '',
+      f.situation   ? 'SITUATION\n' + f.situation : '',
+      f.behavior    ? 'BEHAVIOR\n' + f.behavior : '',
+      f.impact      ? 'IMPACT\n' + f.impact : '',
+      f.policy      ? 'POLICY/STANDARD\n' + f.policy : '',
+      f.discussion  ? 'OUR DISCUSSION\n' + f.discussion : '',
+      f.expectations? 'EXPECTATIONS\n' + f.expectations : '',
+      f.support     ? 'SUPPORT\n' + f.support : '',
+      f.prior       ? 'PRIOR COACHING\n' + f.prior : '',
+      f.followUp    ? 'FOLLOW-UP: ' + clFmtDate(f.followUp) : '',
+      '', lvl.consequence, '', 'Ritch | cc: HR'
+    ].filter(Boolean).join('\n');
+    window._clEmailPlain = plain;
+  }
+
+  function clRenderPIP() {
+    const tmName    = $('clTmName').value.trim();
+    const convoDate = $('clConvoDate').value;
+    const NAVY = '#0C1F42', MAG = '#D6006D', INK = '#1A2233', LINE = '#DDE4EF', SLATE = '#5B6678';
+    const subject = `[COACHING-LOG] ${convoDate || '[Date]'} | Performance Improvement Plan | ${tmName || '[Name]'}`;
+    $('clSubjectLine').textContent = subject;
+    window._clEmailSubject = subject;
+    const f = {
+      gap:      $('clPIPGap').value.trim(),
+      targets:  $('clPIPTargets').value.trim(),
+      support:  $('clPIPSupport').value.trim(),
+      checkin:  $('clPIPCheckin').value.trim(),
+      start:    $('clPIPStart').value,
+      prior:    $('clPIPPrior').value.trim(),
+    };
+    const startFmt = f.start ? clFmtDate(f.start) : '[Start Date]';
+    const endDate  = f.start ? (() => { const d = new Date(f.start+'T00:00:00'); d.setDate(d.getDate()+_clPIPDur); return clFmtDate(d.toISOString().slice(0,10)); })() : `[+${_clPIPDur} days]`;
+    const sect = (label, body) => `<tr><td style="padding:12px 20px 0"><div style="font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:${MAG};margin-bottom:3px">${label}</div><div style="font-size:13px;line-height:1.55;color:${INK}">${body || '<span style="color:#aaa;font-style:italic">—</span>'}</div></td></tr>`;
+    const bullets = t => t.split('\n').filter(Boolean).map(l=>`• ${l}`).join('<br>');
+    const html = `<div style="font-family:Arial,sans-serif;background:#fff;max-width:600px;margin:0 auto">
+      <div style="background:${NAVY};padding:20px 24px 16px;border-radius:6px 6px 0 0">
+        <div style="color:#E91E8C;font-size:20px;font-weight:800;margin-bottom:4px">${tmName || '[Team Member]'}</div>
+        <div style="color:rgba(255,255,255,.7);font-size:12px">Issued: ${clFmtDate(convoDate) || '[Date]'} &nbsp;|&nbsp; Coach: Ritch</div>
+      </div>
+      <div style="background:#D6006D;padding:7px 20px;font-size:10px;font-weight:800;letter-spacing:1px;color:#fff;text-transform:uppercase">PERFORMANCE IMPROVEMENT PLAN · ${_clPIPDur}-DAY PROGRAM</div>
+      <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${LINE};border-top:none;border-radius:0 0 6px 6px">
+        <tr><td style="padding:12px 20px 0"><div style="display:flex;gap:24px;font-size:12px;color:${SLATE}"><span><strong>Start:</strong> ${startFmt}</span><span><strong>End:</strong> ${endDate}</span><span><strong>Duration:</strong> ${_clPIPDur} days</span>${f.prior?`<span><strong>Prior discipline:</strong> ${f.prior}</span>`:''}</div></td></tr>
+        ${sect('PERFORMANCE GAP', f.gap)}
+        ${sect('IMPROVEMENT TARGETS', f.targets ? bullets(f.targets) : '')}
+        ${sect('SUPPORT &amp; RESOURCES PROVIDED', f.support ? bullets(f.support) : '')}
+        ${f.checkin ? sect('CHECK-IN SCHEDULE', f.checkin) : ''}
+        <tr><td style="padding:14px 20px">
+          <div style="background:#FFF4F4;border-left:3px solid ${MAG};padding:10px 14px;font-size:12px;color:${INK};line-height:1.5">
+            <strong>Consequences:</strong> Failure to meet the targets above by ${endDate} may result in further disciplinary action up to and including termination of employment. This plan will be placed in your personnel file.
+          </div>
+        </td></tr>
+        <tr><td style="padding:4px 20px 20px;font-size:13px;color:${SLATE}">I'm committed to supporting your success throughout this process — let's make it work.<br><br><strong>Ritch</strong> &nbsp;|&nbsp; cc: HR</td></tr>
+      </table>
+    </div>`;
+    $('clEmailPreview').innerHTML = html;
+    window._clEmailHtml = html;
+    const plain = [`PERFORMANCE IMPROVEMENT PLAN — ${_clPIPDur} Days`, `${tmName} | Issued: ${clFmtDate(convoDate) || '[Date]'}`, `Period: ${startFmt} → ${endDate}`, '',
+      f.gap     ? 'PERFORMANCE GAP\n' + f.gap : '',
+      f.targets ? 'TARGETS\n' + f.targets : '',
+      f.support ? 'SUPPORT\n' + f.support : '',
+      f.checkin ? 'CHECK-INS: ' + f.checkin : '',
+      f.prior   ? 'PRIOR DISCIPLINE: ' + f.prior : '',
+      '', `Consequences: Failure to meet targets by ${endDate} may result in further action up to and including termination.`,
+      '', 'Ritch | cc: HR'
+    ].filter(Boolean).join('\n');
+    window._clEmailPlain = plain;
+  }
+
   function clRender() {
-    if (_clState.mode === 'weekly') { clRenderWeekly(); return; }
+    if (_clState.mode === 'weekly')    { clRenderWeekly(); return; }
+    if (_clState.mode === 'sbi')       { clRenderSBI();    return; }
+    if (_clState.mode === 'pip')       { clRenderPIP();    return; }
     const f = {
       tmName:       $('clTmName').value.trim(),
       leadName:     $('clLeadName').value.trim(),
