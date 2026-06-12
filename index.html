@@ -811,7 +811,7 @@
     <div id="coachingSection" style="display:none;">
       <div class="content-header">
         <div class="page-title">Coaching Log Generator</div>
-        <div id="clModeSubtitle" class="ch-right" style="font-size:12px;color:var(--slate);font-weight:500">Post-Booking Cadence · 6-Step Standard</div>
+        <div id="clModeSubtitle" class="ch-right" style="font-size:12px;color:var(--slate);font-weight:500">Weekly 1-on-1 Coaching Log</div>
       </div>
       <div id="coachingBody" style="padding:0 24px 32px;display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start">
 
@@ -819,8 +819,8 @@
         <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:18px">
 
           <div style="display:flex;gap:6px;margin-bottom:14px">
-            <button id="clModeViolation" class="cl-chip on-navy" onclick="clSetMode('violation')">Post-Booking Cadence</button>
-            <button id="clModeWeekly" class="cl-chip" onclick="clSetMode('weekly')">Weekly Coaching</button>
+            <button id="clModeWeekly" class="cl-chip on-navy" onclick="clSetMode('weekly')">Weekly Coaching</button>
+            <button id="clModeViolation" class="cl-chip" onclick="clSetMode('violation')">Post-Booking Cadence</button>
           </div>
 
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px">
@@ -2815,7 +2815,7 @@
     tmName:'', squad:'JUMHON', leadName:'', hubspot:'', convoDate:'', behaviorDate:'',
     missed:[], general:true, behaviorEdited:'', useEdited:false, level:'verbal',
     impact:CL_IMPACT_DEFAULT, expectations:CL_EXPECT_DEFAULT, support:CL_SUPPORT_DEFAULT,
-    prior:'', followUp:'', mode:'violation',
+    prior:'', followUp:'', mode:'weekly',
   };
   window._clGeneratedWeekly = null;
 
@@ -2855,7 +2855,8 @@
     $('clImpact').value = CL_IMPACT_DEFAULT;
     $('clExpectations').value = CL_EXPECT_DEFAULT;
     $('clSupport').value = CL_SUPPORT_DEFAULT;
-    clSyncChips(); clSyncLevels(); clBuildBehavior(); clRender();
+    clSyncChips(); clSyncLevels(); clBuildBehavior();
+    clSetMode('weekly');
   }
 
   function clSyncChips() {
