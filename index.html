@@ -923,6 +923,10 @@
                 <label class="cl-label">Coach name</label>
                 <input type="text" id="clWkCoachName" class="cl-input" placeholder="e.g. Ritch" value="Ritch">
               </div>
+              <div class="cl-field" style="flex:0 0 80px">
+                <label class="cl-label">Session #</label>
+                <input type="number" id="clWkWeekNum" class="cl-input" placeholder="1" min="1" max="99" oninput="clRender()" style="text-align:center">
+              </div>
               <div class="cl-field" style="flex:1">
                 <label class="cl-label">Next session date</label>
                 <input type="date" id="clWkNextDate" class="cl-input" oninput="clRender()">
@@ -2941,7 +2945,8 @@
     const coachName   = ($('clWkCoachName') && $('clWkCoachName').value.trim()) || 'Your Coach';
     const NAVY = '#0D1F6F', MAG = '#E91E8C', INK = '#2C3E50';
 
-    const subject = `Weekly Coaching Note — ${tmName || '[Name]'} — ${clFmtDate(sessionDate) || '[Date]'}`;
+    const weekNum = (() => { const n = parseInt(($('clWkWeekNum') && $('clWkWeekNum').value) || ''); return isNaN(n) ? '' : 'W' + String(n).padStart(2, '0'); })();
+    const subject = `[COACHING-LOG] ${sessionDate || '[Date]'} | ${coachName} | ${tmName || '[Name]'}${weekNum ? ' | ' + weekNum : ''}`;
     $('clSubjectLine').textContent = subject;
     window._clEmailSubject = subject;
 
