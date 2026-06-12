@@ -3098,7 +3098,6 @@
   }
 
   async function clGenerateWeekly() {
-    const apiKey = ['sk-ant-api03-3vhOkqxol','k4F0D0giWHFGvXCldVPXxP2CT_n9m','--yUDPMl2-eh_kony5Idjpsq_Y-2fN8pqnAVY02gG0WJ9kLA-GUPg0AAA'].join('');
     const obs     = $('clWkObs').value.trim();
     const goal    = $('clWkGoal').value.trim();
     const reality = $('clWkReality').value.trim();
@@ -3143,14 +3142,9 @@ Return ONLY valid JSON with this exact structure (no markdown, no explanation):
 Generate 2-4 rating rows from the observation. Wins should reflect positives from Reality or rep strengths. Keep each field concise and impactful.`;
 
     try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
+      const res = await fetch('/.netlify/functions/ai-coach', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-allow-browser': 'true'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: 'claude-haiku-4-5-20251001',
           max_tokens: 1200,
