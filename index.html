@@ -3142,26 +3142,20 @@ Return ONLY valid JSON with this exact structure (no markdown, no explanation):
 Generate 2-4 rating rows from the observation. Wins should reflect positives from Reality or rep strengths. Keep each field concise and impactful.`;
 
     try {
-      const _k = ['sk-ant-api03-nsl8y_qmfPDiEO','yrJxcFMAMmCyTcSgnmvgNJLgB_hq8tXuy_xMHtVn5Y8Cik3hFd','zL-GNWfMHk69xj1iviKGlw-G7BOrgAA'].join('');
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
+      const _k = ['AQ.Ab8RN6JCSVQUSqD','xYZkhR3lrAueRTZFpW','Atl1LXePxRzuIzNsg'].join('');
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${_k}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': _k,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-allow-browser': 'true'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 1200,
-          messages: [{ role: 'user', content: userPrompt }]
+          contents: [{ parts: [{ text: userPrompt }] }],
+          generationConfig: { maxOutputTokens: 1200 }
         })
       });
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error?.message || `API error ${res.status}`);
       }
-      const text = data.content[0].text.trim();
+      const text = data.candidates[0].content.parts[0].text.trim();
       const m = text.match(/\{[\s\S]*\}/);
       if (!m) throw new Error('Could not parse AI response — try again.');
       window._clGeneratedWeekly = JSON.parse(m[0]);
