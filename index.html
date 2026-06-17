@@ -807,6 +807,53 @@
       </div>
     </div>
 
+    <!-- ── Team Profile Section ── -->
+    <div id="teamProfileSection" style="display:none;">
+      <div class="profile-head" id="tpHead">
+        <button class="profile-back-btn" onclick="closeTeamProfile()">← Back</button>
+        <div class="profile-avatar" id="tpAvatar" style="font-size:13px;letter-spacing:.02em">--</div>
+        <div>
+          <div class="profile-member-name" id="tpName">--</div>
+          <span class="profile-team-badge" id="tpBadge">Team</span>
+        </div>
+      </div>
+      <div class="profile-stats-row">
+        <div class="profile-stat-box">
+          <div class="profile-stat-num" id="tpStatDay">0</div>
+          <div class="profile-stat-lbl">Today</div>
+        </div>
+        <div class="profile-stat-box">
+          <div class="profile-stat-num" id="tpStatWeek">0</div>
+          <div class="profile-stat-lbl">This Week</div>
+        </div>
+        <div class="profile-stat-box">
+          <div class="profile-stat-num" id="tpStatMonth">0</div>
+          <div class="profile-stat-lbl">This Month</div>
+        </div>
+        <div class="profile-stat-box">
+          <div class="profile-stat-num" id="tpStatLast">0</div>
+          <div class="profile-stat-lbl">Last Month</div>
+        </div>
+        <div class="profile-stat-box" style="border-left:2px solid var(--border)">
+          <div class="profile-stat-num" id="tpStatSize" style="font-size:22px">—</div>
+          <div class="profile-stat-lbl">Active Members</div>
+        </div>
+        <div class="profile-stat-box">
+          <div class="profile-stat-num" id="tpStatShowup" style="font-size:22px;color:#4f46e5">—</div>
+          <div class="profile-stat-lbl">Show-up Rate</div>
+        </div>
+      </div>
+      <div class="profile-chart-area">
+        <div class="profile-chart-toggle">
+          <button class="view-btn active" id="tpBtnDaily"   onclick="setTeamView('daily')">Daily (30d)</button>
+          <button class="view-btn"        id="tpBtnWeekly"  onclick="setTeamView('weekly')">Weekly</button>
+          <button class="view-btn"        id="tpBtnMonthly" onclick="setTeamView('monthly')">Monthly</button>
+        </div>
+        <div class="profile-canvas-wrap" id="tpChartWrap"></div>
+      </div>
+      <div class="profile-att-area" id="tpLeaderboard"></div>
+    </div>
+
     <!-- ── Coaching Log Section ── -->
     <div id="coachingSection" style="display:none;">
       <div class="content-header">
@@ -1560,6 +1607,11 @@
       </div>
       <div class="member-grid"></div>`;
 
+    const lbl = sec.querySelector('.team-label');
+    lbl.style.cursor = 'pointer';
+    lbl.title = 'View team trajectory';
+    lbl.onclick = () => openTeamProfile(team.id);
+
     const grid = sec.querySelector('.member-grid');
     for (const { m, count } of sorted) {
       const su = showup[m.id] || { yes: 0, happened: 0 };
@@ -1657,14 +1709,15 @@
   // ── Page navigation ──
   let _prevPage = 'dashboard';
   function showPage(page) {
-    if (page !== 'profile') _prevPage = page;
-    $('dashboardSection').style.display    = page === 'dashboard'  ? '' : 'none';
-    $('teamSection').style.display         = page === 'team'       ? '' : 'none';
-    $('reportsSection').style.display      = page === 'reports'    ? '' : 'none';
-    $('sheetSection').style.display        = page === 'sheet'      ? '' : 'none';
-    $('attendanceSection').style.display   = page === 'attendance' ? '' : 'none';
-    $('profileSection').style.display      = page === 'profile'    ? '' : 'none';
-    $('coachingSection').style.display     = page === 'coaching'   ? '' : 'none';
+    if (page !== 'profile' && page !== 'teamProfile') _prevPage = page;
+    $('dashboardSection').style.display    = page === 'dashboard'   ? '' : 'none';
+    $('teamSection').style.display         = page === 'team'        ? '' : 'none';
+    $('reportsSection').style.display      = page === 'reports'     ? '' : 'none';
+    $('sheetSection').style.display        = page === 'sheet'       ? '' : 'none';
+    $('attendanceSection').style.display   = page === 'attendance'  ? '' : 'none';
+    $('profileSection').style.display      = page === 'profile'     ? '' : 'none';
+    $('teamProfileSection').style.display  = page === 'teamProfile' ? '' : 'none';
+    $('coachingSection').style.display     = page === 'coaching'    ? '' : 'none';
     $('navDashboard').classList.toggle('active',   page === 'dashboard');
     $('navTeam').classList.toggle('active',        page === 'team');
     $('navReports').classList.toggle('active',     page === 'reports');
@@ -2089,6 +2142,269 @@
       m++; if (m > 12) { m = 1; y++; }
     }
     return pts;
+  }
+
+  // ── Team Profile ──
+  let _tpTeam = null, _tpView = 'daily', _tpChart = null;
+
+  function openTeamProfile(teamId) {
+    _tpTeam = TEAMS.find(t => t.id === teamId);
+    if (!_tpTeam) return;
+    const t = _tpTeam;
+    const visible = t.members.filter(m => !m.hidden);
+
+    $('tpAvatar').textContent = t.name.slice(0, 3);
+    $('tpAvatar').style.background = t.color;
+    $('tpHead').style.background = t.color;
+    $('tpName').textContent = t.name;
+    $('tpBadge').textContent = 'Team — ' + visible.length + ' members';
+    $('tpStatSize').textContent = visible.length;
+
+    const today = localIso(new Date());
+    const [ty, tm] = today.split('-').map(Number);
+    const ym = `${ty}-${String(tm).padStart(2,'0')}`;
+    const prevM = tm === 1 ? `${ty-1}-12` : `${ty}-${String(tm-1).padStart(2,'0')}`;
+
+    const dayTotals = aggregateForDate(today);
+    const wtdTotals = aggregateWTD(today).counts;
+    const moTotals  = aggregateMonth(ym, true).counts;
+    const lmTotals  = aggregateMonth(prevM, false).counts;
+
+    $('tpStatDay').textContent   = visible.reduce((s,m) => s + (dayTotals[m.id] || 0), 0);
+    $('tpStatWeek').textContent  = visible.reduce((s,m) => s + (wtdTotals[m.id] || 0), 0);
+    $('tpStatMonth').textContent = visible.reduce((s,m) => s + (moTotals[m.id]  || 0), 0);
+    $('tpStatLast').textContent  = visible.reduce((s,m) => s + (lmTotals[m.id]  || 0), 0);
+
+    let suYes = 0, suHap = 0;
+    for (const row of rawRows) {
+      const mid = resolveAgent(row.agent);
+      if (!visible.some(m => m.id === mid)) continue;
+      for (const st of [row.sp1status, row.sp2status]) {
+        if (st === 'yes')                           { suYes++; suHap++; }
+        else if (st === 'no' || st === 'cancelled') { suHap++; }
+      }
+    }
+    $('tpStatShowup').textContent = suHap > 0 ? Math.round((suYes/suHap)*100)+'%' : '—';
+    $('tpStatShowup').title = suHap > 0
+      ? `${suYes} showed out of ${suHap} total completed`
+      : 'No completed meetings in loaded data';
+
+    _tpView = 'daily';
+    ['Daily','Weekly','Monthly'].forEach(v =>
+      $('tpBtn'+v).classList.toggle('active', v.toLowerCase() === _tpView)
+    );
+    showPage('teamProfile');
+    void $('tpChartWrap').offsetWidth;
+    renderTeamChart();
+    renderTeamLeaderboard();
+  }
+
+  function closeTeamProfile() {
+    if (_tpChart) { _tpChart.destroy(); _tpChart = null; }
+    _tpTeam = null;
+    showPage('team');
+  }
+
+  function setTeamView(v) {
+    _tpView = v;
+    ['Daily','Weekly','Monthly'].forEach(b =>
+      $('tpBtn'+b).classList.toggle('active', b.toLowerCase() === v)
+    );
+    renderTeamChart();
+    renderTeamLeaderboard();
+  }
+
+  function getTeamDailyData(teamId) {
+    const team = TEAMS.find(t => t.id === teamId);
+    const visible = team.members.filter(m => !m.hidden);
+    const pts = [], cur = new Date();
+    let count = 0;
+    while (count < 30) {
+      const dow = cur.getDay();
+      if (dow !== 0 && dow !== 6) {
+        const iso = localIso(cur);
+        const day = aggregateForDate(iso);
+        pts.unshift({
+          label: new Date(+iso.split('-')[0], +iso.split('-')[1]-1, +iso.split('-')[2])
+                   .toLocaleDateString('en-US',{month:'short',day:'numeric'}),
+          value: visible.reduce((s,m) => s + (day[m.id] || 0), 0)
+        });
+        count++;
+      }
+      cur.setDate(cur.getDate() - 1);
+    }
+    return pts;
+  }
+
+  function getTeamWeeklyData(teamId) {
+    const team = TEAMS.find(t => t.id === teamId);
+    const visible = team.members.filter(m => !m.hidden);
+    const groups = generateWeekOptions();
+    const pts = [];
+    for (const ym of Object.keys(groups).sort()) {
+      const [y, m] = ym.split('-').map(Number);
+      const monthAbbr = new Date(y, m-1, 1).toLocaleDateString('en-US', { month: 'short' });
+      groups[ym].forEach((mon, i) => {
+        pts.push({
+          label: `${monthAbbr} W${i+1}`,
+          value: visible.reduce((s, mbr) => s + getWeekCount(mbr.id, mon), 0)
+        });
+      });
+    }
+    return pts;
+  }
+
+  function getTeamMonthlyData(teamId) {
+    const team = TEAMS.find(t => t.id === teamId);
+    const visible = team.members.filter(m => !m.hidden);
+    const today = localIso(new Date());
+    const [cy, cm] = today.split('-').map(Number);
+    const pts = [];
+    let y = 2026, m = 1;
+    while (y < cy || (y === cy && m <= cm)) {
+      const ym = `${y}-${String(m).padStart(2,'0')}`;
+      const { counts } = aggregateMonth(ym, y === cy && m === cm);
+      pts.push({
+        label: new Date(y, m-1, 1).toLocaleDateString('en-US',{month:'short',year:'2-digit'}),
+        value: visible.reduce((s, mbr) => s + (counts[mbr.id] || 0), 0)
+      });
+      m++; if (m > 12) { m = 1; y++; }
+    }
+    return pts;
+  }
+
+  function renderTeamChart() {
+    const id = _tpTeam.id;
+    const visible = _tpTeam.members.filter(m => !m.hidden);
+    const pts = _tpView === 'daily' ? getTeamDailyData(id)
+              : _tpView === 'weekly' ? getTeamWeeklyData(id)
+              : getTeamMonthlyData(id);
+
+    const baseTarget = _tpView === 'daily' ? DAILY_TARGET
+                     : _tpView === 'weekly' ? WEEKLY_TARGET : MONTHLY_TARGET;
+    const teamTarget = baseTarget * visible.length;
+    const teamColor  = _tpTeam.color;
+    const targetLabel = _tpView === 'daily' ? 'Team Daily Target'
+                      : _tpView === 'weekly' ? 'Team Weekly Target' : 'Team Monthly Target';
+
+    if (_tpChart) { _tpChart.destroy(); _tpChart = null; }
+    const wrap = $('tpChartWrap');
+    wrap.innerHTML = '';
+    const canvas = document.createElement('canvas');
+    wrap.appendChild(canvas);
+    _tpChart = new Chart(canvas.getContext('2d'), {
+      type: 'line',
+      plugins: [pointLabelPlugin],
+      data: {
+        labels: pts.map(p => p.label),
+        datasets: [
+          {
+            label: 'Team DCs',
+            data: pts.map(p => p.value),
+            borderColor: teamColor,
+            backgroundColor: teamColor + '22',
+            fill: true, tension: 0.35,
+            pointBackgroundColor: '#fff',
+            pointBorderColor: teamColor,
+            pointBorderWidth: 2,
+            pointRadius: pts.length > 20 ? 3 : 5,
+            pointHoverRadius: 7,
+            pointHoverBackgroundColor: teamColor,
+            borderWidth: 2.5,
+          },
+          {
+            label: targetLabel,
+            data: new Array(pts.length).fill(teamTarget),
+            borderColor: '#FF1FFF',
+            borderDash: [6, 4], borderWidth: 1.5,
+            pointRadius: 0, fill: false,
+            borderCapStyle: 'round',
+          }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        layout: { padding: { top: 28, right: 12 } },
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: {
+            display: true, position: 'top', align: 'end',
+            labels: {
+              boxWidth: 12, boxHeight: 12, padding: 16,
+              font: { family: "'Plus Jakarta Sans', sans-serif", size: 11, weight: '600' },
+              color: '#0D1A6E', usePointStyle: true, pointStyle: 'circle',
+            }
+          },
+          tooltip: {
+            backgroundColor: '#0D1A6E',
+            titleColor: 'rgba(255,255,255,0.6)',
+            bodyColor: '#fff', padding: 10,
+            borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1,
+            titleFont: { family: "'Plus Jakarta Sans', sans-serif", size: 11 },
+            bodyFont: { family: "'Plus Jakarta Sans', sans-serif", size: 12, weight: '700' },
+            callbacks: { label: c => `  ${c.dataset.label}: ${c.parsed.y}` }
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: { stepSize: 1, precision: 0, font: { family: 'Inter', size: 11 }, color: '#A5A5A5', padding: 6 },
+            grid: { color: '#eceef6' },
+            border: { dash: [4, 4], color: 'transparent' }
+          },
+          x: {
+            ticks: { maxTicksLimit: 14, maxRotation: 40, font: { family: 'Inter', size: 11 }, color: '#A5A5A5', padding: 4 },
+            grid: { display: false },
+            border: { color: '#E2E4F0' }
+          }
+        }
+      }
+    });
+  }
+
+  function renderTeamLeaderboard() {
+    const visible = _tpTeam.members.filter(m => !m.hidden);
+    const today = localIso(new Date());
+    const [ty, tm] = today.split('-').map(Number);
+    const ym = `${ty}-${String(tm).padStart(2,'0')}`;
+
+    let counts = {};
+    if (_tpView === 'daily') {
+      const day = aggregateForDate(today);
+      visible.forEach(m => { counts[m.id] = day[m.id] || 0; });
+    } else if (_tpView === 'weekly') {
+      const wtd = aggregateWTD(today).counts;
+      visible.forEach(m => { counts[m.id] = wtd[m.id] || 0; });
+    } else {
+      const mo = aggregateMonth(ym, true).counts;
+      visible.forEach(m => { counts[m.id] = mo[m.id] || 0; });
+    }
+
+    const sorted = [...visible].sort((a,b) => (counts[b.id]||0) - (counts[a.id]||0));
+    const target = _tpView === 'daily' ? DAILY_TARGET
+                 : _tpView === 'weekly' ? WEEKLY_TARGET : MONTHLY_TARGET;
+    const periodLabel = _tpView === 'daily' ? 'Today'
+                      : _tpView === 'weekly' ? 'This Week' : 'This Month';
+
+    const wrap = $('tpLeaderboard');
+    wrap.innerHTML = `<div style="font-size:10px;font-weight:700;color:var(--gray);margin-bottom:14px;text-transform:uppercase;letter-spacing:.06em">Member Breakdown — ${periodLabel}</div>`;
+    for (const m of sorted) {
+      const c = counts[m.id] || 0;
+      const pct = Math.min(Math.round((c / target) * 100), 100);
+      const color = c >= target ? '#16a34a' : c >= 1 ? '#ea580c' : '#dc2626';
+      const labelColor = pct >= 40 ? 'white' : color;
+      wrap.insertAdjacentHTML('beforeend', `
+        <div class="member-card" onclick="openProfile('${esc(m.id)}')" style="margin-bottom:8px;cursor:pointer">
+          <div class="member-info">
+            <div class="member-name">${esc(m.display)}</div>
+            <div class="bar-outer">
+              <div class="bar-fill" style="width:${pct}%;background:${color}"></div>
+              <span class="bar-pct-label" style="color:${labelColor}">${pct}%</span>
+            </div>
+          </div>
+          <div class="dc-badge ${c >= target ? 'dc-hit' : 'dc-miss'}">${c}</div>
+        </div>`);
+    }
   }
 
   function localIso(dt) {
