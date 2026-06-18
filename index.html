@@ -2596,6 +2596,8 @@
     _sheetData = agentDay;
     _sheetLeadsData = agentDayLeads;
     const sheetShowup = aggregateShowupForDates(dates);
+    const dayShowup = {};
+    for (const date of dates) dayShowup[date] = aggregateShowupForDate(date);
 
     // Date header labels
     const colHeaders = dates.map(d => {
@@ -2709,7 +2711,11 @@
           const cls = n >= DAILY_TARGET ? 'sh-cell-hit' : n >= 1 ? 'sh-cell-part' : 'sh-cell-zero';
           const sepCls = sep ? 'sh-week-sep' : '';
           const leadsHint = l > 0 ? `<div style="font-size:9px;color:#6b7280;font-weight:500;line-height:1;margin-top:1px">${l}L</div>` : '';
-          html += `<td class="${cls} ${sepCls}" style="line-height:1.2;padding:4px 9px">${n ? `<div>${n}</div>${leadsHint}` : '—'}</td>`;
+          const dSu = dayShowup[iso]?.[m.id];
+          const suHint = dSu && dSu.happened > 0
+            ? `<div style="font-size:9px;color:#4f46e5;font-weight:700;line-height:1;margin-top:2px">${Math.round(dSu.yes/dSu.happened*100)}%↑</div>`
+            : '';
+          html += `<td class="${cls} ${sepCls}" style="line-height:1.2;padding:4px 9px">${n ? `<div>${n}</div>${leadsHint}${suHint}` : '—'}</td>`;
         }
         const rowLeads = dates.reduce((s,d) => s+(agentDayLeads[m.id]?.[d]||0), 0);
         html += `<td class="sh-cell-total">${rowTot||'—'}</td>`;
@@ -2743,7 +2749,11 @@
       for (const {iso, sep} of colHeaders) {
         const n = dayTeamTot[iso]||0;
         const sepCls = sep ? 'sh-week-sep' : '';
-        totHtml += `<td class="${sepCls}" style="font-weight:800;color:var(--blue)">${n||'—'}</td>`;
+        const tDaySu = dayShowup[iso];
+        const tYes = visible.reduce((s,m) => s + (tDaySu?.[m.id]?.yes || 0), 0);
+        const tHap = visible.reduce((s,m) => s + (tDaySu?.[m.id]?.happened || 0), 0);
+        const tSuHint = tHap > 0 ? `<div style="font-size:9px;color:#4f46e5;font-weight:700;line-height:1;margin-top:2px">${Math.round(tYes/tHap*100)}%↑</div>` : '';
+        totHtml += `<td class="${sepCls}" style="font-weight:800;color:var(--blue);line-height:1.2;padding:4px 9px">${n ? `<div>${n}</div>${tSuHint}` : '—'}</td>`;
       }
       totHtml += `<td class="sh-cell-total" style="color:var(--blue)">${teamTot||'—'}</td>`;
       const teamLeadsTot = visible.reduce((s,m) => s + dates.reduce((s2,d)=>s2+(agentDayLeads[m.id]?.[d]||0),0), 0);
