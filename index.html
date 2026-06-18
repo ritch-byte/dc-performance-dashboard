@@ -698,6 +698,10 @@
         <div class="page-title">Individual Reports — Weekly Breakdown</div>
         <div class="ch-right">
           <select id="reportMonthSelect" class="week-select" onchange="renderReports()"></select>
+          <button class="btn-export" onclick="downloadShowupCSV()">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 2v8M4 7l4 4 4-4"/><path d="M2 13h12"/></svg>
+            Show-up Rate CSV
+          </button>
         </div>
       </div>
       <div class="main-body" id="reportsBody"></div>
@@ -2818,6 +2822,68 @@
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = `DC-Sheet-${$('sheetHeading').textContent.replace(/[^a-z0-9]+/gi,'-')}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function downloadShowupCSV() {
+    const ym = $('reportMonthSelect').value || localIso(new Date()).slice(0, 7);
+    const [y, m] = ym.split('-').map(Number);
+    const today = localIso(new Date());
+
+    // All business days in the selected month up to today
+    const days = [];
+    const cur = new Date(y, m - 1, 1);
+    while (cur.getMonth() === m - 1) {
+      const iso = localIso(cur);
+      const dow = cur.getDay();
+      if (dow !== 0 && dow !== 6 && iso <= today) days.push(iso);
+      cur.setDate(cur.getDate() + 1);
+    }
+
+    if (!days.length) { alert('No data to export for this period.'); return; }
+
+    const fmt = iso => {
+      const [yr, mo, d] = iso.split('-').map(Number);
+      return new Date(yr, mo - 1, d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+    };
+
+    const rows = [['Date', 'Team', 'Agent', 'Showed Up', 'No Show / Cancelled', 'Total DCs', 'Show-up Rate']];
+
+    const monthlySummary = {};
+
+    for (const team of TEAMS) {
+      const visible = team.members.filter(mbr => !mbr.hidden);
+      if (!monthlySummary[team.id]) monthlySummary[team.id] = { name: team.name, yes: 0, happened: 0 };
+
+      for (const day of days) {
+        const su = aggregateShowupForDate(day);
+        for (const mbr of visible) {
+          const s = su[mbr.id];
+          if (!s || !s.happened) continue;
+          const noShow = s.happened - s.yes;
+          rows.push([fmt(day), team.name, mbr.display, s.yes, noShow, s.happened, Math.round((s.yes / s.happened) * 100) + '%']);
+          monthlySummary[team.id].yes      += s.yes;
+          monthlySummary[team.id].happened += s.happened;
+        }
+      }
+    }
+
+    // Monthly summary section
+    rows.push([]);
+    rows.push(['MONTHLY SUMMARY', '', '', '', '', '', '']);
+    rows.push(['Team', '', '', 'Showed Up', 'No Show / Cancelled', 'Total DCs', 'Show-up Rate']);
+    for (const t of Object.values(monthlySummary)) {
+      const rate = t.happened > 0 ? Math.round((t.yes / t.happened) * 100) + '%' : '—';
+      rows.push([t.name, '', '', t.yes, t.happened - t.yes, t.happened, rate]);
+    }
+
+    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Show-up-Rate-${ym}.csv`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
   }
