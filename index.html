@@ -805,6 +805,18 @@
         </div>
         <div id="profileAttContent"></div>
       </div>
+      <div class="profile-att-area" style="border-top:1px solid var(--border)">
+        <div class="profile-att-title">Daily Show-up Rate — Last 30 Business Days</div>
+        <div style="position:relative;height:220px;margin-top:14px">
+          <canvas id="profileShowupCanvas"></canvas>
+        </div>
+        <div style="display:flex;gap:16px;margin-top:10px;font-size:11px;font-weight:600">
+          <span style="color:#16a34a">● ≥80% showed up</span>
+          <span style="color:#ea580c">● 50–79%</span>
+          <span style="color:#dc2626">● &lt;50%</span>
+          <span style="color:#d1d5db">● No data</span>
+        </div>
+      </div>
     </div>
 
     <!-- ── Team Profile Section ── -->
@@ -1876,7 +1888,7 @@
   }
 
   // ── Member Profile ──
-  let _profileMember = null, _profileTeam = null, _profileView = 'daily', _profileChart = null;
+  let _profileMember = null, _profileTeam = null, _profileView = 'daily', _profileChart = null, _showupChart = null;
 
   function openProfile(memberId) {
     // Find member — prefer visible version (POC team) over hidden
@@ -1935,13 +1947,15 @@
       $('pBtn'+v).classList.toggle('active', v.toLowerCase() === _profileView);
     });
     showPage('profile');
-    void $('profileChartWrap').offsetWidth; // force reflow so wrapper has real dimensions
+    void $('profileChartWrap').offsetWidth;
     renderProfileChart();
     renderProfileAttendance(memberId);
+    renderProfileShowupChart(memberId);
   }
 
   function closeProfile() {
     if (_profileChart) { _profileChart.destroy(); _profileChart = null; }
+    if (_showupChart)  { _showupChart.destroy();  _showupChart  = null; }
     _profileMember = null;
     showPage(_prevPage);
   }
@@ -2138,6 +2152,87 @@
       m++; if (m > 12) { m = 1; y++; }
     }
     return pts;
+  }
+
+  function renderProfileShowupChart(memberId) {
+    const pts = [], cur = new Date();
+    let count = 0;
+    while (count < 30) {
+      const dow = cur.getDay();
+      if (dow !== 0 && dow !== 6) {
+        const iso = localIso(cur);
+        const su = aggregateShowupForDate(iso)[memberId];
+        const rate = su && su.happened > 0 ? Math.round((su.yes / su.happened) * 100) : null;
+        pts.unshift({
+          label: new Date(+iso.split('-')[0], +iso.split('-')[1]-1, +iso.split('-')[2])
+                   .toLocaleDateString('en-US',{month:'short',day:'numeric'}),
+          value: rate,
+          happened: su ? su.happened : 0,
+          yes: su ? su.yes : 0,
+        });
+        count++;
+      }
+      cur.setDate(cur.getDate() - 1);
+    }
+    if (_showupChart) { _showupChart.destroy(); _showupChart = null; }
+    const canvas = $('profileShowupCanvas');
+    const colors = pts.map(p =>
+      p.value === null ? '#e5e7eb'
+      : p.value >= 80  ? '#16a34a'
+      : p.value >= 50  ? '#ea580c'
+      : '#dc2626'
+    );
+    _showupChart = new Chart(canvas.getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: pts.map(p => p.label),
+        datasets: [{
+          label: 'Show-up Rate',
+          data: pts.map(p => p.value ?? 0),
+          backgroundColor: colors,
+          borderRadius: 4,
+          borderSkipped: false,
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: '#0D1A6E',
+            titleColor: 'rgba(255,255,255,0.6)',
+            bodyColor: '#fff', padding: 10,
+            titleFont: { family: "'Plus Jakarta Sans', sans-serif", size: 11 },
+            bodyFont: { family: "'Plus Jakarta Sans', sans-serif", size: 12, weight: '700' },
+            callbacks: {
+              label: (c) => {
+                const pt = pts[c.dataIndex];
+                if (!pt.happened) return '  No completed DCs';
+                return [`  Show-up: ${c.parsed.y}%`, `  ${pt.yes} of ${pt.happened} showed up`];
+              }
+            }
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true, max: 100,
+            ticks: {
+              callback: v => v + '%',
+              stepSize: 20,
+              font: { family: 'Inter', size: 11 },
+              color: '#A5A5A5', padding: 6,
+            },
+            grid: { color: '#eceef6' },
+            border: { dash: [4, 4], color: 'transparent' }
+          },
+          x: {
+            ticks: { maxTicksLimit: 14, maxRotation: 40, font: { family: 'Inter', size: 11 }, color: '#A5A5A5', padding: 4 },
+            grid: { display: false },
+            border: { color: '#E2E4F0' }
+          }
+        }
+      }
+    });
   }
 
   // ── Team Profile ──
