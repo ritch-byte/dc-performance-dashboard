@@ -882,6 +882,7 @@
         <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:18px">
 
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+            <button id="clModeQuick" class="cl-chip" onclick="clSetMode('quick')">⚡ Quick (one-line → AI)</button>
             <button id="clModeWeekly" class="cl-chip on-navy" onclick="clSetMode('weekly')">Weekly Coaching</button>
             <button id="clModeViolation" class="cl-chip" onclick="clSetMode('violation')">Post-Booking Cadence</button>
             <button id="clModeSBI" class="cl-chip" onclick="clSetMode('sbi')">General Performance</button>
@@ -919,6 +920,19 @@
               <label class="cl-label">Violation date (optional)</label>
               <input type="date" id="clBehaviorDate" class="cl-input" oninput="clRender()">
             </div>
+          </div>
+
+          <!-- Quick (one-line → AI) fields -->
+          <div id="clQuickFields" style="display:none">
+            <div class="cl-field" style="margin-top:4px">
+              <label class="cl-label">What happened? <span style="font-weight:400;color:var(--slate)">— one line, plain language. Set the rep &amp; date above; AI writes the rest.</span></label>
+              <textarea id="clQkStory" class="cl-input" rows="3" placeholder="e.g. Mark has logged ~12 dials a day against the 40 target all week and goes quiet after lunch."></textarea>
+            </div>
+            <div style="margin-top:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+              <button id="clBtnGenerateQuick" onclick="clGenerateQuick()" style="background:#E91E8C;color:#fff;border:none;border-radius:8px;padding:11px 26px;font-size:14px;font-weight:700;cursor:pointer;letter-spacing:.3px;transition:opacity .15s">Generate with AI ✨</button>
+              <span style="font-size:11px;color:var(--slate)">Drafts an SBI coaching note + rep email — opens in editable view so you can tweak before sending.</span>
+            </div>
+            <div id="clQuickStatus" style="font-size:11px;margin-top:8px;min-height:16px"></div>
           </div>
 
           <!-- Violation-specific fields -->
@@ -3531,15 +3545,18 @@
   function clSetMode(mode) {
     _clState.mode = mode;
     window._clGeneratedWeekly = null;
+    if (mode !== 'sbi') window._clQuickTopic = '';
+    $('clQuickFields').style.display     = mode === 'quick'     ? '' : 'none';
     $('clViolationFields').style.display = mode === 'violation' ? '' : 'none';
     $('clWeeklyFields').style.display    = mode === 'weekly'    ? '' : 'none';
     $('clSBIFields').style.display       = mode === 'sbi'       ? '' : 'none';
     $('clPIPFields').style.display       = mode === 'pip'       ? '' : 'none';
+    $('clModeQuick').classList.toggle('on-navy',     mode === 'quick');
     $('clModeViolation').classList.toggle('on-navy', mode === 'violation');
     $('clModeWeekly').classList.toggle('on-navy',    mode === 'weekly');
     $('clModeSBI').classList.toggle('on-navy',       mode === 'sbi');
     $('clModePIP').classList.toggle('on-navy',       mode === 'pip');
-    const subtitles = { weekly:'Weekly 1-on-1 Coaching Log', violation:'Post-Booking Cadence · 6-Step Standard', sbi:'General Performance Coaching · SBI Model', pip:'Performance Improvement Plan' };
+    const subtitles = { quick:'Quick Coaching · one-line → AI draft', weekly:'Weekly 1-on-1 Coaching Log', violation:'Post-Booking Cadence · 6-Step Standard', sbi:'General Performance Coaching · SBI Model', pip:'Performance Improvement Plan' };
     $('clModeSubtitle').textContent = subtitles[mode] || '';
     $('clConvoDateLabel').textContent = mode === 'weekly' ? 'Session date' : 'Conversation date';
     document.querySelectorAll('.cl-violation-cell').forEach(el => {
@@ -3799,13 +3816,111 @@ Generate 2-4 rating rows from the observation. Wins should reflect positives fro
   }
 
 
+  function clRenderQuickPlaceholder() {
+    $('clSubjectLine').textContent = '';
+    $('clEmailPreview').innerHTML = `<div style="text-align:center;padding:60px 20px;font-family:sans-serif">
+      <div style="font-size:40px;margin-bottom:14px">⚡</div>
+      <div style="font-size:15px;font-weight:600;color:#555;margin-bottom:8px">Type one line and click Generate</div>
+      <div style="font-size:12px;color:#aaa">AI drafts the full SBI coaching note + rep email — you can edit everything before sending.</div>
+    </div>`;
+    window._clEmailHtml = ''; window._clEmailPlain = '';
+  }
+
+  async function clGenerateQuick() {
+    const story = $('clQkStory').value.trim();
+    if (!story) { alert('Type one line describing what happened, then click Generate.'); return; }
+    const tmName    = $('clTmName').value.trim();
+    const squad     = $('clSquad').value;
+    const convoDate = $('clConvoDate').value;
+    const btn = $('clBtnGenerateQuick'), status = $('clQuickStatus');
+    btn.textContent = 'Generating…'; btn.disabled = true;
+    status.style.color = '#5B6678'; status.textContent = 'Drafting the coaching log…';
+
+    const userPrompt = `You are an HR-aware sales coaching assistant for Outsource Accelerator (OA), an offshore staffing company. You write coaching-log entries for BDRs (Business Development Reps) that double as the documented paper trail for progressive discipline.
+
+TERMINOLOGY: "DC" = Discovery Call (a booked call between a lead and the client). Always write "Discovery Call" or "DC" — never "Decision Conversation".
+
+GROUND RULES (from OA's Coaching Logs & Progressive Discipline best-practices):
+- Use the SBI model: Situation (anchor in time/place), Behavior (observable facts only — never opinions or labels like "lazy" or "unmotivated"), Impact (effect on team, pipeline, clients, or show-up rate).
+- The goal is correction, not punishment. Tone: firm, specific, and respectful; convey belief the rep can improve.
+- Name the policy/standard that applies and note it was communicated to the team.
+- Give measurable expectations with a timeline, concrete support, and a follow-up.
+- Progressive-discipline ladder: verbal coaching -> written warning -> final written warning. Choose the LOWEST level that fits; only escalate if the report clearly signals a repeat or serious issue.
+- Write the situation/behavior/impact/expectations addressed to the rep in second person ("you"), as clean documentary statements. Do NOT invent specific numbers or dates that the report doesn't imply, and do NOT use bracket placeholders — write editable prose the coach can refine.
+
+REP: ${tmName || '(name not given)'}${squad && squad !== 'Other' ? ' · Team ' + squad : ''}
+WHAT THE TEAM LEADER REPORTED (one line): "${story}"
+
+Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
+{
+  "topic": "3-6 word subject topic, e.g. Dial Volume Below Target",
+  "level": "verbal | written | final",
+  "situation": "When and where this was observed.",
+  "behavior": "The specific observable behavior, facts only.",
+  "impact": "Effect on the team, pipeline, clients, or show-up rate.",
+  "policy": "The OA standard or KPI that applies, noting it was communicated to the team.",
+  "discussion": "1-2 sentences the coach can use for what was or should be discussed (the rep's likely context, or the question to ask them).",
+  "expectations": "Specific, measurable expectations with a timeline.",
+  "support": "Concrete support, training, or resources offered.",
+  "followUpDays": 7
+}`;
+
+    try {
+      const res = await fetch('https://silver-cuchufli-071209.netlify.app/.netlify/functions/ai-coach', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 1100,
+          messages: [{ role: 'user', content: userPrompt }]
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error?.message || data.error || `API error ${res.status}`);
+      const text = data.content[0].text.trim();
+      const m = text.match(/\{[\s\S]*\}/);
+      if (!m) throw new Error('Could not parse AI response — try again.');
+      const g = JSON.parse(m[0]);
+
+      // Pre-fill the editable SBI coaching-note fields
+      $('clSBISituation').value    = g.situation    || '';
+      $('clSBIBehavior').value     = g.behavior     || '';
+      $('clSBIImpact').value       = g.impact       || '';
+      $('clSBIPolicy').value       = g.policy       || '';
+      $('clSBIDiscussion').value   = g.discussion   || '';
+      $('clSBIExpectations').value = g.expectations || '';
+      $('clSBISupport').value      = g.support      || '';
+      _clState.level = ['verbal','written','final'].includes(g.level) ? g.level : 'verbal';
+
+      // Follow-up date = conversation date (or today) + followUpDays
+      const days = Number(g.followUpDays) > 0 ? Number(g.followUpDays) : 7;
+      const base = convoDate ? new Date(convoDate + 'T00:00:00') : new Date();
+      base.setDate(base.getDate() + days);
+      $('clSBIFollowUp').value = base.toISOString().slice(0, 10);
+
+      window._clQuickTopic = g.topic || '';
+
+      // Open the editable SBI view with everything pre-filled
+      clSetMode('sbi');
+      clSyncSBILevels();
+      clRender();
+      status.textContent = '';
+    } catch (err) {
+      status.style.color = '#C00';
+      status.textContent = 'Error: ' + err.message;
+    } finally {
+      btn.textContent = 'Generate with AI ✨'; btn.disabled = false;
+    }
+  }
+
   function clRenderSBI() {
     const tmName    = $('clTmName').value.trim();
     const convoDate = $('clConvoDate').value;
     const lvl       = CL_LEVELS.find(l => l.id === _clState.level);
     const NAVY = '#0C1F42', MAG = '#D6006D', INK = '#1A2233', LINE = '#DDE4EF', SLATE = '#5B6678';
     clSyncSBILevels();
-    const subject = `[COACHING-LOG] ${convoDate || '[Date]'} | General Performance · ${lvl.label} | ${tmName || '[Name]'}`;
+    const sbiTopic = window._clQuickTopic ? window._clQuickTopic : 'General Performance';
+    const subject = `[COACHING-LOG] ${convoDate || '[Date]'} | ${sbiTopic} · ${lvl.label} | ${tmName || '[Name]'}`;
     $('clSubjectLine').textContent = subject;
     window._clEmailSubject = subject;
     const f = {
@@ -3915,6 +4030,7 @@ Generate 2-4 rating rows from the observation. Wins should reflect positives fro
   }
 
   function clRender() {
+    if (_clState.mode === 'quick')     { clRenderQuickPlaceholder(); return; }
     if (_clState.mode === 'weekly')    { clRenderWeekly(); return; }
     if (_clState.mode === 'sbi')       { clRenderSBI();    return; }
     if (_clState.mode === 'pip')       { clRenderPIP();    return; }
