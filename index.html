@@ -1015,9 +1015,15 @@
 
           <!-- General Performance Coaching (SBI) fields -->
           <div id="clSBIFields" style="display:none">
-            <div class="cl-field" style="margin-top:4px">
-              <label class="cl-label">Discipline level</label>
-              <div id="clSBILevelBtns" style="display:flex;gap:6px"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;align-items:end">
+              <div class="cl-field" style="margin-top:4px">
+                <label class="cl-label">Level <span style="font-weight:400;color:var(--slate)">— verbal = normal coaching note</span></label>
+                <div id="clSBILevelBtns" style="display:flex;gap:6px"></div>
+              </div>
+              <div class="cl-field" style="margin-top:4px">
+                <label class="cl-label">From <span style="font-weight:400;color:var(--slate)">— who's sending this</span></label>
+                <input id="clSBICoach" class="cl-input" value="Ritch" oninput="clRender()">
+              </div>
             </div>
             <div class="cl-field">
               <label class="cl-label">Situation <span style="font-weight:400;color:var(--slate)">— when &amp; where was this observed?</span></label>
@@ -3836,32 +3842,36 @@ Generate 2-4 rating rows from the observation. Wins should reflect positives fro
     btn.textContent = 'Generating…'; btn.disabled = true;
     status.style.color = '#5B6678'; status.textContent = 'Drafting the coaching log…';
 
-    const userPrompt = `You are an HR-aware sales coaching assistant for Outsource Accelerator (OA), an offshore staffing company. You write coaching-log entries for BDRs (Business Development Reps) that double as the documented paper trail for progressive discipline.
+    const userPrompt = `You are helping a Team Leader at Outsource Accelerator (OA), an offshore staffing company, write a short coaching note directly to one of their BDRs (Business Development Reps). The note keeps a light record of the conversation, but its main job is to support the rep's growth.
 
 TERMINOLOGY: "DC" = Discovery Call (a booked call between a lead and the client). Always write "Discovery Call" or "DC" — never "Decision Conversation".
 
-GROUND RULES (from OA's Coaching Logs & Progressive Discipline best-practices):
-- Use the SBI model: Situation (anchor in time/place), Behavior (observable facts only — never opinions or labels like "lazy" or "unmotivated"), Impact (effect on team, pipeline, clients, or show-up rate).
-- The goal is correction, not punishment. Tone: firm, specific, and respectful; convey belief the rep can improve.
-- Name the policy/standard that applies and note it was communicated to the team.
-- Give measurable expectations with a timeline, concrete support, and a follow-up.
-- Progressive-discipline ladder: verbal coaching -> written warning -> final written warning. Choose the LOWEST level that fits; only escalate if the report clearly signals a repeat or serious issue.
-- Write the situation/behavior/impact/expectations addressed to the rep in second person ("you"), as clean documentary statements. Do NOT invent specific numbers or dates that the report doesn't imply, and do NOT use bracket placeholders — write editable prose the coach can refine.
+VOICE & TONE (important):
+- Write in the FIRST PERSON as the team leader speaking directly to the rep — "I noticed…", "I'd like you to…", "I'll help you with…". NEVER refer to "your team leader" in the third person; the sender IS the team leader.
+- Keep it warm, encouraging, and developmental — a normal coaching conversation between a TL and their rep, NOT a stiff HR or legal document. Be clear about what should change, but lead with support and genuine belief in the rep.
+- Do NOT use heavy disciplinary or legalistic language (avoid "violation", "non-compliance", "progressive discipline", "personnel file") UNLESS the report clearly describes a serious or repeated problem.
+
+GUIDELINES:
+- Loosely follow Situation→Behavior→Impact: what I noticed, the specifics (observable facts, not labels like "lazy"), and why it matters — but phrase it conversationally.
+- Default the level to "verbal" (an ordinary supportive coaching note). Only choose "written" or "final" if the report clearly signals a repeat or serious issue.
+- Keep expectations clear and reasonable, framed as friendly goals going forward with a light timeline.
+- Make support genuinely helpful and specific ("I'll show you…", "I'll pair you with…").
+- Don't invent specific numbers or dates the report doesn't imply, and don't use bracket placeholders — write clean prose the TL can lightly edit.
 
 REP: ${tmName || '(name not given)'}${squad && squad !== 'Other' ? ' · Team ' + squad : ''}
-WHAT THE TEAM LEADER REPORTED (one line): "${story}"
+WHAT THE TEAM LEADER SAID HAPPENED (one line): "${story}"
 
 Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
 {
-  "topic": "3-6 word subject topic, e.g. Dial Volume Below Target",
+  "topic": "3-6 word subject topic, e.g. Dial Volume This Week",
   "level": "verbal | written | final",
-  "situation": "When and where this was observed.",
-  "behavior": "The specific observable behavior, facts only.",
-  "impact": "Effect on the team, pipeline, clients, or show-up rate.",
-  "policy": "The OA standard or KPI that applies, noting it was communicated to the team.",
-  "discussion": "1-2 sentences the coach can use for what was or should be discussed (the rep's likely context, or the question to ask them).",
-  "expectations": "Specific, measurable expectations with a timeline.",
-  "support": "Concrete support, training, or resources offered.",
+  "situation": "Warm first-person opener: what I noticed and roughly when.",
+  "behavior": "The specific thing that happened, observable facts, no labels.",
+  "impact": "Why it matters — effect on the team, pipeline, clients, or show-up rate, kept matter-of-fact not alarming.",
+  "policy": "The OA standard or goal this relates to, mentioned naturally (skip the legalese).",
+  "discussion": "1-2 sentences framing the two-way chat — what we talked about or the question I want to ask you.",
+  "expectations": "Clear, reasonable goals going forward with a light timeline.",
+  "support": "Specific, genuine support or resources I'll offer.",
   "followUpDays": 7
 }`;
 
@@ -3935,43 +3945,57 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
       followUp:    $('clSBIFollowUp').value,
     };
     const sect = (label, body) => `<tr><td style="padding:12px 20px 0"><div style="font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:${MAG};margin-bottom:3px">${label}</div><div style="font-size:13px;line-height:1.55;color:${INK}">${body || '<span style="color:#aaa;font-style:italic">—</span>'}</div></td></tr>`;
+    const coach = ($('clSBICoach') && $('clSBICoach').value.trim()) || 'Your Team Lead';
+    // Softer framing for a TL→rep coaching note (verbal = supportive, not disciplinary)
+    const sbiBanner = { verbal:'COACHING NOTE', written:'WRITTEN WARNING · PERSONNEL FILE', final:'FINAL WRITTEN WARNING · PERSONNEL FILE' }[lvl.id] || lvl.banner;
+    const sbiClose = {
+      verbal:  "This is a coaching note to support your growth — not a disciplinary action. I know you've got this, and I'm here to help. Let's work on it together.",
+      written: "This is a written warning and will be kept on file. I genuinely want to see this turn around — let's make the improvements above so we don't need to take it further.",
+      final:   lvl.consequence,
+    }[lvl.id] || lvl.consequence;
+    const ccHR = lvl.id !== 'verbal';
+    const closeBg = lvl.id === 'verbal' ? '#F0FBF5' : '#FFF4F4';
+    const closeBar = lvl.id === 'verbal' ? '#0E9F6E' : MAG;
     const html = `<div style="font-family:Arial,sans-serif;background:#fff;max-width:600px;margin:0 auto">
       <div style="background:${NAVY};padding:20px 24px 16px;border-radius:6px 6px 0 0">
         <div style="color:#E91E8C;font-size:20px;font-weight:800;margin-bottom:4px">${tmName || '[Team Member]'}</div>
-        <div style="color:rgba(255,255,255,.7);font-size:12px">Date: ${clFmtDate(convoDate) || '[Date]'} &nbsp;|&nbsp; Coach: Ritch</div>
+        <div style="color:rgba(255,255,255,.7);font-size:12px">Date: ${clFmtDate(convoDate) || '[Date]'} &nbsp;|&nbsp; From: ${esc(coach)}</div>
       </div>
-      <div style="background:#D6006D;padding:7px 20px;font-size:10px;font-weight:800;letter-spacing:1px;color:#fff;text-transform:uppercase">${lvl.banner}</div>
+      <div style="background:#D6006D;padding:7px 20px;font-size:10px;font-weight:800;letter-spacing:1px;color:#fff;text-transform:uppercase">${sbiBanner}</div>
       <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${LINE};border-top:none;border-radius:0 0 6px 6px">
-        ${sect('SITUATION', f.situation)}
-        ${sect('BEHAVIOR — WHAT WAS OBSERVED', f.behavior)}
-        ${sect('IMPACT', f.impact)}
-        ${f.policy ? sect('POLICY / STANDARD', f.policy) : ''}
-        ${f.discussion ? sect('OUR DISCUSSION', f.discussion) : ''}
-        ${sect('EXPECTATIONS GOING FORWARD', f.expectations)}
-        ${sect('SUPPORT OFFERED', f.support)}
+        <tr><td style="padding:16px 20px 0;font-size:13px;line-height:1.55;color:${INK}">Hi ${esc((tmName||'').split(' ')[0]) || '[Name]'},<br><br>I wanted to put down a few notes from our chat so we're on the same page.</td></tr>
+        ${sect('WHAT I NOTICED', f.situation)}
+        ${sect('SPECIFICS', f.behavior)}
+        ${sect('WHY IT MATTERS', f.impact)}
+        ${f.policy ? sect('THE STANDARD WE FOLLOW', f.policy) : ''}
+        ${f.discussion ? sect('WHAT WE TALKED ABOUT', f.discussion) : ''}
+        ${sect('GOING FORWARD', f.expectations)}
+        ${sect('HOW I CAN SUPPORT YOU', f.support)}
         ${f.prior ? sect('PRIOR COACHING ON RECORD', f.prior) : ''}
-        ${f.followUp ? sect('FOLLOW-UP REVIEW', clFmtDate(f.followUp)) : ''}
+        ${f.followUp ? sect('CHECK-IN', clFmtDate(f.followUp)) : ''}
         <tr><td style="padding:14px 20px">
-          <div style="background:#FFF4F4;border-left:3px solid ${MAG};padding:10px 14px;font-size:12px;color:${INK};line-height:1.5">
-            ${lvl.consequence}
+          <div style="background:${closeBg};border-left:3px solid ${closeBar};padding:10px 14px;font-size:12px;color:${INK};line-height:1.5">
+            ${sbiClose}
           </div>
         </td></tr>
-        <tr><td style="padding:4px 20px 20px;font-size:13px;color:${SLATE}">I'm confident you can turn this around — let me know how I can help.<br><br><strong>Ritch</strong> &nbsp;|&nbsp; cc: HR</td></tr>
+        <tr><td style="padding:4px 20px 20px;font-size:13px;color:${SLATE}">Thanks for hearing me out — let me know how I can help.<br><br><strong>${esc(coach)}</strong>${ccHR ? ' &nbsp;|&nbsp; cc: HR' : ''}</td></tr>
       </table>
     </div>`;
     $('clEmailPreview').innerHTML = html;
     window._clEmailHtml = html;
-    const plain = [`General Performance Coaching Note — ${lvl.label}`, `${tmName} | ${clFmtDate(convoDate) || '[Date]'}`, '',
-      f.situation   ? 'SITUATION\n' + f.situation : '',
-      f.behavior    ? 'BEHAVIOR\n' + f.behavior : '',
-      f.impact      ? 'IMPACT\n' + f.impact : '',
-      f.policy      ? 'POLICY/STANDARD\n' + f.policy : '',
-      f.discussion  ? 'OUR DISCUSSION\n' + f.discussion : '',
-      f.expectations? 'EXPECTATIONS\n' + f.expectations : '',
-      f.support     ? 'SUPPORT\n' + f.support : '',
+    const plain = [`Coaching Note — ${lvl.label}`, `${tmName} | ${clFmtDate(convoDate) || '[Date]'} | From: ${coach}`, '',
+      `Hi ${(tmName||'').split(' ')[0] || '[Name]'},`, '',
+      "I wanted to put down a few notes from our chat so we're on the same page.", '',
+      f.situation   ? 'WHAT I NOTICED\n' + f.situation : '',
+      f.behavior    ? 'SPECIFICS\n' + f.behavior : '',
+      f.impact      ? 'WHY IT MATTERS\n' + f.impact : '',
+      f.policy      ? 'THE STANDARD WE FOLLOW\n' + f.policy : '',
+      f.discussion  ? 'WHAT WE TALKED ABOUT\n' + f.discussion : '',
+      f.expectations? 'GOING FORWARD\n' + f.expectations : '',
+      f.support     ? 'HOW I CAN SUPPORT YOU\n' + f.support : '',
       f.prior       ? 'PRIOR COACHING\n' + f.prior : '',
-      f.followUp    ? 'FOLLOW-UP: ' + clFmtDate(f.followUp) : '',
-      '', lvl.consequence, '', 'Ritch | cc: HR'
+      f.followUp    ? 'CHECK-IN: ' + clFmtDate(f.followUp) : '',
+      '', sbiClose, '', coach + (ccHR ? ' | cc: HR' : '')
     ].filter(Boolean).join('\n');
     window._clEmailPlain = plain;
   }
