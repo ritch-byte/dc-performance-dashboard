@@ -3385,18 +3385,20 @@
   }
 
   // ── COACHING LOG ──────────────────────────────────────────────────────────
+  // Synced to the June Week 4 schedule (matches the dashboard TEAMS rosters)
   const CL_ROSTER = {
-    JUMHON: ['Lance Villaruel','Mervin Arespacochaga','Cristina Pabiona','Marc Anos','Joy Delos Reyes',
-             'Kenneth Escabillas','Katherine Garcia','Quin Tapiador','Russell Benjamin','Gian Lavares',
-             'Roderico Bangalan','Chenseen Berenguer','Rachel Cagampan','Jonathan Jabonete',
-             'John Steven Javier','John Christian Susana','Alvin Bayhon'],
-    RV: ['Gian Carlo Silang','Godwin Silva','Diana Vosotros','Mark Lauren Ramirez','Charlon Baliuag',
-         'Edward Velasco','Jerry Demayo','Samara Bautista','Charlie Fortez','Alvin Melo',
-         'Pedro Catolico','Renz Ruiz','Julius Sarmiento','Aaron Kyle Valenzuela','Art Joseph Petras'],
-    ACE: ['Bedier Verastigue','Charlito Arcena','Steven Kurt Cavinta','Jose Carlos Malavega',
-          'Charles Sarmiento','Jervin Saminado','Jean Rees','Jefferson Lentija','Maureen Decamora',
-          'Jessica Bascos','Lawrence Galoso','Rommel Tupaz','Renz Sindac','Joshua Bondad'],
-    'POC TEAM': ['Jetdel Ybanez','Angelica Tanate','Vincent Gadier','Alvin Bayhon','Jumar Vere'],
+    JUMHON: ['Jean Rees','Renz Sindac','Steven Kurt Cavinta','Angel Chua','Raffy Gaza','Desiree Rampas',
+             'Justine Balbido','Jesley Cubol','Josie Arienda','Bryan Cajayon','Ruth Quismundo','Armi Caro',
+             'Donald Cardell','Marisol Concepcion','Allan Carumba','Ayesha Magtalas','Christopher Conejos',
+             'Katherine Garcia','Cristina Pabiona','Joy Delos Reyes','Quin Tapiador','John Steven Javier'],
+    RV: ['Julius Sarmiento','Roderico Bangalan','Mark Lauren Ramirez','Renz Ruiz','Charlon Baliuag',
+         'John Christian Susana','Charlie Fortez','Jerry Demayo','Gian Lavares','Art Joseph Petras',
+         'Aaron Kyle Valenzuela','Gian Carlo Silang','Alvin Melo','Pedro Catolico','Godwin Silva',
+         'Diana Vosotros','Samara Bautista','Edward Velasco'],
+    ACE: ['Lawrence Galoso','Mervin Arespacochaga','Maureen Decamora','Russell Benjamin','Kenneth Escabillas',
+          'Jose Carlos Malavega','Joshua Bondad','Lance Villaruel','Jefferson Lentija','Jessica Bascos',
+          'Marc Anos','Charles Sarmiento','Rommel Tupaz','Jervin Saminado','Charlito Arcena','Bedier Verastigue'],
+    'POC TEAM': ['Angelica Tanate','Vincent Gadier','Alvin Bayhon','Jumar Vere'],
   };
   const CL_ALL_TMS = Object.entries(CL_ROSTER).flatMap(([squad,names]) => names.map(name => ({name,squad})));
 
