@@ -3551,15 +3551,19 @@
 
   function buildTrackMonthSelect() {
     const sel = $('clTrackMonth'); if (!sel || sel.options.length) return;
-    let [y, m] = localIso(new Date()).split('-').map(Number);
-    while (y > 2026 || (y === 2026 && m >= 1)) {
-      const ym = `${y}-${String(m).padStart(2,'0')}`;
+    // Build from the months that actually have weeks (newest first). This includes a
+    // bridging month, e.g. the Jun 29–Jul 3 week files under July, so July appears.
+    const keys = Object.keys(generateWeekOptions()).sort().reverse();
+    keys.forEach(ym => {
+      const [y, m] = ym.split('-').map(Number);
       const opt = document.createElement('option');
       opt.value = ym;
       opt.textContent = new Date(y, m-1, 1).toLocaleDateString('en-US', { month:'long', year:'numeric' });
       sel.appendChild(opt);
-      m--; if (m === 0) { m = 12; y--; }
-    }
+    });
+    // Default to the current calendar month if it's in the list, else the newest.
+    const cur = localIso(new Date()).slice(0, 7);
+    if (keys.includes(cur)) sel.value = cur;
   }
 
   function parseCoachCSV(text) {
