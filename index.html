@@ -1026,6 +1026,13 @@
               </div>
             </div>
             <div class="cl-field">
+              <label class="cl-label">OA Handbook violation <span style="font-weight:400;color:var(--slate)">— optional; sets the level &amp; cites the policy</span></label>
+              <select id="clSBIViolation" class="cl-input" onchange="clSBIPickViolation()">
+                <option value="">— none / general coaching —</option>
+              </select>
+              <div id="clSBIViolationNote" style="font-size:11px;margin-top:4px;color:var(--slate);display:none"></div>
+            </div>
+            <div class="cl-field">
               <label class="cl-label">Situation <span style="font-weight:400;color:var(--slate)">— when &amp; where was this observed?</span></label>
               <textarea id="clSBISituation" class="cl-input" rows="2" oninput="clRender()" placeholder="e.g. On June 10, during the morning call block, I reviewed your activity log…"></textarea>
             </div>
@@ -3422,6 +3429,64 @@
   const CL_EXPECT_DEFAULT = 'Effective immediately, you are required to execute the full 6-step post-booking cadence for every booked DC, per the Post Booking Steps standard: (1) confirmation text immediately after booking, (2) reminder email 3 days before, (3) reminder via text/email/LinkedIn 1 day before, (4) text and email reminder 1 hour before, (5) the 3-minutes-before message sent from inside the meeting room, and (6) the full no-show protocol when a lead does not appear. This is mandatory and non-negotiable.';
   const CL_SUPPORT_DEFAULT = 'The Post Booking Steps document and message templates will be resent to you today for reference. Your next bookings will be reviewed for full compliance.';
 
+  // ── OA Employee Handbook · Code of Conduct (curated for BDR coaching) ──
+  // action = prescribed first-instance corrective action per the handbook's Table of Violations.
+  const CL_HANDBOOK = [
+    { cat:'Attendance & Schedule Adherence', items:[
+      { code:'01.9',  desc:'Habitual tardiness (3+ instances or 60 min total in a month)', level:'Major', action:'Written' },
+      { code:'01.10', desc:'Excessive tardiness (10+ instances in a rolling 3-month period)', level:'Major', action:'Written' },
+      { code:'01.11', desc:'Habitual absenteeism (3+ unplanned absences in a month)', level:'Major', action:'Written' },
+      { code:'01.13', desc:'Unexcused / unauthorized absence', level:'Major', action:'Written' },
+      { code:'01.8',  desc:'Failure to follow the prescribed call-in procedure', level:'Major', action:'Written' },
+      { code:'01.5',  desc:'Failure to file the appropriate leave within the prescribed period', level:'Major', action:'Written' },
+      { code:'01.19', desc:'Abandonment of post / unauthorized undertime / unauthorized VTO', level:'Less Serious', action:'Final Written' },
+      { code:'01.20', desc:'One (1) day No Call No Show (NCNS)', level:'Less Serious', action:'Final Written' },
+      { code:'01.21', desc:'Absence on a Critical Workday', level:'Less Serious', action:'Final Written' },
+      { code:'01.22', desc:'Patterned absences (before/after a rest day, holiday, or payday)', level:'Less Serious', action:'Final Written' },
+      { code:'01.24', desc:'Two (2) consecutive days of NCNS (AWOL)', level:'Serious', action:'Dismissal' },
+      { code:'01.25', desc:'Tampering with time entries or clocking in/out for another employee', level:'Serious', action:'Dismissal' },
+    ]},
+    { cat:'Performance & Productivity', items:[
+      { code:'02.3',  desc:'Failure to meet account-specific metrics/KPIs within one month', level:'Minor', action:'Verbal' },
+      { code:'02.2',  desc:'Use of company time on non-work activities, slowing productivity', level:'Minor', action:'Verbal' },
+      { code:'02.4',  desc:'Failure to attend coaching, one-on-ones, calibrations, or meetings', level:'Major', action:'Written' },
+      { code:'02.5',  desc:'Failure to complete assigned tasks or reports', level:'Major', action:'Written' },
+      { code:'02.7',  desc:'Failure to meet KPIs for 2–3 consecutive months despite coaching', level:'Major', action:'Written' },
+      { code:'02.8',  desc:'Quarterly/mid-year performance score below expectations (lower than 3)', level:'Major', action:'Written' },
+      { code:'02.21', desc:'Insubordination — failure to follow a direct order from a superior', level:'Less Serious', action:'Final Written' },
+      { code:'02.51', desc:'Failure to deliver glidepath/step goals while on a PIP', level:'Serious', action:'Dismissal' },
+    ]},
+    { cat:'Integrity & Honesty', items:[
+      { code:'03.4',  desc:'Manipulation of performance statistics to appear compliant', level:'Less Serious', action:'Final Written' },
+      { code:'03.14', desc:'Falsifying/tampering timekeeping records; punching in offsite', level:'Serious', action:'Dismissal' },
+      { code:'03.37', desc:'Manipulating data for personal gain (e.g. to hit metrics/incentives)', level:'Serious', action:'Dismissal' },
+    ]},
+    { cat:'Professional Conduct', items:[
+      { code:'05.1',  desc:'Failure to follow the Company dress code', level:'Minor', action:'Verbal' },
+      { code:'05.2',  desc:'Failure to comply with the English-Only Policy', level:'Minor', action:'Verbal' },
+      { code:'05.39', desc:'Repetitive sleeping during scheduled shift / at workstation', level:'Less Serious', action:'Final Written' },
+      { code:'05.24', desc:'Discourtesy or rudeness to a colleague, officer, or client', level:'Less Serious', action:'Final Written' },
+      { code:'05.32', desc:'Use of profane, obscene, or abusive language on the premises', level:'Less Serious', action:'Final Written' },
+    ]},
+    { cat:'Information Security & IT', items:[
+      { code:'04.4',  desc:'Browsing non-work websites on company devices during work hours', level:'Less Serious', action:'Final Written' },
+      { code:'04.1',  desc:"Sharing/distributing the Company's proprietary or confidential data", level:'Major', action:'Written' },
+    ]},
+    { cat:'Repetitive Infractions', items:[
+      { code:'08.1', desc:'Two or more Verbal Warnings within the same category', level:'Major', action:'Written' },
+      { code:'08.3', desc:'Two or more Written Warnings', level:'Less Serious', action:'Final Written' },
+      { code:'08.4', desc:'Two or more Final Written Warnings', level:'Serious', action:'Dismissal' },
+    ]},
+  ];
+  const _clViolationMap = {};
+  CL_HANDBOOK.forEach(g => g.items.forEach(it => { _clViolationMap[it.code] = { ...it, cat: g.cat }; }));
+  // Map a handbook corrective action to the note's level selector (Dismissal-level still drafts as Final Written + an HR note).
+  function clActionToLevel(action) {
+    if (action === 'Verbal') return 'verbal';
+    if (action === 'Written') return 'written';
+    return 'final';
+  }
+
   let _clInited = false;
   let _clState = {
     tmName:'', squad:'JUMHON', leadName:'', hubspot:'', convoDate:'', behaviorDate:'',
@@ -3476,8 +3541,39 @@
       btn.onclick = () => { _clState.level = l.id; clSyncSBILevels(); clRender(); };
       sbiLvls.appendChild(btn);
     });
+    // Build OA Handbook violation dropdown (grouped by category)
+    const sbiViol = $('clSBIViolation');
+    if (sbiViol) {
+      CL_HANDBOOK.forEach(group => {
+        const og = document.createElement('optgroup');
+        og.label = group.cat;
+        group.items.forEach(it => {
+          const o = document.createElement('option');
+          o.value = it.code;
+          o.textContent = `§${it.code} — ${it.desc} (${it.action})`;
+          og.appendChild(o);
+        });
+        sbiViol.appendChild(og);
+      });
+    }
     clSyncChips(); clSyncLevels(); clBuildBehavior();
     clSetMode('weekly');
+  }
+
+  function clSBIPickViolation() {
+    const sel = $('clSBIViolation'), note = $('clSBIViolationNote');
+    const item = _clViolationMap[sel.value];
+    if (!item) { if (note) note.style.display = 'none'; return; }
+    _clState.level = clActionToLevel(item.action);
+    $('clSBIPolicy').value = `OA Employee Handbook, Code of Conduct §${item.code} (${item.cat}): ${item.desc}. Classified as a ${item.level} offense; prescribed first-instance action under the Table of Violations is ${item.action}.`;
+    if (note) {
+      note.style.display = '';
+      note.innerHTML = item.action === 'Dismissal'
+        ? `<b style="color:#C00">Handbook: ${item.level} offense — first-instance action is Dismissal.</b> This is beyond a coaching note — coordinate with HR to issue an NTE. Drafted below as a Final Written record.`
+        : `Handbook: <b>${item.level}</b> offense · prescribed first-instance action: <b>${item.action}</b>. Repeat offenses escalate per the progressive-discipline table.`;
+    }
+    clSyncSBILevels();
+    clRender();
   }
 
   function clSyncSBILevels() {
@@ -3844,6 +3940,8 @@ Generate 2-4 rating rows from the observation. Wins should reflect positives fro
     btn.textContent = 'Generating…'; btn.disabled = true;
     status.style.color = '#5B6678'; status.textContent = 'Drafting the coaching log…';
 
+    const hbRef = CL_HANDBOOK.map(g => `${g.cat}: ` + g.items.map(i => `§${i.code} ${i.desc} [${i.level} → ${i.action}]`).join(' | ')).join('\n');
+
     const userPrompt = `You are helping a Team Leader at Outsource Accelerator (OA), an offshore staffing company, write a short coaching note directly to one of their BDRs (Business Development Reps). The note keeps a light record of the conversation, but its main job is to support the rep's growth.
 
 TERMINOLOGY: "DC" = Discovery Call (a booked call between a lead and the client). Always write "Discovery Call" or "DC" — never "Decision Conversation".
@@ -3860,6 +3958,10 @@ GUIDELINES:
 - Make support genuinely helpful and specific ("I'll show you…", "I'll pair you with…").
 - Don't invent specific numbers or dates the report doesn't imply, and don't use bracket placeholders — write clean prose the TL can lightly edit.
 
+OA HANDBOOK — possible Code-of-Conduct violations. Map the story to the closest ONE only if it clearly fits; otherwise leave handbookRef "":
+${hbRef}
+Level mapping from a handbook item's prescribed action: Verbal → "verbal", Written → "written", Final Written or Dismissal → "final". If the story clearly maps to a handbook item, set "level" from that item's action using this mapping (this overrides the soft default), and set "handbookRef" to its section code (e.g. "01.9"). If a Dismissal-level item fits, still draft as "final" — it becomes an HR/NTE matter, not just a coaching note. Even when an item applies, keep the email body warm and first-person; do NOT quote the handbook verbatim in the body.
+
 REP: ${tmName || '(name not given)'}${squad && squad !== 'Other' ? ' · Team ' + squad : ''}
 WHAT THE TEAM LEADER SAID HAPPENED (one line): "${story}"
 
@@ -3867,6 +3969,7 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
 {
   "topic": "3-6 word subject topic, e.g. Dial Volume This Week",
   "level": "verbal | written | final",
+  "handbookRef": "matching OA Code-of-Conduct section code like 01.9, or empty string if none clearly fits",
   "situation": "Warm first-person opener: what I noticed and roughly when.",
   "behavior": "The specific thing that happened, observable facts, no labels.",
   "impact": "Why it matters — effect on the team, pipeline, clients, or show-up rate, kept matter-of-fact not alarming.",
@@ -3903,6 +4006,21 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
       $('clSBIExpectations').value = g.expectations || '';
       $('clSBISupport').value      = g.support      || '';
       _clState.level = ['verbal','written','final'].includes(g.level) ? g.level : 'verbal';
+
+      // If the AI matched an OA Handbook violation, surface it (keep the warm body as written)
+      const hbItem = _clViolationMap[(g.handbookRef || '').trim()];
+      const vSel = $('clSBIViolation'), vNote = $('clSBIViolationNote');
+      if (vSel) vSel.value = hbItem ? hbItem.code : '';
+      if (vNote) {
+        if (hbItem) {
+          vNote.style.display = '';
+          vNote.innerHTML = hbItem.action === 'Dismissal'
+            ? `<b style="color:#C00">Handbook: ${hbItem.level} offense (§${hbItem.code}) — first-instance action is Dismissal.</b> This is beyond a coaching note; coordinate with HR for an NTE. Drafted as Final Written.`
+            : `Handbook: <b>${hbItem.level}</b> offense (§${hbItem.code}) · prescribed first-instance action: <b>${hbItem.action}</b>.`;
+        } else {
+          vNote.style.display = 'none';
+        }
+      }
 
       // Follow-up date = conversation date (or today) + followUpDays
       const days = Number(g.followUpDays) > 0 ? Number(g.followUpDays) : 7;
