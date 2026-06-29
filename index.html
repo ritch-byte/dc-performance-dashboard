@@ -636,6 +636,15 @@
       Coaching Log
     </a>
 
+    <a class="nav-item" id="navTracker" href="#" onclick="showPage('tracker');return false;">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="1" y="1" width="14" height="14" rx="1"/>
+        <path d="M1 5.5h14M6 5.5V15M1 10.5h5"/>
+        <path d="M9 8.5l1.3 1.3L13 7"/>
+      </svg>
+      Coaching Tracker
+    </a>
+
     <div class="sidebar-divider"></div>
     <div class="nav-group-label">System</div>
     <a class="nav-item" href="#">
@@ -873,11 +882,7 @@
     <!-- ── Coaching Log Section ── -->
     <div id="coachingSection" style="display:none;">
       <div class="content-header">
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-          <div class="page-title">Coaching Log</div>
-          <button id="clTabGen" class="cl-chip on-navy" onclick="clShowTab('gen')">✍️ Generator</button>
-          <button id="clTabTracker" class="cl-chip" onclick="clShowTab('tracker')">📋 Weekly Tracker</button>
-        </div>
+        <div class="page-title">Coaching Log Generator</div>
         <div id="clModeSubtitle" class="ch-right" style="font-size:12px;color:var(--slate);font-weight:500">Weekly 1-on-1 Coaching Log</div>
       </div>
       <div id="coachingBody" style="padding:0 24px 32px;display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start">
@@ -1138,9 +1143,15 @@
         </div>
 
       </div>
+    </div>
 
-      <!-- Coaching Tracker -->
-      <div id="coachingTrackerBody" style="display:none;padding:0 24px 32px">
+    <!-- ── Coaching Tracker Section ── -->
+    <div id="trackerSection" style="display:none;">
+      <div class="content-header">
+        <div class="page-title">Coaching Tracker</div>
+        <div class="ch-right" style="font-size:12px;color:var(--slate);font-weight:500">1 coaching log per SDR, per week</div>
+      </div>
+      <div style="padding:0 24px 32px">
         <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:18px">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px">
             <div style="display:flex;align-items:center;gap:10px">
@@ -1154,7 +1165,7 @@
           </div>
           <div id="clTrackTable" style="overflow-x:auto"></div>
           <div style="margin-top:12px;background:#EEF3FB;border:1px solid #C9D8F0;border-radius:10px;padding:10px 14px;font-size:11px;color:#142E5C">
-            Each rep needs <b>1 coaching log per week</b>. <span style="color:#0E9F6E;font-weight:700">●&nbsp;Green</span> = coached · <span style="color:#C00;font-weight:700">●&nbsp;Red</span> = none yet · <span style="color:#999;font-weight:700">●&nbsp;Grey</span> = week not due yet. Sending a coaching log (<b>Copy email</b>) records one automatically.
+            Each rep needs <b>1 coaching log per week</b>. <span style="color:#0E9F6E;font-weight:700">●&nbsp;Green</span> = coached · <span style="color:#C00;font-weight:700">●&nbsp;Red</span> = none yet · <span style="color:#999;font-weight:700">●&nbsp;Grey</span> = week not due yet. Sending a coaching log from the Generator (<b>Copy email</b>) records one automatically.
           </div>
         </div>
       </div>
@@ -1796,17 +1807,20 @@
     $('profileSection').style.display      = page === 'profile'     ? '' : 'none';
     $('teamProfileSection').style.display  = page === 'teamProfile' ? '' : 'none';
     $('coachingSection').style.display     = page === 'coaching'    ? '' : 'none';
+    $('trackerSection').style.display      = page === 'tracker'     ? '' : 'none';
     $('navDashboard').classList.toggle('active',   page === 'dashboard');
     $('navTeam').classList.toggle('active',        page === 'team');
     $('navReports').classList.toggle('active',     page === 'reports');
     $('navSheet').classList.toggle('active',       page === 'sheet');
     $('navAttendance').classList.toggle('active',  page === 'attendance');
     $('navCoaching').classList.toggle('active',    page === 'coaching');
+    $('navTracker').classList.toggle('active',     page === 'tracker');
     if (page === 'team')       renderTeamRoster();
     if (page === 'reports')    { buildReportMonthSelect(); renderReports(); }
     if (page === 'sheet')      { buildSheetWeekSelect(); renderSheet(); if (!_attLoaded && !_attLoading) loadAttendanceData(); }
     if (page === 'attendance') { if (!_attLoaded) loadAttendanceData(); else renderAttendance(); }
     if (page === 'coaching')   clInit();
+    if (page === 'tracker')    { buildTrackMonthSelect(); loadCoachingLogs(false); }
   }
 
   // ── Reports ──
@@ -3533,16 +3547,6 @@
     clearTimeout(t._h); t._h = setTimeout(() => { t.style.opacity = '0'; }, 2800);
   }
 
-  function clShowTab(tab) {
-    const gen = tab !== 'tracker';
-    $('coachingBody').style.display = gen ? 'grid' : 'none';
-    $('coachingTrackerBody').style.display = gen ? 'none' : '';
-    $('clTabGen').classList.toggle('on-navy', gen);
-    $('clTabTracker').classList.toggle('on-navy', !gen);
-    $('clModeSubtitle').style.display = gen ? '' : 'none';
-    if (!gen) { buildTrackMonthSelect(); loadCoachingLogs(false); }
-  }
-
   function buildTrackMonthSelect() {
     const sel = $('clTrackMonth'); if (!sel || sel.options.length) return;
     // Build from the months that actually have weeks (newest first). This includes a
@@ -3627,7 +3631,7 @@
       try { const a = JSON.parse(localStorage.getItem('oaCoachLogs') || '[]'); a.push(entry); localStorage.setItem('oaCoachLogs', JSON.stringify(a)); } catch (e) {}
     }
     clToast(`✓ Logged coaching · ${rep} · week of ${getWeekDateRange(weekOf)}`);
-    if ($('coachingTrackerBody') && $('coachingTrackerBody').style.display !== 'none') renderCoachingTracker();
+    if ($('trackerSection') && $('trackerSection').style.display !== 'none') renderCoachingTracker();
   }
 
   function renderCoachingTracker() {
