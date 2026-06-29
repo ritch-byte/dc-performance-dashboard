@@ -3523,8 +3523,8 @@
   // ══ Coaching Log Tracker ══
   // After deploying the Google Apps Script + publishing the Logs sheet as CSV, paste the two URLs below.
   // Leave both empty to run in this-browser-only (localStorage) mode.
-  const COACH_LOG_POST_URL = '';  // Apps Script Web App /exec URL (writes a log)
-  const COACH_LOG_CSV_URL  = '';  // Published-to-web CSV URL of the Logs sheet (reads the tracker)
+  const COACH_LOG_POST_URL = 'https://script.google.com/macros/s/AKfycbz0biy1pd4UC-iE_Ph3Ycbl_TcKu-6qrii3HXRmIhUjS4NEG4lJHnSmu0SvwnxO2i7O/exec';  // Apps Script Web App /exec URL (writes a log)
+  const COACH_LOG_CSV_URL  = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSr9FXCEpsr01V3nxJhB4UZIH2AJqteMzsJ3YoNQO_r33FzI8XE53Xs0D1k21RI2AAfci5y79H89HBv/pub?gid=0&single=true&output=csv';  // Published-to-web CSV URL of the Logs sheet (reads the tracker)
   let _coachLogs = [], _coachLogsLoaded = false;
   const _loggedThisSession = new Set();
 
