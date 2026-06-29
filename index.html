@@ -873,7 +873,11 @@
     <!-- ── Coaching Log Section ── -->
     <div id="coachingSection" style="display:none;">
       <div class="content-header">
-        <div class="page-title">Coaching Log Generator</div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <div class="page-title">Coaching Log</div>
+          <button id="clTabGen" class="cl-chip on-navy" onclick="clShowTab('gen')">✍️ Generator</button>
+          <button id="clTabTracker" class="cl-chip" onclick="clShowTab('tracker')">📋 Weekly Tracker</button>
+        </div>
         <div id="clModeSubtitle" class="ch-right" style="font-size:12px;color:var(--slate);font-weight:500">Weekly 1-on-1 Coaching Log</div>
       </div>
       <div id="coachingBody" style="padding:0 24px 32px;display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start">
@@ -1133,6 +1137,26 @@
           </div>
         </div>
 
+      </div>
+
+      <!-- Coaching Tracker -->
+      <div id="coachingTrackerBody" style="display:none;padding:0 24px 32px">
+        <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:18px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <label class="cl-label" style="margin:0">Month</label>
+              <select id="clTrackMonth" class="cl-input" style="width:auto" onchange="renderCoachingTracker()"></select>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <span id="clTrackStatus" style="font-size:11px;color:var(--slate)"></span>
+              <button onclick="loadCoachingLogs(true)" class="cl-chip">↻ Refresh</button>
+            </div>
+          </div>
+          <div id="clTrackTable" style="overflow-x:auto"></div>
+          <div style="margin-top:12px;background:#EEF3FB;border:1px solid #C9D8F0;border-radius:10px;padding:10px 14px;font-size:11px;color:#142E5C">
+            Each rep needs <b>1 coaching log per week</b>. <span style="color:#0E9F6E;font-weight:700">●&nbsp;Green</span> = coached · <span style="color:#C00;font-weight:700">●&nbsp;Red</span> = none yet · <span style="color:#999;font-weight:700">●&nbsp;Grey</span> = week not due yet. Sending a coaching log (<b>Copy email</b>) records one automatically.
+          </div>
+        </div>
       </div>
     </div>
 
@@ -3496,6 +3520,161 @@
   };
   window._clGeneratedWeekly = null;
 
+  // ══ Coaching Log Tracker ══
+  // After deploying the Google Apps Script + publishing the Logs sheet as CSV, paste the two URLs below.
+  // Leave both empty to run in this-browser-only (localStorage) mode.
+  const COACH_LOG_POST_URL = '';  // Apps Script Web App /exec URL (writes a log)
+  const COACH_LOG_CSV_URL  = '';  // Published-to-web CSV URL of the Logs sheet (reads the tracker)
+  let _coachLogs = [], _coachLogsLoaded = false;
+  const _loggedThisSession = new Set();
+
+  function clToast(msg) {
+    let t = document.getElementById('clToast');
+    if (!t) {
+      t = document.createElement('div'); t.id = 'clToast';
+      t.style.cssText = 'position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:#0C1F42;color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:600;z-index:9999;opacity:0;transition:opacity .2s;box-shadow:0 4px 14px rgba(0,0,0,.25)';
+      document.body.appendChild(t);
+    }
+    t.textContent = msg; t.style.opacity = '1';
+    clearTimeout(t._h); t._h = setTimeout(() => { t.style.opacity = '0'; }, 2800);
+  }
+
+  function clShowTab(tab) {
+    const gen = tab !== 'tracker';
+    $('coachingBody').style.display = gen ? 'grid' : 'none';
+    $('coachingTrackerBody').style.display = gen ? 'none' : '';
+    $('clTabGen').classList.toggle('on-navy', gen);
+    $('clTabTracker').classList.toggle('on-navy', !gen);
+    $('clModeSubtitle').style.display = gen ? '' : 'none';
+    if (!gen) { buildTrackMonthSelect(); loadCoachingLogs(false); }
+  }
+
+  function buildTrackMonthSelect() {
+    const sel = $('clTrackMonth'); if (!sel || sel.options.length) return;
+    let [y, m] = localIso(new Date()).split('-').map(Number);
+    while (y > 2026 || (y === 2026 && m >= 1)) {
+      const ym = `${y}-${String(m).padStart(2,'0')}`;
+      const opt = document.createElement('option');
+      opt.value = ym;
+      opt.textContent = new Date(y, m-1, 1).toLocaleDateString('en-US', { month:'long', year:'numeric' });
+      sel.appendChild(opt);
+      m--; if (m === 0) { m = 12; y--; }
+    }
+  }
+
+  function parseCoachCSV(text) {
+    const lines = text.trim().split(/\r?\n/);
+    if (lines.length < 2) return [];
+    const hdr = splitLine(lines[0]).map(h => h.trim().toLowerCase());
+    return lines.slice(1).map(line => {
+      const c = splitLine(line); const o = {};
+      hdr.forEach((h, i) => o[h] = (c[i] || '').trim());
+      return o;
+    }).filter(o => o.rep);
+  }
+
+  async function loadCoachingLogs(force) {
+    if (_coachLogsLoaded && !force) { renderCoachingTracker(); return; }
+    const status = $('clTrackStatus');
+    if (COACH_LOG_CSV_URL) {
+      if (status) status.textContent = 'Loading…';
+      try {
+        const res = await fetch(COACH_LOG_CSV_URL + (COACH_LOG_CSV_URL.includes('?') ? '&' : '?') + 't=' + Date.now());
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        _coachLogs = parseCoachCSV(await res.text());
+        _coachLogsLoaded = true;
+        if (status) status.textContent = 'Synced ' + new Date().toLocaleTimeString();
+      } catch (err) {
+        if (status) status.textContent = 'Could not load sheet — ' + err.message;
+      }
+    } else {
+      try { _coachLogs = JSON.parse(localStorage.getItem('oaCoachLogs') || '[]'); } catch (e) { _coachLogs = []; }
+      _coachLogsLoaded = true;
+      if (status) status.textContent = 'Local to this browser — connect a Sheet to share across TLs';
+    }
+    renderCoachingTracker();
+  }
+
+  function clPostLog(entry) {
+    if (!COACH_LOG_POST_URL) return;
+    try {
+      fetch(COACH_LOG_POST_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(entry),
+        mode: 'no-cors',
+      });
+    } catch (e) {}
+  }
+
+  function clLogCoaching() {
+    const rep = $('clTmName').value.trim();
+    if (!rep) return;
+    const squad = $('clSquad').value;
+    const date = $('clConvoDate').value || localIso(new Date());
+    const weekOf = getMondayIso(date);
+    const key = rep.toLowerCase() + '|' + weekOf;
+    if (_loggedThisSession.has(key)) return;  // don't double-log the same rep/week from re-copies
+    _loggedThisSession.add(key);
+    const level = (CL_LEVELS.find(l => l.id === _clState.level) || {}).label || _clState.level;
+    const topic = window._clQuickTopic ||
+      ({ weekly:'Weekly Coaching', violation:'Post-Booking Cadence', sbi:'General Performance', pip:'PIP', quick:'Quick' }[_clState.mode] || 'Coaching');
+    const coach = ($('clSBICoach') && $('clSBICoach').value.trim()) ||
+                  ($('clWkCoachName') && $('clWkCoachName').value.trim()) || 'Ritch';
+    const entry = { timestamp: new Date().toISOString(), date, weekof: weekOf, squad, rep, level, topic, coach };
+    _coachLogs.push(entry);  // optimistic — shows immediately in the tracker
+    if (COACH_LOG_POST_URL) {
+      clPostLog(entry);
+    } else {
+      try { const a = JSON.parse(localStorage.getItem('oaCoachLogs') || '[]'); a.push(entry); localStorage.setItem('oaCoachLogs', JSON.stringify(a)); } catch (e) {}
+    }
+    clToast(`✓ Logged coaching · ${rep} · week of ${getWeekDateRange(weekOf)}`);
+    if ($('coachingTrackerBody') && $('coachingTrackerBody').style.display !== 'none') renderCoachingTracker();
+  }
+
+  function renderCoachingTracker() {
+    const sel = $('clTrackMonth');
+    const ym = (sel && sel.value) || localIso(new Date()).slice(0, 7);
+    const weeks = getWeeksForMonth(ym);           // array of Monday ISO strings
+    const todayMon = getMondayIso(localIso(new Date()));
+    const counts = {};
+    _coachLogs.forEach(l => {
+      const d = (l.date || '').slice(0, 10); if (!d) return;
+      let wk; try { wk = getMondayIso(d); } catch (e) { return; }
+      const k = (l.rep || '').trim().toLowerCase() + '|' + wk;
+      counts[k] = (counts[k] || 0) + 1;
+    });
+    const NAVY = '#0C1F42';
+    if (!weeks.length) { $('clTrackTable').innerHTML = '<div style="padding:20px;color:var(--slate);font-size:13px">No weeks for this month yet.</div>'; return; }
+    let html = '<table style="border-collapse:collapse;width:100%;font-size:12px"><thead><tr>';
+    html += `<th style="text-align:left;padding:8px 10px;background:${NAVY};color:#fff;position:sticky;left:0;min-width:170px">SDR</th>`;
+    weeks.forEach((mon, i) => {
+      html += `<th style="padding:8px 10px;background:${NAVY};color:#fff;white-space:nowrap;text-align:center">Week ${i+1}<br><span style="font-weight:400;color:#9FB4DA;font-size:10px">${getWeekDateRange(mon)}</span></th>`;
+    });
+    html += `<th style="padding:8px 10px;background:${NAVY};color:#fff;text-align:center">Done</th></tr></thead><tbody>`;
+    ['JUMHON','RV','ACE'].forEach(sq => {
+      const reps = CL_ROSTER[sq] || [];
+      html += `<tr><td colspan="${weeks.length+2}" style="background:#EEF3FB;color:${NAVY};font-weight:800;padding:6px 10px;font-size:11px;letter-spacing:.5px">${sq}</td></tr>`;
+      reps.forEach(rep => {
+        let done = 0, due = 0, cells = '';
+        weeks.forEach(mon => {
+          const future = mon > todayMon;
+          const n = counts[rep.toLowerCase() + '|' + mon] || 0;
+          if (!future) { due++; if (n > 0) done++; }
+          let bg, fg, txt;
+          if (future) { bg = '#F1F3F7'; fg = '#999'; txt = '—'; }
+          else if (n > 0) { bg = '#E6F7EE'; fg = '#0E9F6E'; txt = '✓' + (n > 1 ? ' ' + n : ''); }
+          else { bg = '#FDECEC'; fg = '#C00'; txt = '✗'; }
+          cells += `<td style="text-align:center;padding:8px 10px;border:1px solid #eee;background:${bg};color:${fg};font-weight:700">${txt}</td>`;
+        });
+        const allDone = due > 0 && done === due;
+        html += `<tr><td style="padding:8px 10px;border:1px solid #eee;position:sticky;left:0;background:#fff">${esc(rep)}</td>${cells}<td style="text-align:center;padding:8px 10px;border:1px solid #eee;font-weight:800;color:${allDone ? '#0E9F6E' : NAVY}">${done}/${due}</td></tr>`;
+      });
+    });
+    html += '</tbody></table>';
+    $('clTrackTable').innerHTML = html;
+  }
+
   function clInit() {
     if (_clInited) return;
     _clInited = true;
@@ -4282,6 +4461,7 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
     }
     btn.textContent = 'Copied ✓'; btn.style.background = '#0E9F6E';
     setTimeout(() => { btn.textContent = 'Copy email'; btn.style.background = '#D6006D'; }, 1800);
+    clLogCoaching();  // record this coaching in the Weekly Tracker
   }
   async function clCopySubject() {
     try { await navigator.clipboard.writeText(window._clEmailSubject || ''); } catch {}
