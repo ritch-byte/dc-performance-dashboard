@@ -3563,9 +3563,10 @@
   function clSBIPickViolation() {
     const sel = $('clSBIViolation'), note = $('clSBIViolationNote');
     const item = _clViolationMap[sel.value];
-    if (!item) { if (note) note.style.display = 'none'; return; }
+    if (!item) { if (note) note.style.display = 'none'; clRender(); return; }
     _clState.level = clActionToLevel(item.action);
-    $('clSBIPolicy').value = `OA Employee Handbook, Code of Conduct §${item.code} (${item.cat}): ${item.desc}. Classified as a ${item.level} offense; prescribed first-instance action under the Table of Violations is ${item.action}.`;
+    // The handbook citation is rendered as its own "Policy reference" line in the email,
+    // so leave the Policy/standard field for the warm, plain-language standard.
     if (note) {
       note.style.display = '';
       note.innerHTML = item.action === 'Dismissal'
@@ -4066,6 +4067,7 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
     };
     const sect = (label, body) => `<tr><td style="padding:12px 20px 0"><div style="font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:${MAG};margin-bottom:3px">${label}</div><div style="font-size:13px;line-height:1.55;color:${INK}">${body || '<span style="color:#aaa;font-style:italic">—</span>'}</div></td></tr>`;
     const coach = ($('clSBICoach') && $('clSBICoach').value.trim()) || 'Your Team Lead';
+    const vItem = _clViolationMap[($('clSBIViolation') && $('clSBIViolation').value) || ''];
     // Softer framing for a TL→rep coaching note (verbal = supportive, not disciplinary)
     const sbiBanner = { verbal:'COACHING NOTE', written:'WRITTEN WARNING · PERSONNEL FILE', final:'FINAL WRITTEN WARNING · PERSONNEL FILE' }[lvl.id] || lvl.banner;
     const sbiClose = {
@@ -4093,6 +4095,7 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
         ${sect('HOW I CAN SUPPORT YOU', f.support)}
         ${f.prior ? sect('PRIOR COACHING ON RECORD', f.prior) : ''}
         ${f.followUp ? sect('CHECK-IN', clFmtDate(f.followUp)) : ''}
+        ${vItem ? `<tr><td style="padding:12px 20px 0"><div style="font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:${SLATE};margin-bottom:3px">Policy reference</div><div style="font-size:11px;line-height:1.5;color:${SLATE}">OA Employee Handbook · Code of Conduct §${esc(vItem.code)} (${esc(vItem.cat)}) — ${esc(vItem.desc)}. ${esc(vItem.level)} offense; prescribed first-instance corrective action: ${esc(vItem.action)}.</div></td></tr>` : ''}
         <tr><td style="padding:14px 20px">
           <div style="background:${closeBg};border-left:3px solid ${closeBar};padding:10px 14px;font-size:12px;color:${INK};line-height:1.5">
             ${sbiClose}
@@ -4115,6 +4118,7 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
       f.support     ? 'HOW I CAN SUPPORT YOU\n' + f.support : '',
       f.prior       ? 'PRIOR COACHING\n' + f.prior : '',
       f.followUp    ? 'CHECK-IN: ' + clFmtDate(f.followUp) : '',
+      vItem ? `POLICY REFERENCE: OA Employee Handbook Code of Conduct §${vItem.code} (${vItem.cat}) — ${vItem.desc}. ${vItem.level} offense; prescribed first-instance corrective action: ${vItem.action}.` : '',
       '', sbiClose, '', coach + (ccHR ? ' | cc: HR' : '')
     ].filter(Boolean).join('\n');
     window._clEmailPlain = plain;
