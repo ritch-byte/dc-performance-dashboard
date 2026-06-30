@@ -3849,18 +3849,29 @@ ${notes}`;
         weeks.forEach(mon => {
           const future = mon > todayMon;
           const entries = _trackCellMap[rep.toLowerCase() + '|' + mon] || [];
-          const n = entries.length;
-          if (!future) { due++; if (n > 0) done++; }
-          let bg, fg, inner, attr = '';
-          if (n > 0) {
+          // Only Weekly / Performance coaching satisfies the weekly cadence. Violation & PIP don't.
+          const qualifying = entries.filter(e => { const t = clCoachType(e.topic).label; return t === 'Weekly' || t === 'Performance'; });
+          if (!future) { due++; if (qualifying.length) done++; }
+          let bg, fg, inner;
+          if (qualifying.length) {
             bg = '#E6F7EE'; fg = '#0E9F6E';
-            const coachName = (entries[entries.length-1].coach || '').trim();
-            inner = `<div style="font-size:14px;line-height:1">✓${n > 1 ? ' ' + n : ''}</div>` +
-                    (coachName ? `<div style="font-size:10px;font-weight:600;color:#0b7d57;margin-top:2px">${esc(coachName)}</div>` : '');
-            const tip = entries.map(e => `${(e.date||'').slice(0,10)} · ${e.coach||'—'} · ${clCoachType(e.topic).label}${e.summary ? ': ' + e.summary : ''}`).join('\n');
-            attr = ` title="${esc(tip)}" onclick="clShowSessions('${js(rep)}','${mon}')"`;
+            const last = qualifying[qualifying.length-1];
+            const ty = clCoachType(last.topic), coachName = (last.coach || '').trim();
+            inner = `<div style="font-size:14px;line-height:1">✓${qualifying.length > 1 ? ' ' + qualifying.length : ''}</div>` +
+                    `<div style="font-size:9px;font-weight:800;letter-spacing:.3px;color:${ty.fg};margin-top:2px">${ty.label.toUpperCase()}</div>` +
+                    (coachName ? `<div style="font-size:10px;font-weight:600;color:#0b7d57">${esc(coachName)}</div>` : '');
+          } else if (entries.length) {
+            // Only a violation / PIP was logged — recorded, but does NOT count as the weekly coaching
+            bg = '#FFF7E6'; fg = '#C97000';
+            const last = entries[entries.length-1];
+            const ty = clCoachType(last.topic), coachName = (last.coach || '').trim();
+            inner = `<div style="font-size:11px;font-weight:800;letter-spacing:.3px;color:${ty.fg}">${ty.label.toUpperCase()}</div>` +
+                    (coachName ? `<div style="font-size:10px;font-weight:600;color:#9a6a00">${esc(coachName)}</div>` : '') +
+                    `<div style="font-size:9px;color:#b08300">no weekly</div>`;
           } else if (future) { bg = '#F1F3F7'; fg = '#999'; inner = '—'; }
           else { bg = '#FDECEC'; fg = '#C00'; inner = '✗'; }
+          const tip = entries.map(e => `${(e.date||'').slice(0,10)} · ${e.coach||'—'} · ${clCoachType(e.topic).label}${e.summary ? ': ' + e.summary : ''}`).join('\n');
+          const attr = entries.length ? ` title="${esc(tip)}" onclick="clShowSessions('${js(rep)}','${mon}')"` : '';
           const cursor = attr ? 'cursor:pointer;' : '';
           cells += `<td${attr} style="${cursor}text-align:center;padding:8px 10px;border:1px solid #eee;background:${bg};color:${fg};font-weight:700">${inner}</td>`;
         });
