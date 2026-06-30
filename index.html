@@ -3601,7 +3601,7 @@
     const name = ((_profileMember && _profileMember.display) || '').trim().toLowerCase();
     const logs = _coachLogs
       .filter(l => (l.rep || '').trim().toLowerCase() === name)
-      .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      .sort((a, b) => (b.timestamp || b.date || '').localeCompare(a.timestamp || a.date || ''));
     if (!logs.length) {
       el.innerHTML = '<div style="color:var(--slate);font-size:13px">No coaching logged yet for this rep.' + (COACH_LOG_CSV_URL ? '' : ' (Tracker isn\'t connected to a sheet.)') + '</div>';
       return;
