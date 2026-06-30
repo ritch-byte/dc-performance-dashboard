@@ -1008,7 +1008,14 @@
             <div style="display:flex;gap:12px">
               <div class="cl-field" style="flex:1">
                 <label class="cl-label">Coach name</label>
-                <input type="text" id="clWkCoachName" class="cl-input" placeholder="e.g. Ritch" value="Ritch">
+                <select id="clWkCoachName" class="cl-input">
+                  <option>Vincent Gadier</option>
+                  <option>Jumar Vere</option>
+                  <option>Alvin Bayhon</option>
+                  <option>Angelica Tanate</option>
+                  <option>Jonathan Jabonete</option>
+                  <option selected>Ritch Joy Manipol</option>
+                </select>
               </div>
 <div class="cl-field" style="flex:1">
                 <label class="cl-label">Next session date</label>
@@ -1030,7 +1037,14 @@
               </div>
               <div class="cl-field" style="margin-top:4px">
                 <label class="cl-label">From <span style="font-weight:400;color:var(--slate)">— who's sending this</span></label>
-                <input id="clSBICoach" class="cl-input" value="Ritch" oninput="clRender()">
+                <select id="clSBICoach" class="cl-input" onchange="clRender()">
+                  <option>Vincent Gadier</option>
+                  <option>Jumar Vere</option>
+                  <option>Alvin Bayhon</option>
+                  <option>Angelica Tanate</option>
+                  <option>Jonathan Jabonete</option>
+                  <option selected>Ritch Joy Manipol</option>
+                </select>
               </div>
             </div>
             <div class="cl-field">
@@ -3532,8 +3546,44 @@
   // Leave both empty to run in this-browser-only (localStorage) mode.
   const COACH_LOG_POST_URL = 'https://script.google.com/macros/s/AKfycbz0biy1pd4UC-iE_Ph3Ycbl_TcKu-6qrii3HXRmIhUjS4NEG4lJHnSmu0SvwnxO2i7O/exec';  // Apps Script Web App /exec URL (writes a log)
   const COACH_LOG_CSV_URL  = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSr9FXCEpsr01V3nxJhB4UZIH2AJqteMzsJ3YoNQO_r33FzI8XE53Xs0D1k21RI2AAfci5y79H89HBv/pub?gid=0&single=true&output=csv';  // Published-to-web CSV URL of the Logs sheet (reads the tracker)
-  let _coachLogs = [], _coachLogsLoaded = false;
+  let _coachLogs = [], _coachLogsLoaded = false, _trackCellMap = {};
   const _loggedThisSession = new Set();
+
+  function clSessionSummary() {
+    const v = id => { const el = $(id); return el && el.value ? el.value.trim() : ''; };
+    let s;
+    const m = _clState.mode;
+    if (m === 'weekly')         s = v('clWkObs') || v('clWkGoal');
+    else if (m === 'violation') s = _clState.useEdited ? _clState.behaviorEdited : v('clBehavior');
+    else if (m === 'pip')       s = v('clPIPGap');
+    else                        s = v('clSBISituation') || v('clSBIBehavior');  // quick / sbi
+    s = (s || '').replace(/\s+/g, ' ').trim();
+    return s.length > 200 ? s.slice(0, 197) + '…' : s;
+  }
+
+  function clShowSessions(rep, weekKey) {
+    const entries = _trackCellMap[(rep || '').toLowerCase() + '|' + weekKey] || [];
+    let ov = document.getElementById('clSessOverlay');
+    if (!ov) {
+      ov = document.createElement('div'); ov.id = 'clSessOverlay';
+      ov.style.cssText = 'position:fixed;inset:0;background:rgba(12,31,66,.45);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px';
+      ov.onclick = e => { if (e.target === ov) ov.style.display = 'none'; };
+      document.body.appendChild(ov);
+    }
+    const rows = entries.map(e => `
+      <div style="border:1px solid #eee;border-radius:8px;padding:12px;margin-bottom:10px">
+        <div style="font-size:12px;color:#5B6678;margin-bottom:4px">${esc((e.date||'').slice(0,10))} · <b style="color:#0C1F42">${esc(e.coach||'—')}</b> · ${esc(e.level||'')} · ${esc(e.topic||'')}</div>
+        <div style="font-size:13px;color:#1A2233;line-height:1.5">${esc(e.summary || '(no summary captured)')}</div>
+      </div>`).join('');
+    ov.innerHTML = `<div style="background:#fff;border-radius:12px;max-width:560px;width:100%;max-height:80vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,.3)">
+      <div style="background:#0C1F42;color:#fff;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;gap:12px">
+        <div><div style="font-weight:800">${esc(rep)}</div><div style="font-size:11px;color:#9FB4DA">Week of ${getWeekDateRange(weekKey)} · ${entries.length} session${entries.length===1?'':'s'}</div></div>
+        <button onclick="document.getElementById('clSessOverlay').style.display='none'" style="background:transparent;border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:12px">Close</button>
+      </div>
+      <div style="padding:16px 18px">${rows || '<div style="color:#999">No sessions.</div>'}</div>
+    </div>`;
+    ov.style.display = 'flex';
+  }
 
   function clToast(msg) {
     let t = document.getElementById('clToast');
@@ -3620,9 +3670,12 @@
     const level = (CL_LEVELS.find(l => l.id === _clState.level) || {}).label || _clState.level;
     const topic = window._clQuickTopic ||
       ({ weekly:'Weekly Coaching', violation:'Post-Booking Cadence', sbi:'General Performance', pip:'PIP', quick:'Quick' }[_clState.mode] || 'Coaching');
-    const coach = ($('clSBICoach') && $('clSBICoach').value.trim()) ||
-                  ($('clWkCoachName') && $('clWkCoachName').value.trim()) || 'Ritch';
-    const entry = { timestamp: new Date().toISOString(), date, weekof: weekOf, squad, rep, level, topic, coach };
+    const coach = ((_clState.mode === 'weekly' ? ($('clWkCoachName') && $('clWkCoachName').value) : ($('clSBICoach') && $('clSBICoach').value))
+                   || ($('clSBICoach') && $('clSBICoach').value)
+                   || ($('clWkCoachName') && $('clWkCoachName').value)
+                   || 'Ritch Joy Manipol').trim();
+    const summary = clSessionSummary();
+    const entry = { timestamp: new Date().toISOString(), date, weekof: weekOf, squad, rep, level, topic, coach, summary };
     _coachLogs.push(entry);  // optimistic — shows immediately in the tracker
     if (COACH_LOG_POST_URL) {
       clPostLog(entry);
@@ -3638,16 +3691,29 @@
     const ym = (sel && sel.value) || localIso(new Date()).slice(0, 7);
     const weeks = getWeeksForMonth(ym);           // array of Monday ISO strings
     const todayMon = getMondayIso(localIso(new Date()));
-    const counts = {};
+    _trackCellMap = {};
+    const byCoach = {};
     _coachLogs.forEach(l => {
       const d = (l.date || '').slice(0, 10); if (!d) return;
       let wk; try { wk = getMondayIso(d); } catch (e) { return; }
       const k = (l.rep || '').trim().toLowerCase() + '|' + wk;
-      counts[k] = (counts[k] || 0) + 1;
+      (_trackCellMap[k] = _trackCellMap[k] || []).push(l);
+      if (weeks.indexOf(wk) >= 0) { const c = (l.coach || '—').trim() || '—'; byCoach[c] = (byCoach[c] || 0) + 1; }
     });
     const NAVY = '#0C1F42';
     if (!weeks.length) { $('clTrackTable').innerHTML = '<div style="padding:20px;color:var(--slate);font-size:13px">No weeks for this month yet.</div>'; return; }
-    let html = '<table style="border-collapse:collapse;width:100%;font-size:12px"><thead><tr>';
+    const js = s => String(s).replace(/\\/g, '\\\\').replace(/"/g, '&quot;').replace(/'/g, "\\'");
+
+    // Per-coach tally for the month
+    const coaches = Object.keys(byCoach).sort((a, b) => byCoach[b] - byCoach[a]);
+    let html = '';
+    if (coaches.length) {
+      html += '<div style="margin-bottom:14px"><div style="font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--slate);margin-bottom:6px">Coaching by leader · this month</div><div style="display:flex;flex-wrap:wrap;gap:8px">' +
+        coaches.map(c => `<span style="background:#EEF3FB;border:1px solid #C9D8F0;border-radius:999px;padding:4px 12px;font-size:12px;color:#142E5C"><b>${esc(c)}</b> &nbsp;${byCoach[c]}</span>`).join('') +
+        '</div></div>';
+    }
+
+    html += '<table style="border-collapse:collapse;width:100%;font-size:12px"><thead><tr>';
     html += `<th style="text-align:left;padding:8px 10px;background:${NAVY};color:#fff;position:sticky;left:0;min-width:170px">SDR</th>`;
     weeks.forEach((mon, i) => {
       html += `<th style="padding:8px 10px;background:${NAVY};color:#fff;white-space:nowrap;text-align:center">Week ${i+1}<br><span style="font-weight:400;color:#9FB4DA;font-size:10px">${getWeekDateRange(mon)}</span></th>`;
@@ -3660,13 +3726,21 @@
         let done = 0, due = 0, cells = '';
         weeks.forEach(mon => {
           const future = mon > todayMon;
-          const n = counts[rep.toLowerCase() + '|' + mon] || 0;
+          const entries = _trackCellMap[rep.toLowerCase() + '|' + mon] || [];
+          const n = entries.length;
           if (!future) { due++; if (n > 0) done++; }
-          let bg, fg, txt;
-          if (future) { bg = '#F1F3F7'; fg = '#999'; txt = '—'; }
-          else if (n > 0) { bg = '#E6F7EE'; fg = '#0E9F6E'; txt = '✓' + (n > 1 ? ' ' + n : ''); }
-          else { bg = '#FDECEC'; fg = '#C00'; txt = '✗'; }
-          cells += `<td style="text-align:center;padding:8px 10px;border:1px solid #eee;background:${bg};color:${fg};font-weight:700">${txt}</td>`;
+          let bg, fg, inner, attr = '';
+          if (n > 0) {
+            bg = '#E6F7EE'; fg = '#0E9F6E';
+            const coachName = (entries[entries.length-1].coach || '').trim();
+            inner = `<div style="font-size:14px;line-height:1">✓${n > 1 ? ' ' + n : ''}</div>` +
+                    (coachName ? `<div style="font-size:10px;font-weight:600;color:#0b7d57;margin-top:2px">${esc(coachName)}</div>` : '');
+            const tip = entries.map(e => `${(e.date||'').slice(0,10)} · ${e.coach||'—'} · ${e.topic||''}${e.summary ? ': ' + e.summary : ''}`).join('\n');
+            attr = ` title="${esc(tip)}" onclick="clShowSessions('${js(rep)}','${mon}')"`;
+          } else if (future) { bg = '#F1F3F7'; fg = '#999'; inner = '—'; }
+          else { bg = '#FDECEC'; fg = '#C00'; inner = '✗'; }
+          const cursor = attr ? 'cursor:pointer;' : '';
+          cells += `<td${attr} style="${cursor}text-align:center;padding:8px 10px;border:1px solid #eee;background:${bg};color:${fg};font-weight:700">${inner}</td>`;
         });
         const allDone = due > 0 && done === due;
         html += `<tr><td style="padding:8px 10px;border:1px solid #eee;position:sticky;left:0;background:#fff">${esc(rep)}</td>${cells}<td style="text-align:center;padding:8px 10px;border:1px solid #eee;font-weight:800;color:${allDone ? '#0E9F6E' : NAVY}">${done}/${due}</td></tr>`;
