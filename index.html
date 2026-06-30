@@ -905,6 +905,16 @@
             <button id="clModePIP" class="cl-chip" onclick="clSetMode('pip')">Improvement Plan (PIP)</button>
           </div>
 
+          <div class="cl-field" style="margin-bottom:10px">
+            <label class="cl-label">Log as <span style="font-weight:400;color:var(--slate)">— coaching type recorded in the tracker (defaults to the template, override anytime)</span></label>
+            <select id="clCoachTypeSel" class="cl-input">
+              <option value="weekly">Weekly Coaching</option>
+              <option value="performance" selected>Performance Coaching</option>
+              <option value="violation">Violation</option>
+              <option value="pip">PIP</option>
+            </select>
+          </div>
+
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px">
             <div class="cl-field">
               <label class="cl-label">Squad</label>
@@ -3781,8 +3791,12 @@ ${notes}`;
     if (_loggedThisSession.has(key)) return;  // don't double-log the same rep/week from re-copies
     _loggedThisSession.add(key);
     const level = (CL_LEVELS.find(l => l.id === _clState.level) || {}).label || _clState.level;
-    const topic = window._clQuickTopic ||
-      ({ weekly:'Weekly Coaching', violation:'Post-Booking Cadence', sbi:'General Performance', pip:'PIP', quick:'Quick' }[_clState.mode] || 'Coaching');
+    // Coaching type comes from the "Log as" selector → encoded into topic so the tracker classifies it.
+    const tv = ($('clCoachTypeSel') && $('clCoachTypeSel').value) || 'performance';
+    const topic = tv === 'weekly'    ? 'Weekly Coaching'
+                : tv === 'violation' ? 'Post-Booking Cadence'
+                : tv === 'pip'       ? 'PIP'
+                : (window._clQuickTopic || 'General Performance');
     const coach = ((_clState.mode === 'weekly' ? ($('clWkCoachName') && $('clWkCoachName').value) : ($('clSBICoach') && $('clSBICoach').value))
                    || ($('clSBICoach') && $('clSBICoach').value)
                    || ($('clWkCoachName') && $('clWkCoachName').value)
@@ -4048,6 +4062,7 @@ ${notes}`;
     $('clModeWeekly').classList.toggle('on-navy',    mode === 'weekly');
     $('clModeSBI').classList.toggle('on-navy',       mode === 'sbi');
     $('clModePIP').classList.toggle('on-navy',       mode === 'pip');
+    if ($('clCoachTypeSel')) $('clCoachTypeSel').value = ({ weekly:'weekly', violation:'violation', pip:'pip', sbi:'performance', quick:'performance' }[mode] || 'performance');
     const subtitles = { quick:'Quick Coaching · one-line → AI draft', weekly:'Weekly 1-on-1 Coaching Log', violation:'Post-Booking Cadence · 6-Step Standard', sbi:'General Performance Coaching · SBI Model', pip:'Performance Improvement Plan' };
     $('clModeSubtitle').textContent = subtitles[mode] || '';
     $('clConvoDateLabel').textContent = mode === 'weekly' ? 'Session date' : 'Conversation date';
