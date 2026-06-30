@@ -831,6 +831,10 @@
         </div>
       </div>
       <div class="profile-att-area" style="border-top:1px solid var(--border)">
+        <div class="profile-att-title">Show-up Rate — by Month</div>
+        <div id="profileMonthlyShowup" style="margin-top:14px"></div>
+      </div>
+      <div class="profile-att-area" style="border-top:1px solid var(--border)">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:12px;flex-wrap:wrap">
           <div class="profile-att-title" style="margin-bottom:0">Coaching History</div>
           <button id="profileInsightsBtn" onclick="clProfileInsights()" style="font-size:11px;font-weight:700;color:#fff;background:#D6006D;border:none;border-radius:8px;padding:6px 14px;cursor:pointer">✨ Coaching insights</button>
@@ -2067,6 +2071,7 @@
     renderProfileChart();
     renderProfileAttendance(memberId);
     renderProfileShowupChart(memberId);
+    renderProfileMonthlyShowup();
     renderProfileCoaching();
     if (!_coachLogsLoaded) loadCoachingLogs(false).then(() => { if (_profileMember) renderProfileCoaching(); });
   }
@@ -3707,6 +3712,34 @@ ${notes}`;
     } finally {
       btn.disabled = false; btn.textContent = '✨ Coaching insights';
     }
+  }
+
+  function renderProfileMonthlyShowup() {
+    const el = $('profileMonthlyShowup'); if (!el || !_profileMember) return;
+    const id = _profileMember.id;
+    const byMonth = {};
+    for (const row of rawRows) {
+      if (resolveAgent(row.agent) !== id) continue;
+      const d = normalizeDate(row.rawDate); if (!d) continue;
+      const o = byMonth[d.slice(0, 7)] || (byMonth[d.slice(0, 7)] = { yes: 0, happened: 0 });
+      for (const st of [row.sp1status, row.sp2status]) {
+        if (st === 'yes') { o.yes++; o.happened++; }
+        else if (st === 'no' || st === 'cancelled') { o.happened++; }
+      }
+    }
+    const months = Object.keys(byMonth).filter(ym => byMonth[ym].happened > 0).sort();
+    if (!months.length) { el.innerHTML = '<div style="color:var(--slate);font-size:13px">No completed meetings recorded yet.</div>'; return; }
+    const color = p => p >= 80 ? '#16a34a' : p >= 50 ? '#ea580c' : '#dc2626';
+    el.innerHTML = '<div style="display:flex;flex-wrap:wrap;gap:8px">' + months.map(ym => {
+      const o = byMonth[ym], p = Math.round(o.yes / o.happened * 100);
+      const [y, m] = ym.split('-').map(Number);
+      const lbl = new Date(y, m-1, 1).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+      return `<div style="min-width:86px;border:1px solid var(--border);border-radius:8px;padding:8px 10px;text-align:center">
+        <div style="font-size:11px;color:var(--slate);margin-bottom:3px">${lbl}</div>
+        <div style="font-size:18px;font-weight:800;color:${color(p)}">${p}%</div>
+        <div style="font-size:10px;color:var(--slate)">${o.yes}/${o.happened} showed</div>
+      </div>`;
+    }).join('') + '</div>';
   }
 
   function exportProfileCsv() {
