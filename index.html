@@ -829,6 +829,14 @@
           <span style="color:#d1d5db">● No data</span>
         </div>
       </div>
+      <div class="profile-att-area" style="border-top:1px solid var(--border)">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:12px;flex-wrap:wrap">
+          <div class="profile-att-title" style="margin-bottom:0">Coaching History</div>
+          <button id="profileInsightsBtn" onclick="clProfileInsights()" style="font-size:11px;font-weight:700;color:#fff;background:#D6006D;border:none;border-radius:8px;padding:6px 14px;cursor:pointer">✨ Coaching insights</button>
+        </div>
+        <div id="profileCoachContent"></div>
+        <div id="profileInsights" style="display:none;margin-top:14px"></div>
+      </div>
     </div>
 
     <!-- ── Team Profile Section ── -->
@@ -2048,6 +2056,8 @@
     renderProfileChart();
     renderProfileAttendance(memberId);
     renderProfileShowupChart(memberId);
+    renderProfileCoaching();
+    if (!_coachLogsLoaded) loadCoachingLogs(false).then(() => { if (_profileMember) renderProfileCoaching(); });
   }
 
   function closeProfile() {
@@ -3583,6 +3593,91 @@
       <div style="padding:16px 18px">${rows || '<div style="color:#999">No sessions.</div>'}</div>
     </div>`;
     ov.style.display = 'flex';
+  }
+
+  function renderProfileCoaching() {
+    const el = $('profileCoachContent'); if (!el) return;
+    const ins = $('profileInsights'); if (ins) { ins.style.display = 'none'; ins.innerHTML = ''; }
+    const name = ((_profileMember && _profileMember.display) || '').trim().toLowerCase();
+    const logs = _coachLogs
+      .filter(l => (l.rep || '').trim().toLowerCase() === name)
+      .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    if (!logs.length) {
+      el.innerHTML = '<div style="color:var(--slate);font-size:13px">No coaching logged yet for this rep.' + (COACH_LOG_CSV_URL ? '' : ' (Tracker isn\'t connected to a sheet.)') + '</div>';
+      return;
+    }
+    const monthWeeks = getWeeksForMonth(localIso(new Date()).slice(0, 7));
+    const thisMonth = logs.filter(l => { let wk; try { wk = getMondayIso((l.date || '').slice(0, 10)); } catch (e) { return false; } return monthWeeks.indexOf(wk) >= 0; }).length;
+    const last = logs[0];
+    const byCoach = {};
+    logs.forEach(l => { const c = (l.coach || '—').trim() || '—'; byCoach[c] = (byCoach[c] || 0) + 1; });
+    const chips = Object.keys(byCoach).sort((a, b) => byCoach[b] - byCoach[a])
+      .map(c => `<span style="background:#EEF3FB;border:1px solid #C9D8F0;border-radius:999px;padding:3px 10px;font-size:11px;color:#142E5C"><b>${esc(c)}</b> ${byCoach[c]}</span>`).join(' ');
+    const rows = logs.slice(0, 8).map(l => `
+      <div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px">
+        <div style="font-size:11px;color:var(--slate);margin-bottom:3px">${esc((l.date||'').slice(0,10))} · <b style="color:var(--ink)">${esc(l.coach||'—')}</b> · ${esc(l.level||'')} · ${esc(l.topic||'')}</div>
+        <div style="font-size:13px;color:var(--ink);line-height:1.5">${esc(l.summary || '(no summary captured)')}</div>
+      </div>`).join('');
+    el.innerHTML =
+      `<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:12px;font-size:13px;align-items:baseline">
+         <div><b style="font-size:18px;color:var(--ink)">${thisMonth}</b> <span style="color:var(--slate)">this month</span></div>
+         <div><b style="font-size:18px;color:var(--ink)">${logs.length}</b> <span style="color:var(--slate)">total logged</span></div>
+         <div style="color:var(--slate)">Last: <b style="color:var(--ink)">${esc((last.date||'').slice(0,10))}</b> by ${esc(last.coach||'—')}</div>
+       </div>
+       <div style="margin-bottom:14px">${chips}</div>
+       ${rows}
+       ${logs.length > 8 ? `<div style="font-size:11px;color:var(--slate)">+ ${logs.length - 8} earlier session(s)</div>` : ''}`;
+  }
+
+  async function clProfileInsights() {
+    const name = ((_profileMember && _profileMember.display) || '').trim();
+    const box = $('profileInsights'), btn = $('profileInsightsBtn');
+    const logs = _coachLogs
+      .filter(l => (l.rep || '').trim().toLowerCase() === name.toLowerCase())
+      .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    if (!logs.length) { box.style.display = ''; box.innerHTML = '<div style="color:var(--slate);font-size:13px">No coaching notes to analyze yet.</div>'; return; }
+    btn.disabled = true; btn.textContent = 'Analyzing…';
+    const notes = logs.map(l => `- [${(l.date||'').slice(0,10)} · ${l.topic||''} · ${l.level||''}] ${l.summary || '(no summary)'}`).join('\n');
+    const prompt = `You are a sales coaching analyst. Below are dated coaching notes a team leader logged for one BDR (Business Development Rep) named ${name} at an offshore staffing company. "DC" = Discovery Call.
+
+Read across ALL notes and synthesize patterns over time. Return ONLY valid JSON (no markdown):
+{
+  "strengths": ["consistent strength, under ~12 words", "..."],
+  "focus": ["recurring weakness / area to improve, under ~12 words", "..."],
+  "consistency": "1-2 sentences on how consistent the rep is and whether trending up or down",
+  "nextStep": "one concrete focus for the next coaching session"
+}
+Base it strictly on the notes. If there's little data, say so plainly rather than inventing.
+
+COACHING NOTES (oldest to newest):
+${notes}`;
+    try {
+      const res = await fetch('https://silver-cuchufli-071209.netlify.app/.netlify/functions/ai-coach', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 700, messages: [{ role: 'user', content: prompt }] })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error?.message || data.error || ('API ' + res.status));
+      const m = data.content[0].text.trim().match(/\{[\s\S]*\}/);
+      if (!m) throw new Error('Could not parse insights — try again.');
+      const g = JSON.parse(m[0]);
+      const list = arr => (arr && arr.length)
+        ? '<ul style="margin:4px 0 0;padding-left:18px">' + arr.map(x => `<li style="font-size:13px;color:var(--ink);margin-bottom:3px">${esc(x)}</li>`).join('') + '</ul>'
+        : '<div style="font-size:12px;color:var(--slate)">—</div>';
+      box.style.display = '';
+      box.innerHTML =
+        `<div style="background:#FAFBFE;border:1px solid var(--border);border-radius:10px;padding:14px 16px">
+           <div style="font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#0E9F6E;margin-bottom:2px">Strengths</div>${list(g.strengths)}
+           <div style="font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#C97000;margin:10px 0 2px">Focus areas</div>${list(g.focus)}
+           <div style="font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#142E5C;margin:10px 0 2px">Consistency</div><div style="font-size:13px;color:var(--ink);line-height:1.5">${esc(g.consistency || '—')}</div>
+           ${g.nextStep ? `<div style="font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#D6006D;margin:10px 0 2px">Suggested next step</div><div style="font-size:13px;color:var(--ink);line-height:1.5">${esc(g.nextStep)}</div>` : ''}
+           <div style="font-size:10px;color:var(--slate);margin-top:10px">AI synthesis from ${logs.length} logged note(s) — verify before acting.</div>
+         </div>`;
+    } catch (err) {
+      box.style.display = ''; box.innerHTML = `<div style="color:#C00;font-size:12px">Couldn't generate insights: ${esc(err.message)}</div>`;
+    } finally {
+      btn.disabled = false; btn.textContent = '✨ Coaching insights';
+    }
   }
 
   function clToast(msg) {
