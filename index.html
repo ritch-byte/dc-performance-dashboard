@@ -3571,6 +3571,24 @@
     return s.length > 200 ? s.slice(0, 197) + '…' : s;
   }
 
+  // Derive coaching type from the logged topic (weekly/violation/PIP use fixed labels; rest = performance)
+  function clCoachType(topic) {
+    const t = (topic || '').trim();
+    if (t === 'Weekly Coaching')     return { label: 'Weekly',      bg: '#E7ECFB', fg: '#1A2DB5' };
+    if (t === 'Post-Booking Cadence')return { label: 'Violation',   bg: '#FDECEC', fg: '#C00000' };
+    if (t === 'PIP')                 return { label: 'PIP',         bg: '#FFF1E0', fg: '#C97000' };
+    return { label: 'Performance', bg: '#E6F7EE', fg: '#0E9F6E' };
+  }
+  function clTypeBadge(topic) {
+    const c = clCoachType(topic);
+    return `<span style="background:${c.bg};color:${c.fg};border-radius:4px;padding:1px 7px;font-size:10px;font-weight:800;letter-spacing:.3px;text-transform:uppercase">${c.label}</span>`;
+  }
+  // Show the specific subject only when it adds info beyond the type label
+  function clTopicExtra(topic) {
+    const t = (topic || '').trim();
+    return (clCoachType(t).label === 'Performance' && t && t !== 'General Performance') ? ' · ' + esc(t) : '';
+  }
+
   function clShowSessions(rep, weekKey) {
     const entries = _trackCellMap[(rep || '').toLowerCase() + '|' + weekKey] || [];
     let ov = document.getElementById('clSessOverlay');
@@ -3582,7 +3600,7 @@
     }
     const rows = entries.map(e => `
       <div style="border:1px solid #eee;border-radius:8px;padding:12px;margin-bottom:10px">
-        <div style="font-size:12px;color:#5B6678;margin-bottom:4px">${esc((e.date||'').slice(0,10))} · <b style="color:#0C1F42">${esc(e.coach||'—')}</b> · ${esc(e.level||'')} · ${esc(e.topic||'')}</div>
+        <div style="font-size:12px;color:#5B6678;margin-bottom:4px">${esc((e.date||'').slice(0,10))} · <b style="color:#0C1F42">${esc(e.coach||'—')}</b> · ${clTypeBadge(e.topic)} · ${esc(e.level||'')}${clTopicExtra(e.topic)}</div>
         <div style="font-size:13px;color:#1A2233;line-height:1.5">${esc(e.summary || '(no summary captured)')}</div>
       </div>`).join('');
     ov.innerHTML = `<div style="background:#fff;border-radius:12px;max-width:560px;width:100%;max-height:80vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,.3)">
@@ -3615,7 +3633,7 @@
       .map(c => `<span style="background:#EEF3FB;border:1px solid #C9D8F0;border-radius:999px;padding:3px 10px;font-size:11px;color:#142E5C"><b>${esc(c)}</b> ${byCoach[c]}</span>`).join(' ');
     const rows = logs.slice(0, 8).map(l => `
       <div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px">
-        <div style="font-size:11px;color:var(--slate);margin-bottom:3px">${esc((l.date||'').slice(0,10))} · <b style="color:var(--ink)">${esc(l.coach||'—')}</b> · ${esc(l.level||'')} · ${esc(l.topic||'')}</div>
+        <div style="font-size:11px;color:var(--slate);margin-bottom:3px">${esc((l.date||'').slice(0,10))} · <b style="color:var(--ink)">${esc(l.coach||'—')}</b> · ${clTypeBadge(l.topic)} · ${esc(l.level||'')}${clTopicExtra(l.topic)}</div>
         <div style="font-size:13px;color:var(--ink);line-height:1.5">${esc(l.summary || '(no summary captured)')}</div>
       </div>`).join('');
     el.innerHTML =
@@ -3787,13 +3805,16 @@ ${notes}`;
     const weeks = getWeeksForMonth(ym);           // array of Monday ISO strings
     const todayMon = getMondayIso(localIso(new Date()));
     _trackCellMap = {};
-    const byCoach = {};
+    const byCoach = {}, byType = {};
     _coachLogs.forEach(l => {
       const d = (l.date || '').slice(0, 10); if (!d) return;
       let wk; try { wk = getMondayIso(d); } catch (e) { return; }
       const k = (l.rep || '').trim().toLowerCase() + '|' + wk;
       (_trackCellMap[k] = _trackCellMap[k] || []).push(l);
-      if (weeks.indexOf(wk) >= 0) { const c = (l.coach || '—').trim() || '—'; byCoach[c] = (byCoach[c] || 0) + 1; }
+      if (weeks.indexOf(wk) >= 0) {
+        const c = (l.coach || '—').trim() || '—'; byCoach[c] = (byCoach[c] || 0) + 1;
+        const ty = clCoachType(l.topic).label; byType[ty] = (byType[ty] || 0) + 1;
+      }
     });
     const NAVY = '#0C1F42';
     if (!weeks.length) { $('clTrackTable').innerHTML = '<div style="padding:20px;color:var(--slate);font-size:13px">No weeks for this month yet.</div>'; return; }
@@ -3805,6 +3826,12 @@ ${notes}`;
     if (coaches.length) {
       html += '<div style="margin-bottom:14px"><div style="font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--slate);margin-bottom:6px">Coaching by leader · this month</div><div style="display:flex;flex-wrap:wrap;gap:8px">' +
         coaches.map(c => `<span style="background:#EEF3FB;border:1px solid #C9D8F0;border-radius:999px;padding:4px 12px;font-size:12px;color:#142E5C"><b>${esc(c)}</b> &nbsp;${byCoach[c]}</span>`).join('') +
+        '</div></div>';
+    }
+    const types = Object.keys(byType).sort((a, b) => byType[b] - byType[a]);
+    if (types.length) {
+      html += '<div style="margin-bottom:14px"><div style="font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--slate);margin-bottom:6px">Coaching by type · this month</div><div style="display:flex;flex-wrap:wrap;gap:8px">' +
+        types.map(t => `${clTypeBadge(t === 'Weekly' ? 'Weekly Coaching' : t === 'Violation' ? 'Post-Booking Cadence' : t === 'PIP' ? 'PIP' : 'General Performance')} <span style="font-size:12px;color:#142E5C;font-weight:700;margin-left:-4px">${byType[t]}</span>`).join('&nbsp;&nbsp;') +
         '</div></div>';
     }
 
@@ -3830,7 +3857,7 @@ ${notes}`;
             const coachName = (entries[entries.length-1].coach || '').trim();
             inner = `<div style="font-size:14px;line-height:1">✓${n > 1 ? ' ' + n : ''}</div>` +
                     (coachName ? `<div style="font-size:10px;font-weight:600;color:#0b7d57;margin-top:2px">${esc(coachName)}</div>` : '');
-            const tip = entries.map(e => `${(e.date||'').slice(0,10)} · ${e.coach||'—'} · ${e.topic||''}${e.summary ? ': ' + e.summary : ''}`).join('\n');
+            const tip = entries.map(e => `${(e.date||'').slice(0,10)} · ${e.coach||'—'} · ${clCoachType(e.topic).label}${e.summary ? ': ' + e.summary : ''}`).join('\n');
             attr = ` title="${esc(tip)}" onclick="clShowSessions('${js(rep)}','${mon}')"`;
           } else if (future) { bg = '#F1F3F7'; fg = '#999'; inner = '—'; }
           else { bg = '#FDECEC'; fg = '#C00'; inner = '✗'; }
