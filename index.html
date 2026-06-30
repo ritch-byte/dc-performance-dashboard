@@ -775,6 +775,7 @@
           <div class="profile-member-name" id="profileName">--</div>
           <span class="profile-team-badge" id="profileTeamBadge">--</span>
         </div>
+        <button class="profile-back-btn" style="margin-left:auto" onclick="exportProfileCsv()">⬇ Export CSV</button>
       </div>
       <div class="profile-stats-row">
         <div class="profile-stat-box">
@@ -3706,6 +3707,77 @@ ${notes}`;
     } finally {
       btn.disabled = false; btn.textContent = '✨ Coaching insights';
     }
+  }
+
+  function exportProfileCsv() {
+    if (!_profileMember) return;
+    const id = _profileMember.id, name = _profileMember.display, team = _profileTeam ? _profileTeam.name : '';
+    const curYm = localIso(new Date()).slice(0, 7);
+
+    // One pass over DC rows → per-month DCs / leads / show-up for this rep
+    const byMonth = {};
+    const ensure = ym => (byMonth[ym] = byMonth[ym] || { dcs: 0, leads: 0, yes: 0, happened: 0 });
+    for (const row of rawRows) {
+      if (resolveAgent(row.agent) !== id) continue;
+      const d = normalizeDate(row.rawDate); if (!d) continue;
+      const o = ensure(d.slice(0, 7));
+      o.dcs += (row.sp1 ? 1 : 0) + (row.sp2 ? 1 : 0);
+      if (row.sp1) o.leads += 1;
+      for (const st of [row.sp1status, row.sp2status]) {
+        if (st === 'yes') { o.yes++; o.happened++; }
+        else if (st === 'no' || st === 'cancelled') { o.happened++; }
+      }
+    }
+    // Coaching logs for this rep, per month
+    const coachByMonth = {};
+    _coachLogs.filter(l => (l.rep || '').trim().toLowerCase() === name.trim().toLowerCase()).forEach(l => {
+      const d = (l.date || '').slice(0, 10); if (!d) return;
+      const ym = d.slice(0, 7);
+      const c = coachByMonth[ym] || (coachByMonth[ym] = { total: 0, types: {} });
+      c.total++; const t = clCoachType(l.topic).label; c.types[t] = (c.types[t] || 0) + 1;
+    });
+
+    // Month range: earliest month with any data → current month
+    const dataMonths = Object.keys(byMonth).concat(Object.keys(coachByMonth)).sort();
+    let startYm = dataMonths.length ? dataMonths[0] : curYm;
+    const months = [];
+    { let [y, m] = startYm.split('-').map(Number); const [cy, cm] = curYm.split('-').map(Number);
+      while (y < cy || (y === cy && m <= cm)) { months.push(`${y}-${String(m).padStart(2,'0')}`); m++; if (m > 12) { m = 1; y++; } } }
+
+    const pct = (a, b) => b > 0 ? Math.round((a / b) * 100) + '%' : '';
+    const cell = v => { v = (v == null ? '' : String(v)); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+    const monthLabel = ym => { const [y, m] = ym.split('-').map(Number); return new Date(y, m-1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }); };
+
+    const headers = ['Month', 'Booked DCs', 'Leads', 'Days Present', 'Days Scheduled', 'Attendance %', 'Meetings Showed', 'Meetings Completed', 'Show-up %', 'Coachings', 'Coaching Types'];
+    const tot = { dcs: 0, leads: 0, att: 0, sch: 0, yes: 0, happened: 0, coach: 0 };
+    const lines = months.map(ym => {
+      const o = byMonth[ym] || { dcs: 0, leads: 0, yes: 0, happened: 0 };
+      const a = _attLoaded ? getAgentAttForMonth(id, ym) : null;
+      const c = coachByMonth[ym] || { total: 0, types: {} };
+      tot.dcs += o.dcs; tot.leads += o.leads; tot.yes += o.yes; tot.happened += o.happened; tot.coach += c.total;
+      if (a) { tot.att += a.att; tot.sch += a.sch; }
+      const types = Object.keys(c.types).map(t => `${t} ${c.types[t]}`).join('; ');
+      return [monthLabel(ym), o.dcs, o.leads, a ? a.att : '', a ? a.sch : '', a ? pct(a.att, a.sch) : '', o.yes, o.happened, pct(o.yes, o.happened), c.total, types].map(cell).join(',');
+    });
+    const totalRow = ['TOTAL', tot.dcs, tot.leads, _attLoaded ? tot.att : '', _attLoaded ? tot.sch : '', _attLoaded ? pct(tot.att, tot.sch) : '', tot.yes, tot.happened, pct(tot.yes, tot.happened), tot.coach, ''].map(cell).join(',');
+
+    const meta = [
+      `SDR Performance Export,${cell(name)}`,
+      `Team,${cell(team)}`,
+      `Period,${cell(monthLabel(months[0]) + ' – ' + monthLabel(months[months.length-1]))}`,
+      `Generated,${cell(new Date().toLocaleString())}`,
+      _attLoaded ? '' : 'Note,Attendance not loaded — open Attendance once then re-export for those columns',
+      ''
+    ].filter(s => s !== '');
+
+    const csv = meta.join('\n') + '\n' + headers.map(cell).join(',') + '\n' + lines.join('\n') + '\n' + totalRow + '\n';
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${name.replace(/[^a-z0-9]+/gi, '_')}_performance_${localIso(new Date())}.csv`;
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    clToast(`Exported ${months.length}-month report for ${name}`);
   }
 
   function clToast(msg) {
