@@ -3587,22 +3587,34 @@
     return s.length > 200 ? s.slice(0, 197) + '…' : s;
   }
 
-  // Derive coaching type from the logged topic (weekly/violation/PIP use fixed labels; rest = performance)
-  function clCoachType(topic) {
-    const t = (topic || '').trim();
-    if (t === 'Weekly Coaching')     return { label: 'Weekly',      bg: '#E7ECFB', fg: '#1A2DB5' };
-    if (t === 'Post-Booking Cadence')return { label: 'Violation',   bg: '#FDECEC', fg: '#C00000' };
-    if (t === 'PIP')                 return { label: 'PIP',         bg: '#FFF1E0', fg: '#C97000' };
-    return { label: 'Performance', bg: '#E6F7EE', fg: '#0E9F6E' };
+  const CL_TYPE_STYLE = {
+    Weekly:      { label: 'Weekly',      bg: '#E7ECFB', fg: '#1A2DB5' },
+    Violation:   { label: 'Violation',   bg: '#FDECEC', fg: '#C00000' },
+    PIP:         { label: 'PIP',         bg: '#FFF1E0', fg: '#C97000' },
+    Performance: { label: 'Performance', bg: '#E6F7EE', fg: '#0E9F6E' },
+  };
+  // Accepts a log entry (preferred — uses its explicit `type`) OR a topic string (legacy fallback).
+  function clCoachType(x) {
+    const isObj = x && typeof x === 'object';
+    const explicit = (isObj ? (x.type || '') : '').trim().toLowerCase();
+    if (explicit.startsWith('weekly'))    return CL_TYPE_STYLE.Weekly;
+    if (explicit.startsWith('violation')) return CL_TYPE_STYLE.Violation;
+    if (explicit === 'pip')               return CL_TYPE_STYLE.PIP;
+    if (explicit.startsWith('perf'))      return CL_TYPE_STYLE.Performance;
+    const t = (isObj ? (x.topic || '') : (x || '')).trim();
+    if (t === 'Weekly Coaching')      return CL_TYPE_STYLE.Weekly;
+    if (t === 'Post-Booking Cadence') return CL_TYPE_STYLE.Violation;
+    if (t === 'PIP')                  return CL_TYPE_STYLE.PIP;
+    return CL_TYPE_STYLE.Performance;
   }
-  function clTypeBadge(topic) {
-    const c = clCoachType(topic);
+  function clTypeBadge(x) {
+    const c = clCoachType(x);
     return `<span style="background:${c.bg};color:${c.fg};border-radius:4px;padding:1px 7px;font-size:10px;font-weight:800;letter-spacing:.3px;text-transform:uppercase">${c.label}</span>`;
   }
   // Show the specific subject only when it adds info beyond the type label
-  function clTopicExtra(topic) {
-    const t = (topic || '').trim();
-    return (clCoachType(t).label === 'Performance' && t && t !== 'General Performance') ? ' · ' + esc(t) : '';
+  function clTopicExtra(x) {
+    const topic = ((x && typeof x === 'object') ? (x.topic || '') : (x || '')).trim();
+    return (clCoachType(x).label === 'Performance' && topic && topic !== 'General Performance') ? ' · ' + esc(topic) : '';
   }
 
   function clShowSessions(rep, weekKey) {
@@ -3616,7 +3628,7 @@
     }
     const rows = entries.map(e => `
       <div style="border:1px solid #eee;border-radius:8px;padding:12px;margin-bottom:10px">
-        <div style="font-size:12px;color:#5B6678;margin-bottom:4px">${esc((e.date||'').slice(0,10))} · <b style="color:#0C1F42">${esc(e.coach||'—')}</b> · ${clTypeBadge(e.topic)} · ${esc(e.level||'')}${clTopicExtra(e.topic)}</div>
+        <div style="font-size:12px;color:#5B6678;margin-bottom:4px">${esc((e.date||'').slice(0,10))} · <b style="color:#0C1F42">${esc(e.coach||'—')}</b> · ${clTypeBadge(e)} · ${esc(e.level||'')}${clTopicExtra(e)}</div>
         <div style="font-size:13px;color:#1A2233;line-height:1.5">${esc(e.summary || '(no summary captured)')}</div>
       </div>`).join('');
     ov.innerHTML = `<div style="background:#fff;border-radius:12px;max-width:560px;width:100%;max-height:80vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,.3)">
@@ -3649,7 +3661,7 @@
       .map(c => `<span style="background:#EEF3FB;border:1px solid #C9D8F0;border-radius:999px;padding:3px 10px;font-size:11px;color:#142E5C"><b>${esc(c)}</b> ${byCoach[c]}</span>`).join(' ');
     const rows = logs.slice(0, 8).map(l => `
       <div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px">
-        <div style="font-size:11px;color:var(--slate);margin-bottom:3px">${esc((l.date||'').slice(0,10))} · <b style="color:var(--ink)">${esc(l.coach||'—')}</b> · ${clTypeBadge(l.topic)} · ${esc(l.level||'')}${clTopicExtra(l.topic)}</div>
+        <div style="font-size:11px;color:var(--slate);margin-bottom:3px">${esc((l.date||'').slice(0,10))} · <b style="color:var(--ink)">${esc(l.coach||'—')}</b> · ${clTypeBadge(l)} · ${esc(l.level||'')}${clTopicExtra(l)}</div>
         <div style="font-size:13px;color:var(--ink);line-height:1.5">${esc(l.summary || '(no summary captured)')}</div>
       </div>`).join('');
     el.innerHTML =
@@ -3767,7 +3779,7 @@ ${notes}`;
       const d = (l.date || '').slice(0, 10); if (!d) return;
       const ym = d.slice(0, 7);
       const c = coachByMonth[ym] || (coachByMonth[ym] = { total: 0, types: {} });
-      c.total++; const t = clCoachType(l.topic).label; c.types[t] = (c.types[t] || 0) + 1;
+      c.total++; const t = clCoachType(l).label; c.types[t] = (c.types[t] || 0) + 1;
     });
 
     // Month range: earliest month with any data → current month
@@ -3896,18 +3908,17 @@ ${notes}`;
     if (_loggedThisSession.has(key)) return;  // don't double-log the same rep/week from re-copies
     _loggedThisSession.add(key);
     const level = (CL_LEVELS.find(l => l.id === _clState.level) || {}).label || _clState.level;
-    // Coaching type comes from the "Log as" selector → encoded into topic so the tracker classifies it.
+    // Type is stored explicitly (from the "Log as" selector); topic keeps the real subject.
     const tv = ($('clCoachTypeSel') && $('clCoachTypeSel').value) || 'performance';
-    const topic = tv === 'weekly'    ? 'Weekly Coaching'
-                : tv === 'violation' ? 'Post-Booking Cadence'
-                : tv === 'pip'       ? 'PIP'
-                : (window._clQuickTopic || 'General Performance');
+    const type = ({ weekly: 'Weekly', performance: 'Performance', violation: 'Violation', pip: 'PIP' }[tv]) || 'Performance';
+    const topic = window._clQuickTopic ||
+      ({ weekly:'Weekly Coaching', violation:'Post-Booking Cadence', sbi:'General Performance', pip:'PIP', quick:'Quick' }[_clState.mode] || 'Coaching');
     const coach = ((_clState.mode === 'weekly' ? ($('clWkCoachName') && $('clWkCoachName').value) : ($('clSBICoach') && $('clSBICoach').value))
                    || ($('clSBICoach') && $('clSBICoach').value)
                    || ($('clWkCoachName') && $('clWkCoachName').value)
                    || 'Ritch Joy Manipol').trim();
     const summary = clSessionSummary();
-    const entry = { timestamp: new Date().toISOString(), date, weekof: weekOf, squad, rep, level, topic, coach, summary };
+    const entry = { timestamp: new Date().toISOString(), date, weekof: weekOf, squad, rep, level, topic, coach, summary, type };
     _coachLogs.push(entry);  // optimistic — shows immediately in the tracker
     if (COACH_LOG_POST_URL) {
       clPostLog(entry);
@@ -3932,7 +3943,7 @@ ${notes}`;
       (_trackCellMap[k] = _trackCellMap[k] || []).push(l);
       if (weeks.indexOf(wk) >= 0) {
         const c = (l.coach || '—').trim() || '—'; byCoach[c] = (byCoach[c] || 0) + 1;
-        const ty = clCoachType(l.topic).label; byType[ty] = (byType[ty] || 0) + 1;
+        const ty = clCoachType(l).label; byType[ty] = (byType[ty] || 0) + 1;
       }
     });
     const NAVY = '#0C1F42';
@@ -3950,7 +3961,7 @@ ${notes}`;
     const types = Object.keys(byType).sort((a, b) => byType[b] - byType[a]);
     if (types.length) {
       html += '<div style="margin-bottom:14px"><div style="font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--slate);margin-bottom:6px">Coaching by type · this month</div><div style="display:flex;flex-wrap:wrap;gap:8px">' +
-        types.map(t => `${clTypeBadge(t === 'Weekly' ? 'Weekly Coaching' : t === 'Violation' ? 'Post-Booking Cadence' : t === 'PIP' ? 'PIP' : 'General Performance')} <span style="font-size:12px;color:#142E5C;font-weight:700;margin-left:-4px">${byType[t]}</span>`).join('&nbsp;&nbsp;') +
+        types.map(t => `${clTypeBadge({ type: t })} <span style="font-size:12px;color:#142E5C;font-weight:700;margin-left:-4px">${byType[t]}</span>`).join('&nbsp;&nbsp;') +
         '</div></div>';
     }
 
@@ -3969,13 +3980,13 @@ ${notes}`;
           const future = mon > todayMon;
           const entries = _trackCellMap[rep.toLowerCase() + '|' + mon] || [];
           // Only Weekly / Performance coaching satisfies the weekly cadence. Violation & PIP don't.
-          const qualifying = entries.filter(e => { const t = clCoachType(e.topic).label; return t === 'Weekly' || t === 'Performance'; });
+          const qualifying = entries.filter(e => { const t = clCoachType(e).label; return t === 'Weekly' || t === 'Performance'; });
           if (!future) { due++; if (qualifying.length) done++; }
           let bg, fg, inner;
           if (qualifying.length) {
             bg = '#E6F7EE'; fg = '#0E9F6E';
             const last = qualifying[qualifying.length-1];
-            const ty = clCoachType(last.topic), coachName = (last.coach || '').trim();
+            const ty = clCoachType(last), coachName = (last.coach || '').trim();
             inner = `<div style="font-size:14px;line-height:1">✓${qualifying.length > 1 ? ' ' + qualifying.length : ''}</div>` +
                     `<div style="font-size:9px;font-weight:800;letter-spacing:.3px;color:${ty.fg};margin-top:2px">${ty.label.toUpperCase()}</div>` +
                     (coachName ? `<div style="font-size:10px;font-weight:600;color:#0b7d57">${esc(coachName)}</div>` : '');
@@ -3983,13 +3994,13 @@ ${notes}`;
             // Only a violation / PIP was logged — recorded, but does NOT count as the weekly coaching
             bg = '#FFF7E6'; fg = '#C97000';
             const last = entries[entries.length-1];
-            const ty = clCoachType(last.topic), coachName = (last.coach || '').trim();
+            const ty = clCoachType(last), coachName = (last.coach || '').trim();
             inner = `<div style="font-size:11px;font-weight:800;letter-spacing:.3px;color:${ty.fg}">${ty.label.toUpperCase()}</div>` +
                     (coachName ? `<div style="font-size:10px;font-weight:600;color:#9a6a00">${esc(coachName)}</div>` : '') +
                     `<div style="font-size:9px;color:#b08300">no weekly</div>`;
           } else if (future) { bg = '#F1F3F7'; fg = '#999'; inner = '—'; }
           else { bg = '#FDECEC'; fg = '#C00'; inner = '✗'; }
-          const tip = entries.map(e => `${(e.date||'').slice(0,10)} · ${e.coach||'—'} · ${clCoachType(e.topic).label}${e.summary ? ': ' + e.summary : ''}`).join('\n');
+          const tip = entries.map(e => `${(e.date||'').slice(0,10)} · ${e.coach||'—'} · ${clCoachType(e).label}${e.summary ? ': ' + e.summary : ''}`).join('\n');
           const attr = entries.length ? ` title="${esc(tip)}" onclick="clShowSessions('${js(rep)}','${mon}')"` : '';
           const cursor = attr ? 'cursor:pointer;' : '';
           cells += `<td${attr} style="${cursor}text-align:center;padding:8px 10px;border:1px solid #eee;background:${bg};color:${fg};font-weight:700">${inner}</td>`;

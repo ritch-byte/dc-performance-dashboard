@@ -22,7 +22,7 @@
  */
 
 const SHEET_NAME = 'Logs';
-const HEADERS = ['timestamp', 'date', 'weekof', 'squad', 'rep', 'level', 'topic', 'coach', 'summary'];
+const HEADERS = ['timestamp', 'date', 'weekof', 'squad', 'rep', 'level', 'topic', 'coach', 'summary', 'type'];
 
 function doPost(e) {
   try {
