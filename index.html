@@ -2034,6 +2034,15 @@
       const coachedPct = visible.length ? Math.round(coached.size / visible.length * 100) : 0;
       const coachColor = coachedPct >= 80 ? '#0E9F6E' : coachedPct >= 50 ? '#C97000' : '#C00000';
 
+      // Targets: per-rep DC target × team size for the period
+      const perRepTarget = view === 'daily' ? DAILY_TARGET : view === 'weekly' ? WEEKLY_TARGET : MONTHLY_TARGET;
+      const teamTarget = perRepTarget * visible.length;
+      const dcPct = teamTarget > 0 ? Math.round(dcs / teamTarget * 100) : 0;
+      const remaining = Math.max(0, visible.length - coached.size);
+      const coachGoal = view === 'daily'
+        ? `${coachedPct}% coached today`
+        : (remaining > 0 ? `<b style="color:${coachColor}">${remaining} SDR${remaining === 1 ? '' : 's'} still to coach ${periodWord}</b>` : `<b style="color:#0E9F6E">all coached ${periodWord} ✓</b>`);
+
       return `<div onclick="openTeamProfile('${team.id}')" style="cursor:pointer;border:1px solid var(--border);border-radius:14px;overflow:hidden;background:#fff;transition:box-shadow .15s"
                 onmouseover="this.style.boxShadow='0 6px 20px rgba(0,0,0,.08)'" onmouseout="this.style.boxShadow='none'">
         <div style="background:${esc(team.color)};padding:14px 18px;display:flex;justify-content:space-between;align-items:center">
@@ -2047,8 +2056,17 @@
             ${statCell('Coaching sessions', sessions, 'var(--ink)')}
             ${statCell('SDRs coached', `${coached.size}/${visible.length}`, coachColor)}
           </div>
+          <div style="margin-top:14px">
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--slate);margin-bottom:4px">
+              <span>DCs vs ${periodWord} target</span>
+              <span><b style="color:var(--ink)">${dcs}</b> / ${teamTarget} · ${dcPct}%</span>
+            </div>
+            <div style="height:8px;background:#EEF1F6;border-radius:999px;overflow:hidden">
+              <div style="height:100%;width:${Math.min(100, dcPct)}%;background:${dcPct >= 100 ? '#0E9F6E' : 'var(--blue)'}"></div>
+            </div>
+          </div>
           <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:11px;color:var(--slate);text-align:center">
-            Attendance MTD <b style="color:var(--ink)">${attStr}</b> &nbsp;·&nbsp; ${coachedPct}% of the team coached ${periodWord} &nbsp;·&nbsp; click for full team trajectory →
+            Attendance MTD <b style="color:var(--ink)">${attStr}</b> &nbsp;·&nbsp; ${coachGoal} &nbsp;·&nbsp; full trajectory →
           </div>
         </div>
       </div>`;
