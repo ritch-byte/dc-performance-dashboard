@@ -698,6 +698,11 @@
         <div class="page-title">Team Scorecards</div>
         <div class="ch-right" style="font-size:12px;color:var(--slate);font-weight:500">Click a team for its full trajectory &amp; leaderboard</div>
       </div>
+      <div style="padding:12px 24px 0;display:flex;gap:8px">
+        <button class="view-btn" id="tvBtnDaily"   onclick="setTeamView('daily')">Daily</button>
+        <button class="view-btn" id="tvBtnWeekly"  onclick="setTeamView('weekly')">Weekly</button>
+        <button class="view-btn active" id="tvBtnMonthly" onclick="setTeamView('monthly')">Monthly</button>
+      </div>
       <div class="main-body" id="teamBody"></div>
     </div>
 
@@ -1966,17 +1971,34 @@
     }
   }
 
+  let _teamView = 'monthly';
+  function setTeamView(v) {
+    _teamView = v;
+    ['Daily','Weekly','Monthly'].forEach(x => $('tvBtn'+x).classList.toggle('active', x.toLowerCase() === v));
+    renderTeamRoster();
+  }
+
   function renderTeamRoster() {
+    const view = _teamView;
     const today = localIso(new Date());
     const [ty, tm] = today.split('-').map(Number);
     const ym = `${ty}-${String(tm).padStart(2,'0')}`;
-    const prevM = tm === 1 ? `${ty-1}-12` : `${ty}-${String(tm-1).padStart(2,'0')}`;
-    const dayT = aggregateForDate(today);
-    const wtdT = aggregateWTD(today).counts;
-    const moT  = aggregateMonth(ym, true).counts;
-    const lmT  = aggregateMonth(prevM, false).counts;
     const curWeek = getMondayIso(today);
     const monthWeeks = getWeeksForMonth(ym);
+
+    // Pick the period's DC counts, its date set, and a label
+    let dcCounts, periodDates, dcLabel;
+    if (view === 'daily')      { dcCounts = aggregateForDate(today);        periodDates = [today];                     dcLabel = 'DCs today'; }
+    else if (view === 'weekly'){ const w = aggregateWTD(today);            dcCounts = w.counts; periodDates = w.dates; dcLabel = 'DCs this week'; }
+    else                       { const mo = aggregateMonth(ym, true);      dcCounts = mo.counts; periodDates = mo.dates; dcLabel = 'DCs this month'; }
+    const dateSet = new Set(periodDates);
+    const inPeriod = d => {
+      if (!d) return false;
+      if (view === 'daily') return d === today;
+      let wk; try { wk = getMondayIso(d); } catch (e) { return false; }
+      return view === 'weekly' ? wk === curWeek : monthWeeks.indexOf(wk) >= 0;
+    };
+    const periodWord = view === 'daily' ? 'today' : view === 'weekly' ? 'this week' : 'this month';
 
     const statCell = (label, val, color, size) =>
       `<div><div style="font-size:${size||22}px;font-weight:800;font-family:'Plus Jakarta Sans',sans-serif;color:${color||'var(--ink)'};line-height:1.1">${val}</div>` +
@@ -1985,13 +2007,15 @@
     const cards = TEAMS.map(team => {
       const visible = team.members.filter(m => !m.hidden);
       const ids = visible.map(m => m.id);
+      const idSet = new Set(ids);
       const names = new Set(visible.map(m => m.display.trim().toLowerCase()));
-      const sum = obj => ids.reduce((s, id) => s + (obj[id] || 0), 0);
-      const day = sum(dayT), wtd = sum(wtdT), mo = sum(moT), lm = sum(lmT);
+      const dcs = ids.reduce((s, id) => s + (dcCounts[id] || 0), 0);
 
+      // Show-up scoped to the period's dates
       let suY = 0, suH = 0;
       for (const row of rawRows) {
-        const mid = resolveAgent(row.agent); if (!ids.includes(mid)) continue;
+        if (!idSet.has(resolveAgent(row.agent))) continue;
+        if (!dateSet.has(normalizeDate(row.rawDate))) continue;
         for (const st of [row.sp1status, row.sp2status]) {
           if (st === 'yes') { suY++; suH++; } else if (st === 'no' || st === 'cancelled') { suH++; }
         }
@@ -2002,15 +2026,12 @@
       if (_attLoaded) for (const id of ids) { const a = getAgentAttForMonth(id, ym); att += a.att; sch += a.sch; }
       const attStr = _attLoaded ? (sch > 0 ? `${Math.round(att/sch*100)}%` : '—') : '—';
 
-      const teamLogs = _coachLogs.filter(l => names.has((l.rep || '').trim().toLowerCase()));
-      const coachedThisWeek = new Set(); let coachMonth = 0;
-      teamLogs.forEach(l => {
-        const d = (l.date || '').slice(0, 10); if (!d) return;
-        let wk; try { wk = getMondayIso(d); } catch (e) { return; }
-        if (wk === curWeek && ['Weekly','Performance'].includes(clCoachType(l).label)) coachedThisWeek.add((l.rep || '').trim().toLowerCase());
-        if (monthWeeks.indexOf(wk) >= 0) coachMonth++;
-      });
-      const coachedPct = visible.length ? Math.round(coachedThisWeek.size / visible.length * 100) : 0;
+      // Coaching scoped to the period
+      const teamLogs = _coachLogs.filter(l => names.has((l.rep || '').trim().toLowerCase()) && inPeriod((l.date || '').slice(0, 10)));
+      const sessions = teamLogs.length;
+      const coached = new Set();
+      teamLogs.forEach(l => { if (['Weekly','Performance'].includes(clCoachType(l).label)) coached.add((l.rep || '').trim().toLowerCase()); });
+      const coachedPct = visible.length ? Math.round(coached.size / visible.length * 100) : 0;
       const coachColor = coachedPct >= 80 ? '#0E9F6E' : coachedPct >= 50 ? '#C97000' : '#C00000';
 
       return `<div onclick="openTeamProfile('${team.id}')" style="cursor:pointer;border:1px solid var(--border);border-radius:14px;overflow:hidden;background:#fff;transition:box-shadow .15s"
@@ -2021,14 +2042,14 @@
         </div>
         <div style="padding:16px 18px">
           <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;text-align:center">
-            ${statCell('Today', day, 'var(--blue)')}${statCell('This Week', wtd, 'var(--blue)')}${statCell('This Month', mo, 'var(--blue)')}${statCell('Last Month', lm)}
+            ${statCell(dcLabel, dcs, 'var(--blue)')}
+            ${statCell('Show-up ' + periodWord, su, '#4f46e5')}
+            ${statCell('Coaching sessions', sessions, 'var(--ink)')}
+            ${statCell('SDRs coached', `${coached.size}/${visible.length}`, coachColor)}
           </div>
-          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px;padding-top:14px;border-top:1px solid var(--border);text-align:center">
-            ${statCell('Show-up', su, '#4f46e5', 18)}
-            ${statCell('Attendance MTD', attStr, 'var(--ink)', 18)}
-            ${statCell('Coached this week', `${coachedThisWeek.size}/${visible.length}`, coachColor, 18)}
+          <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:11px;color:var(--slate);text-align:center">
+            Attendance MTD <b style="color:var(--ink)">${attStr}</b> &nbsp;·&nbsp; ${coachedPct}% of the team coached ${periodWord} &nbsp;·&nbsp; click for full team trajectory →
           </div>
-          <div style="margin-top:12px;font-size:11px;color:var(--slate);text-align:center">${coachMonth} coaching${coachMonth === 1 ? '' : 's'} logged this month · click for full team trajectory →</div>
         </div>
       </div>`;
     }).join('');
