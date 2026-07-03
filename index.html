@@ -695,7 +695,8 @@
     <!-- ── Team Section ── -->
     <div id="teamSection" style="display:none;">
       <div class="content-header">
-        <div class="page-title">Team Roster</div>
+        <div class="page-title">Team Scorecards</div>
+        <div class="ch-right" style="font-size:12px;color:var(--slate);font-weight:500">Click a team for its full trajectory &amp; leaderboard</div>
       </div>
       <div class="main-body" id="teamBody"></div>
     </div>
@@ -1967,44 +1968,74 @@
 
   function renderTeamRoster() {
     const today = localIso(new Date());
-    const [ty, tm] = today.split('-');
-    const { counts } = aggregateMonth(`${ty}-${tm}`, true);
-    const body = $('teamBody');
-    body.innerHTML = '';
-    for (const team of TEAMS) {
-      const sorted = team.members.filter(m => !m.hidden).sort((a,b) => a.display.localeCompare(b.display));
-      const sec = document.createElement('div');
-      sec.className = 'team-section';
-      sec.innerHTML = `
-        <div class="team-header">
-          <div class="team-label">
-            <div class="team-accent" style="background:${esc(team.color)}"></div>
-            <div class="team-name">${esc(team.name)}</div>
-          </div>
-          <div class="team-stats">
-            <span class="stat-pill stat-total">${sorted.length} members</span>
-          </div>
-        </div>
-        <div class="member-grid"></div>`;
-      const grid = sec.querySelector('.member-grid');
-      for (const m of sorted) {
-        const mtd = counts[m.id] || 0;
-        const card = document.createElement('div');
-        card.className = 'member-card';
-        card.onclick = () => openProfile(m.id);
-        card.innerHTML = `
-          <div class="member-info">
-            <div class="member-name">${esc(m.display)}</div>
-            <div style="font-size:10px;color:var(--gray);margin-top:3px;letter-spacing:0.3px;text-transform:uppercase">${esc(team.name)}</div>
-          </div>
-          <div style="text-align:right;flex-shrink:0">
-            <div style="font-size:22px;font-weight:800;font-family:'Plus Jakarta Sans',sans-serif;color:var(--blue);line-height:1">${mtd}</div>
-            <div style="font-size:9px;color:var(--gray);letter-spacing:0.5px;text-transform:uppercase;margin-top:2px">MTD DCs</div>
-          </div>`;
-        grid.appendChild(card);
+    const [ty, tm] = today.split('-').map(Number);
+    const ym = `${ty}-${String(tm).padStart(2,'0')}`;
+    const prevM = tm === 1 ? `${ty-1}-12` : `${ty}-${String(tm-1).padStart(2,'0')}`;
+    const dayT = aggregateForDate(today);
+    const wtdT = aggregateWTD(today).counts;
+    const moT  = aggregateMonth(ym, true).counts;
+    const lmT  = aggregateMonth(prevM, false).counts;
+    const curWeek = getMondayIso(today);
+    const monthWeeks = getWeeksForMonth(ym);
+
+    const statCell = (label, val, color, size) =>
+      `<div><div style="font-size:${size||22}px;font-weight:800;font-family:'Plus Jakarta Sans',sans-serif;color:${color||'var(--ink)'};line-height:1.1">${val}</div>` +
+      `<div style="font-size:9px;color:var(--gray);letter-spacing:.4px;text-transform:uppercase;margin-top:3px">${label}</div></div>`;
+
+    const cards = TEAMS.map(team => {
+      const visible = team.members.filter(m => !m.hidden);
+      const ids = visible.map(m => m.id);
+      const names = new Set(visible.map(m => m.display.trim().toLowerCase()));
+      const sum = obj => ids.reduce((s, id) => s + (obj[id] || 0), 0);
+      const day = sum(dayT), wtd = sum(wtdT), mo = sum(moT), lm = sum(lmT);
+
+      let suY = 0, suH = 0;
+      for (const row of rawRows) {
+        const mid = resolveAgent(row.agent); if (!ids.includes(mid)) continue;
+        for (const st of [row.sp1status, row.sp2status]) {
+          if (st === 'yes') { suY++; suH++; } else if (st === 'no' || st === 'cancelled') { suH++; }
+        }
       }
-      body.appendChild(sec);
-    }
+      const su = suH > 0 ? Math.round(suY / suH * 100) + '%' : '—';
+
+      let att = 0, sch = 0;
+      if (_attLoaded) for (const id of ids) { const a = getAgentAttForMonth(id, ym); att += a.att; sch += a.sch; }
+      const attStr = _attLoaded ? (sch > 0 ? `${Math.round(att/sch*100)}%` : '—') : '—';
+
+      const teamLogs = _coachLogs.filter(l => names.has((l.rep || '').trim().toLowerCase()));
+      const coachedThisWeek = new Set(); let coachMonth = 0;
+      teamLogs.forEach(l => {
+        const d = (l.date || '').slice(0, 10); if (!d) return;
+        let wk; try { wk = getMondayIso(d); } catch (e) { return; }
+        if (wk === curWeek && ['Weekly','Performance'].includes(clCoachType(l).label)) coachedThisWeek.add((l.rep || '').trim().toLowerCase());
+        if (monthWeeks.indexOf(wk) >= 0) coachMonth++;
+      });
+      const coachedPct = visible.length ? Math.round(coachedThisWeek.size / visible.length * 100) : 0;
+      const coachColor = coachedPct >= 80 ? '#0E9F6E' : coachedPct >= 50 ? '#C97000' : '#C00000';
+
+      return `<div onclick="openTeamProfile('${team.id}')" style="cursor:pointer;border:1px solid var(--border);border-radius:14px;overflow:hidden;background:#fff;transition:box-shadow .15s"
+                onmouseover="this.style.boxShadow='0 6px 20px rgba(0,0,0,.08)'" onmouseout="this.style.boxShadow='none'">
+        <div style="background:${esc(team.color)};padding:14px 18px;display:flex;justify-content:space-between;align-items:center">
+          <div style="color:#fff;font-weight:800;font-size:18px;letter-spacing:.5px">${esc(team.name)}</div>
+          <div style="color:rgba(255,255,255,.9);font-size:12px;font-weight:600">${visible.length} members</div>
+        </div>
+        <div style="padding:16px 18px">
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;text-align:center">
+            ${statCell('Today', day, 'var(--blue)')}${statCell('This Week', wtd, 'var(--blue)')}${statCell('This Month', mo, 'var(--blue)')}${statCell('Last Month', lm)}
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px;padding-top:14px;border-top:1px solid var(--border);text-align:center">
+            ${statCell('Show-up', su, '#4f46e5', 18)}
+            ${statCell('Attendance MTD', attStr, 'var(--ink)', 18)}
+            ${statCell('Coached this week', `${coachedThisWeek.size}/${visible.length}`, coachColor, 18)}
+          </div>
+          <div style="margin-top:12px;font-size:11px;color:var(--slate);text-align:center">${coachMonth} coaching${coachMonth === 1 ? '' : 's'} logged this month · click for full team trajectory →</div>
+        </div>
+      </div>`;
+    }).join('');
+
+    $('teamBody').innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(430px,1fr));gap:18px;padding:4px 4px 24px">${cards}</div>`;
+
+    if (!_coachLogsLoaded) loadCoachingLogs(false).then(() => { if ($('teamSection').style.display !== 'none') renderTeamRoster(); });
   }
 
   // ── Member Profile ──
