@@ -699,9 +699,9 @@
         <div class="ch-right" style="font-size:12px;color:var(--slate);font-weight:500">Click a team for its full trajectory &amp; leaderboard</div>
       </div>
       <div style="padding:12px 24px 0;display:flex;gap:8px">
-        <button class="view-btn" id="tvBtnDaily"   onclick="setTeamView('daily')">Daily</button>
-        <button class="view-btn" id="tvBtnWeekly"  onclick="setTeamView('weekly')">Weekly</button>
-        <button class="view-btn active" id="tvBtnMonthly" onclick="setTeamView('monthly')">Monthly</button>
+        <button class="view-btn" id="tvBtnDaily"   onclick="setTeamCardView('daily')">Daily</button>
+        <button class="view-btn" id="tvBtnWeekly"  onclick="setTeamCardView('weekly')">Weekly</button>
+        <button class="view-btn active" id="tvBtnMonthly" onclick="setTeamCardView('monthly')">Monthly</button>
       </div>
       <div class="main-body" id="teamBody"></div>
     </div>
@@ -1972,7 +1972,7 @@
   }
 
   let _teamView = 'monthly';
-  function setTeamView(v) {
+  function setTeamCardView(v) {
     _teamView = v;
     ['Daily','Weekly','Monthly'].forEach(x => $('tvBtn'+x).classList.toggle('active', x.toLowerCase() === v));
     renderTeamRoster();
