@@ -3777,7 +3777,7 @@ ${notes}`;
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error?.message || data.error || ('API ' + res.status));
-      const m = data.content[0].text.trim().match(/\{[\s\S]*\}/);
+      const m = clAiText(data).trim().match(/\{[\s\S]*\}/);
       if (!m) throw new Error('Could not parse insights — try again.');
       const g = JSON.parse(m[0]);
       const list = arr => (arr && arr.length)
@@ -3896,6 +3896,14 @@ ${notes}`;
     document.body.appendChild(a); a.click();
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
     clToast(`Exported ${months.length}-month report for ${name}`);
+  }
+
+  // Pull the text out of a Claude response, or throw the real error (key missing / billing / etc.)
+  function clAiText(data) {
+    if (data && data.error) throw new Error(typeof data.error === 'string' ? data.error : (data.error.message || JSON.stringify(data.error)));
+    if (!data || !data.content || !data.content[0] || typeof data.content[0].text !== 'string')
+      throw new Error('Unexpected AI response: ' + JSON.stringify(data || {}).slice(0, 300));
+    return data.content[0].text;
   }
 
   function clToast(msg) {
@@ -4495,7 +4503,7 @@ Generate 2-4 rating rows from the observation. Wins should reflect positives fro
       if (!res.ok) {
         throw new Error(data.error?.message || data.error || `API error ${res.status}`);
       }
-      const text = data.content[0].text.trim();
+      const text = clAiText(data).trim();
       const m = text.match(/\{[\s\S]*\}/);
       if (!m) throw new Error('Could not parse AI response — try again.');
       window._clGeneratedWeekly = JSON.parse(m[0]);
@@ -4584,7 +4592,7 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error?.message || data.error || `API error ${res.status}`);
-      const text = data.content[0].text.trim();
+      const text = clAiText(data).trim();
       const m = text.match(/\{[\s\S]*\}/);
       if (!m) throw new Error('Could not parse AI response — try again.');
       const g = JSON.parse(m[0]);
