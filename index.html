@@ -3642,6 +3642,9 @@
   // Leave both empty to run in this-browser-only (localStorage) mode.
   const COACH_LOG_POST_URL = 'https://script.google.com/macros/s/AKfycbz0biy1pd4UC-iE_Ph3Ycbl_TcKu-6qrii3HXRmIhUjS4NEG4lJHnSmu0SvwnxO2i7O/exec';  // Apps Script Web App /exec URL (writes a log)
   const COACH_LOG_CSV_URL  = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSr9FXCEpsr01V3nxJhB4UZIH2AJqteMzsJ3YoNQO_r33FzI8XE53Xs0D1k21RI2AAfci5y79H89HBv/pub?gid=0&single=true&output=csv';  // Published-to-web CSV URL of the Logs sheet (reads the tracker)
+  // AI proxy for coaching generation/insights — a Netlify function that holds the ANTHROPIC_API_KEY.
+  // Update this ONE line to the new Netlify site URL after (re)deploying the function.
+  const AI_COACH_URL = 'https://silver-cuchufli-071209.netlify.app/.netlify/functions/ai-coach';
   let _coachLogs = [], _coachLogsLoaded = false, _trackCellMap = {};
   const _loggedThisSession = new Set();
 
@@ -3768,7 +3771,7 @@ Base it strictly on the notes. If there's little data, say so plainly rather tha
 COACHING NOTES (oldest to newest):
 ${notes}`;
     try {
-      const res = await fetch('https://silver-cuchufli-071209.netlify.app/.netlify/functions/ai-coach', {
+      const res = await fetch(AI_COACH_URL, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 700, messages: [{ role: 'user', content: prompt }] })
       });
@@ -4479,7 +4482,7 @@ Return ONLY valid JSON with this exact structure (no markdown, no explanation):
 Generate 2-4 rating rows from the observation. Wins should reflect positives from Reality or rep strengths. Keep each field concise and impactful.`;
 
     try {
-      const res = await fetch('https://silver-cuchufli-071209.netlify.app/.netlify/functions/ai-coach', {
+      const res = await fetch(AI_COACH_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -4570,7 +4573,7 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
 }`;
 
     try {
-      const res = await fetch('https://silver-cuchufli-071209.netlify.app/.netlify/functions/ai-coach', {
+      const res = await fetch(AI_COACH_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
