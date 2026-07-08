@@ -4282,10 +4282,10 @@ ${notes}`;
   // dashes used as clause separators become a comma. Applied to every generated email.
   function clDeDash(s) {
     return String(s == null ? '' : s)
-      .replace(/(\d)\s*[–—]\s*(\d)/g, '$1-$2')  // 2–3 -> 2-3
-      .replace(/\s*[–—]\s*/g, ', ')             // clause dash -> comma
-      .replace(/\s+,/g, ',')                              // tidy stray space before comma
-      .replace(/,\s*,/g, ',');                            // collapse double commas
+      .replace(/(\d)\s*[‒–—―]\s*(\d)/g, '$1-$2')  // 2–3 -> 2-3
+      .replace(/\s*[‒–—―]\s*/g, ', ')             // any dash used as a clause break -> comma
+      .replace(/\s+,/g, ',')                                          // tidy stray space before comma
+      .replace(/,\s*,/g, ',');                                        // collapse double commas
   }
 
   let _clPIPDur = 30;
