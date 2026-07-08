@@ -930,7 +930,7 @@
             <div class="cl-field">
               <label class="cl-label">Squad</label>
               <select id="clSquad" class="cl-input" onchange="clSetSquad()">
-                <option>JUMHON</option><option>RV</option><option>ACE</option><option>POC TEAM</option><option>Other</option>
+                <option>JUMHON</option><option>RV</option><option>ACE</option><option>B17</option><option>POC TEAM</option><option>Other</option>
               </select>
             </div>
             <div class="cl-field">
@@ -1316,6 +1316,37 @@
         { id: 'gadier',  display: 'Vincent Gadier',   ln: 'gadier' },
         { id: 'bayhon',  display: 'Alvin Bayhon',     ln: 'bayhon' },
         { id: 'jumar',   display: 'Jumar Vere',       ln: 'vere'   },
+      ]
+    },
+    {
+      id: 'b17', name: 'B17', color: '#0891b2',
+      members: [
+        { id: 'sanjose',    display: 'Glen Jerick San Jose',   ln: 'jose',      ln2: 'san jose' },
+        { id: 'jerusalem',  display: 'Danilo Jerusalem',       ln: 'jerusalem' },
+        { id: 'ramos_i',    display: 'Ma. Isabel Ramos',       ln: 'ramos',     fn: 'isabel' },
+        { id: 'jaraula',    display: 'Jezza Jezreel Jaraula',  ln: 'jaraula' },
+        { id: 'tiu',        display: 'Regine Theresa Tiu',     ln: 'tiu' },
+        { id: 'aurelio',    display: 'Raymond Aurelio',        ln: 'aurelio' },
+        { id: 'tamayo',     display: 'Melisse Tamayo',         ln: 'tamayo' },
+        { id: 'quijano',    display: 'Cenizal Quijano Jr',     ln: 'quijano' },
+        { id: 'ronquillo',  display: 'Joremie Ronquillo',      ln: 'ronquillo' },
+        { id: 'malinay',    display: 'Reynaldo Malinay Jr',    ln: 'malinay' },
+        { id: 'ignacio',    display: 'Aileen Ignacio',         ln: 'ignacio' },
+        { id: 'decastro',   display: 'Catherine de Castro',    ln: 'castro',    ln2: 'de castro' },
+        { id: 'monticarlo', display: 'Apol Monticarlo',        ln: 'monticarlo' },
+        { id: 'guerra',     display: 'Chester John Guerra',    ln: 'guerra' },
+        { id: 'velasquez',  display: 'Archie Velasquez',       ln: 'velasquez' },
+        { id: 'lotho',      display: 'Robert Christian Lotho', ln: 'lotho' },
+        { id: 'sanchez',    display: 'Maria Angelica Sanchez', ln: 'sanchez' },
+        { id: 'arana',      display: 'Marvin Arana',           ln: 'arana' },
+        { id: 'elago',      display: 'Ednyl Chloe Elago',      ln: 'elago' },
+        { id: 'ramos_j',    display: 'Jennifer Ramos',         ln: 'ramos',     fn: 'jennifer' },
+        { id: 'tormon',     display: 'Michael Anthony Tormon', ln: 'tormon' },
+        { id: 'diaz',       display: 'Sheilla Diaz',           ln: 'diaz' },
+        { id: 'caguimbal',  display: 'Morris Caguimbal',       ln: 'caguimbal' },
+        { id: 'tungol',     display: 'Lorenzo Luiz Tungol',    ln: 'tungol' },
+        { id: 'mendoza',    display: 'June Angel Mendoza',     ln: 'mendoza' },
+        { id: 'aridi',      display: 'Hadi Aridi',             ln: 'aridi' },
       ]
     }
   ];
@@ -3547,6 +3578,11 @@
           'Jose Carlos Malavega','Joshua Bondad','Lance Villaruel','Jefferson Lentija','Jessica Bascos',
           'Marc Anos','Charles Sarmiento','Rommel Tupaz','Jervin Saminado','Charlito Arcena','Bedier Verastigue'],
     'POC TEAM': ['Angelica Tanate','Vincent Gadier','Alvin Bayhon','Jumar Vere'],
+    B17: ['Glen Jerick San Jose','Danilo Jerusalem','Ma. Isabel Ramos','Jezza Jezreel Jaraula','Regine Theresa Tiu',
+          'Raymond Aurelio','Melisse Tamayo','Cenizal Quijano Jr','Joremie Ronquillo','Reynaldo Malinay Jr',
+          'Aileen Ignacio','Catherine de Castro','Apol Monticarlo','Chester John Guerra','Archie Velasquez',
+          'Robert Christian Lotho','Maria Angelica Sanchez','Marvin Arana','Ednyl Chloe Elago','Jennifer Ramos',
+          'Michael Anthony Tormon','Sheilla Diaz','Morris Caguimbal','Lorenzo Luiz Tungol','June Angel Mendoza','Hadi Aridi'],
   };
   const CL_ALL_TMS = Object.entries(CL_ROSTER).flatMap(([squad,names]) => names.map(name => ({name,squad})));
 
@@ -4052,7 +4088,7 @@ ${notes}`;
       html += `<th style="padding:8px 10px;background:${NAVY};color:#fff;white-space:nowrap;text-align:center">Week ${i+1}<br><span style="font-weight:400;color:#9FB4DA;font-size:10px">${getWeekDateRange(mon)}</span></th>`;
     });
     html += `<th style="padding:8px 10px;background:${NAVY};color:#fff;text-align:center">Done</th></tr></thead><tbody>`;
-    ['JUMHON','RV','ACE'].forEach(sq => {
+    ['JUMHON','RV','ACE','B17'].forEach(sq => {
       const reps = CL_ROSTER[sq] || [];
       html += `<tr><td colspan="${weeks.length+2}" style="background:#EEF3FB;color:${NAVY};font-weight:800;padding:6px 10px;font-size:11px;letter-spacing:.5px">${sq}</td></tr>`;
       reps.forEach(rep => {
