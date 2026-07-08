@@ -4278,6 +4278,16 @@ ${notes}`;
     return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' });
   }
 
+  // Strip em/en dashes for a cleaner, professional read. Numeric ranges become a hyphen;
+  // dashes used as clause separators become a comma. Applied to every generated email.
+  function clDeDash(s) {
+    return String(s == null ? '' : s)
+      .replace(/(\d)\s*[–—]\s*(\d)/g, '$1-$2')  // 2–3 -> 2-3
+      .replace(/\s*[–—]\s*/g, ', ')             // clause dash -> comma
+      .replace(/\s+,/g, ',')                              // tidy stray space before comma
+      .replace(/,\s*,/g, ',');                            // collapse double commas
+  }
+
   let _clPIPDur = 30;
   function clPIPDur(n) { _clPIPDur = n; ['30','60','90'].forEach(v => $('clPIP'+v).classList.toggle('on-navy', Number(v)===n)); clRender(); }
 
@@ -4323,7 +4333,7 @@ ${notes}`;
       const n = Math.floor((d - firstMon) / 86400000 / 7) + 1;
       return 'W' + String(n).padStart(2, '0');
     })();
-    const subject = `[COACHING-LOG] ${sessionDate || '[Date]'} | ${coachName} | ${tmName || '[Name]'} | ${weekNum || 'W##'}`;
+    const subject = clDeDash(`[COACHING-LOG] ${sessionDate || '[Date]'} | ${coachName} | ${tmName || '[Name]'} | ${weekNum || 'W##'}`);
     $('clSubjectLine').textContent = subject;
     window._clEmailSubject = subject;
 
@@ -4436,10 +4446,10 @@ ${notes}`;
 
 </div></div>`;
 
-    $('clEmailPreview').innerHTML = html;
-    window._clEmailHtml = html;
-    window._clEmailSubject = subject;
-    window._clEmailPlain = clBuildWeeklyPlain(g, { tmName, sessionDate, nextDate, coachName });
+    $('clEmailPreview').innerHTML = clDeDash(html);
+    window._clEmailHtml = clDeDash(html);
+    window._clEmailSubject = clDeDash(subject);
+    window._clEmailPlain = clDeDash(clBuildWeeklyPlain(g, { tmName, sessionDate, nextDate, coachName }));
   }
 
   function clBuildWeeklyPlain(g, meta) {
@@ -4499,7 +4509,7 @@ ${notes}`;
 
 IMPORTANT TERMINOLOGY: "DC" means Discovery Call (a booked call between the lead and the client). Never write "Decision Conversation" — always use "Discovery Call" or "DC".
 
-Based on the GROW coaching session notes below, generate structured content for each section of the coaching log. Be specific, professional, and actionable. Transform the raw notes into polished coaching language.
+Based on the GROW coaching session notes below, generate structured content for each section of the coaching log. Be specific, professional, and actionable. Transform the raw notes into polished coaching language. Do NOT use em dashes or en dashes (— or –) anywhere; use commas, periods, colons, or parentheses instead.
 
 GROW SESSION NOTES:
 Observation (what you observed about this rep): ${obs||'(not provided)'}
@@ -4592,7 +4602,8 @@ GUIDELINES:
 - Default the level to "verbal" (an ordinary supportive coaching note). Only choose "written" or "final" if the report clearly signals a repeat or serious issue.
 - Keep expectations clear and reasonable, framed as friendly goals going forward with a light timeline.
 - Make support genuinely helpful and specific ("I'll show you…", "I'll pair you with…").
-- Don't invent specific numbers or dates the report doesn't imply, and don't use bracket placeholders — write clean prose the TL can lightly edit.
+- Don't invent specific numbers or dates the report doesn't imply, and don't use bracket placeholders. Write clean prose the TL can lightly edit.
+- WRITING STYLE: Do NOT use em dashes or en dashes (— or –) anywhere. Use commas, periods, colons, or parentheses instead. Keep sentences clear and professional.
 
 OA HANDBOOK — possible Code-of-Conduct violations. Map the story to the closest ONE only if it clearly fits; otherwise leave handbookRef "":
 ${hbRef}
@@ -4633,14 +4644,14 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
       if (!m) throw new Error('Could not parse AI response — try again.');
       const g = JSON.parse(m[0]);
 
-      // Pre-fill the editable SBI coaching-note fields
-      $('clSBISituation').value    = g.situation    || '';
-      $('clSBIBehavior').value     = g.behavior     || '';
-      $('clSBIImpact').value       = g.impact       || '';
-      $('clSBIPolicy').value       = g.policy       || '';
-      $('clSBIDiscussion').value   = g.discussion   || '';
-      $('clSBIExpectations').value = g.expectations || '';
-      $('clSBISupport').value      = g.support      || '';
+      // Pre-fill the editable SBI coaching-note fields (strip any em/en dashes the model slipped in)
+      $('clSBISituation').value    = clDeDash(g.situation    || '');
+      $('clSBIBehavior').value     = clDeDash(g.behavior     || '');
+      $('clSBIImpact').value       = clDeDash(g.impact       || '');
+      $('clSBIPolicy').value       = clDeDash(g.policy       || '');
+      $('clSBIDiscussion').value   = clDeDash(g.discussion   || '');
+      $('clSBIExpectations').value = clDeDash(g.expectations || '');
+      $('clSBISupport').value      = clDeDash(g.support      || '');
       _clState.level = ['verbal','written','final'].includes(g.level) ? g.level : 'verbal';
 
       // If the AI matched an OA Handbook violation, surface it (keep the warm body as written)
@@ -4686,7 +4697,7 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
     const NAVY = '#0C1F42', MAG = '#D6006D', INK = '#1A2233', LINE = '#DDE4EF', SLATE = '#5B6678';
     clSyncSBILevels();
     const sbiTopic = window._clQuickTopic ? window._clQuickTopic : 'General Performance';
-    const subject = `[COACHING-LOG] ${convoDate || '[Date]'} | ${sbiTopic} · ${lvl.label} | ${tmName || '[Name]'}`;
+    const subject = clDeDash(`[COACHING-LOG] ${convoDate || '[Date]'} | ${sbiTopic} · ${lvl.label} | ${tmName || '[Name]'}`);
     $('clSubjectLine').textContent = subject;
     window._clEmailSubject = subject;
     const f = {
@@ -4700,48 +4711,60 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
       prior:       $('clSBIPrior').value.trim(),
       followUp:    $('clSBIFollowUp').value,
     };
-    const sect = (label, body) => `<tr><td style="padding:12px 20px 0"><div style="font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:${MAG};margin-bottom:3px">${label}</div><div style="font-size:13px;line-height:1.55;color:${INK}">${body || '<span style="color:#aaa;font-style:italic">—</span>'}</div></td></tr>`;
+    const ACCENT = '#B4185A';  // restrained brand rose (was neon #E91E8C)
+    const sect = (label, body) => `<tr><td style="padding:0 26px">
+        <div style="border-top:1px solid ${LINE};padding:14px 0 0">
+          <div style="font-size:10px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:${ACCENT};margin-bottom:5px">${label}</div>
+          <div style="font-size:13.5px;line-height:1.6;color:${INK}">${body || '<span style="color:#B7C0CE;font-style:italic">to be completed</span>'}</div>
+        </div>
+      </td></tr>`;
     const coach = ($('clSBICoach') && $('clSBICoach').value.trim()) || 'Your Team Lead';
     const vItem = _clViolationMap[($('clSBIViolation') && $('clSBIViolation').value) || ''];
     // Softer framing for a TL→rep coaching note (verbal = supportive, not disciplinary)
-    const sbiBanner = { verbal:'COACHING NOTE', written:'WRITTEN WARNING · PERSONNEL FILE', final:'FINAL WRITTEN WARNING · PERSONNEL FILE' }[lvl.id] || lvl.banner;
+    const sbiBanner = { verbal:'Coaching Note', written:'Written Warning · Personnel File', final:'Final Written Warning · Personnel File' }[lvl.id] || lvl.banner;
     const sbiClose = {
-      verbal:  "This is a coaching note to support your growth — not a disciplinary action. I know you've got this, and I'm here to help. Let's work on it together.",
-      written: "This is a written warning and will be kept on file. I genuinely want to see this turn around — let's make the improvements above so we don't need to take it further.",
+      verbal:  "This is a coaching note to support your growth, not a disciplinary action. I know you've got this, and I'm here to help. Let's work on it together.",
+      written: "This is a written warning and will be kept on file. I genuinely want to see this turn around, so let's make the improvements above and we won't need to take it further.",
       final:   lvl.consequence,
     }[lvl.id] || lvl.consequence;
     const ccHR = lvl.id !== 'verbal';
-    const closeBg = lvl.id === 'verbal' ? '#F0FBF5' : '#FFF4F4';
-    const closeBar = lvl.id === 'verbal' ? '#0E9F6E' : MAG;
-    const html = `<div style="font-family:Arial,sans-serif;background:#fff;max-width:600px;margin:0 auto">
-      <div style="background:${NAVY};padding:20px 24px 16px;border-radius:6px 6px 0 0">
-        <div style="color:#E91E8C;font-size:20px;font-weight:800;margin-bottom:4px">${tmName || '[Team Member]'}</div>
-        <div style="color:rgba(255,255,255,.7);font-size:12px">Date: ${clFmtDate(convoDate) || '[Date]'} &nbsp;|&nbsp; From: ${esc(coach)}</div>
+    const closeBg   = lvl.id === 'verbal' ? '#F0FBF5' : '#FCEBEC';
+    const closeBar  = lvl.id === 'verbal' ? '#0E9F6E' : ACCENT;
+    const ribbonBg  = lvl.id === 'verbal' ? '#EEF2F9' : '#FCEBEC';
+    const ribbonInk = lvl.id === 'verbal' ? NAVY : '#B3261E';
+    const firstName = esc((tmName||'').split(' ')[0]) || '[Name]';
+    const html = `<div style="font-family:'Segoe UI',Roboto,Arial,sans-serif;background:#fff;max-width:620px;margin:0 auto;border:1px solid ${LINE};border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(16,31,66,.07)">
+      <div style="background:${NAVY};padding:22px 26px 18px">
+        <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;color:#8FA6CE;text-transform:uppercase">Outsource Accelerator · Sales Operations</div>
+        <div style="color:#fff;font-size:19px;font-weight:700;margin-top:7px;letter-spacing:.2px">${tmName || '[Team Member]'}</div>
+        <div style="color:rgba(255,255,255,.62);font-size:12px;margin-top:4px">${clFmtDate(convoDate) || '[Date]'} &nbsp;·&nbsp; From ${esc(coach)}</div>
       </div>
-      <div style="background:#D6006D;padding:7px 20px;font-size:10px;font-weight:800;letter-spacing:1px;color:#fff;text-transform:uppercase">${sbiBanner}</div>
-      <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${LINE};border-top:none;border-radius:0 0 6px 6px">
-        <tr><td style="padding:16px 20px 0;font-size:13px;line-height:1.55;color:${INK}">Hi ${esc((tmName||'').split(' ')[0]) || '[Name]'},<br><br>I wanted to put down a few notes from our chat so we're on the same page.</td></tr>
-        ${sect('WHAT I NOTICED', f.situation)}
-        ${sect('SPECIFICS', f.behavior)}
-        ${sect('WHY IT MATTERS', f.impact)}
-        ${f.policy ? sect('THE STANDARD WE FOLLOW', f.policy) : ''}
-        ${f.discussion ? sect('WHAT WE TALKED ABOUT', f.discussion) : ''}
-        ${sect('GOING FORWARD', f.expectations)}
-        ${sect('HOW I CAN SUPPORT YOU', f.support)}
-        ${f.prior ? sect('PRIOR COACHING ON RECORD', f.prior) : ''}
-        ${f.followUp ? sect('CHECK-IN', clFmtDate(f.followUp)) : ''}
-        ${vItem ? `<tr><td style="padding:12px 20px 0"><div style="font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:${SLATE};margin-bottom:3px">Policy reference</div><div style="font-size:11px;line-height:1.5;color:${SLATE}">OA Employee Handbook · Code of Conduct §${esc(vItem.code)} (${esc(vItem.cat)}) — ${esc(vItem.desc)}. ${esc(vItem.level)} offense; prescribed first-instance corrective action: ${esc(vItem.action)}.</div></td></tr>` : ''}
-        <tr><td style="padding:14px 20px">
-          <div style="background:${closeBg};border-left:3px solid ${closeBar};padding:10px 14px;font-size:12px;color:${INK};line-height:1.5">
-            ${sbiClose}
-          </div>
+      <div style="background:${ribbonBg};padding:9px 26px;border-bottom:1px solid ${LINE}">
+        <span style="font-size:10px;font-weight:700;letter-spacing:1.2px;color:${ribbonInk};text-transform:uppercase">${sbiBanner}</span>
+      </div>
+      <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
+        <tr><td style="padding:20px 26px 4px;font-size:13.5px;line-height:1.6;color:${INK}">Hi ${firstName},<br><br>I wanted to put down a few notes from our chat so we're on the same page.</td></tr>
+        ${sect('What I noticed', f.situation)}
+        ${sect('Specifics', f.behavior)}
+        ${sect('Why it matters', f.impact)}
+        ${f.policy ? sect('The standard we follow', f.policy) : ''}
+        ${f.discussion ? sect('What we talked about', f.discussion) : ''}
+        ${sect('Going forward', f.expectations)}
+        ${sect('How I can support you', f.support)}
+        ${f.prior ? sect('Prior coaching on record', f.prior) : ''}
+        ${f.followUp ? sect('Check-in', clFmtDate(f.followUp)) : ''}
+        ${vItem ? `<tr><td style="padding:0 26px"><div style="border-top:1px solid ${LINE};padding:14px 0 0"><div style="font-size:10px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:${SLATE};margin-bottom:4px">Policy reference</div><div style="font-size:11.5px;line-height:1.55;color:${SLATE}">OA Employee Handbook · Code of Conduct §${esc(vItem.code)} (${esc(vItem.cat)}): ${esc(vItem.desc)}. ${esc(vItem.level)} offense; prescribed first-instance corrective action: ${esc(vItem.action)}.</div></div></td></tr>` : ''}
+        <tr><td style="padding:18px 26px 4px">
+          <div style="background:${closeBg};border-left:3px solid ${closeBar};padding:12px 16px;border-radius:0 8px 8px 0;font-size:12.5px;color:${INK};line-height:1.55">${sbiClose}</div>
         </td></tr>
-        <tr><td style="padding:4px 20px 20px;font-size:13px;color:${SLATE}">Thanks for hearing me out — let me know how I can help.<br><br><strong>${esc(coach)}</strong>${ccHR ? ' &nbsp;|&nbsp; cc: HR' : ''}</td></tr>
+        <tr><td style="padding:16px 26px 22px">
+          <div style="border-top:1px solid ${LINE};padding-top:14px;font-size:13px;color:${INK};line-height:1.5">Thanks for hearing me out, let me know how I can help.<br><br><strong style="color:${NAVY}">${esc(coach)}</strong><br><span style="color:${SLATE};font-size:11.5px">Team Leader · Sales Operations${ccHR ? ' &nbsp;|&nbsp; cc: HR' : ''}</span></div>
+        </td></tr>
       </table>
     </div>`;
-    $('clEmailPreview').innerHTML = html;
-    window._clEmailHtml = html;
-    const plain = [`Coaching Note — ${lvl.label}`, `${tmName} | ${clFmtDate(convoDate) || '[Date]'} | From: ${coach}`, '',
+    $('clEmailPreview').innerHTML = clDeDash(html);
+    window._clEmailHtml = clDeDash(html);
+    const plain = [`Coaching Note (${lvl.label})`, `${tmName} | ${clFmtDate(convoDate) || '[Date]'} | From: ${coach}`, '',
       `Hi ${(tmName||'').split(' ')[0] || '[Name]'},`, '',
       "I wanted to put down a few notes from our chat so we're on the same page.", '',
       f.situation   ? 'WHAT I NOTICED\n' + f.situation : '',
@@ -4753,17 +4776,17 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
       f.support     ? 'HOW I CAN SUPPORT YOU\n' + f.support : '',
       f.prior       ? 'PRIOR COACHING\n' + f.prior : '',
       f.followUp    ? 'CHECK-IN: ' + clFmtDate(f.followUp) : '',
-      vItem ? `POLICY REFERENCE: OA Employee Handbook Code of Conduct §${vItem.code} (${vItem.cat}) — ${vItem.desc}. ${vItem.level} offense; prescribed first-instance corrective action: ${vItem.action}.` : '',
+      vItem ? `POLICY REFERENCE: OA Employee Handbook Code of Conduct §${vItem.code} (${vItem.cat}): ${vItem.desc}. ${vItem.level} offense; prescribed first-instance corrective action: ${vItem.action}.` : '',
       '', sbiClose, '', coach + (ccHR ? ' | cc: HR' : '')
     ].filter(Boolean).join('\n');
-    window._clEmailPlain = plain;
+    window._clEmailPlain = clDeDash(plain);
   }
 
   function clRenderPIP() {
     const tmName    = $('clTmName').value.trim();
     const convoDate = $('clConvoDate').value;
     const NAVY = '#0C1F42', MAG = '#D6006D', INK = '#1A2233', LINE = '#DDE4EF', SLATE = '#5B6678';
-    const subject = `[COACHING-LOG] ${convoDate || '[Date]'} | Performance Improvement Plan | ${tmName || '[Name]'}`;
+    const subject = clDeDash(`[COACHING-LOG] ${convoDate || '[Date]'} | Performance Improvement Plan | ${tmName || '[Name]'}`);
     $('clSubjectLine').textContent = subject;
     window._clEmailSubject = subject;
     const f = {
@@ -4776,7 +4799,7 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
     };
     const startFmt = f.start ? clFmtDate(f.start) : '[Start Date]';
     const endDate  = f.start ? (() => { const d = new Date(f.start+'T00:00:00'); d.setDate(d.getDate()+_clPIPDur); return clFmtDate(d.toISOString().slice(0,10)); })() : `[+${_clPIPDur} days]`;
-    const sect = (label, body) => `<tr><td style="padding:12px 20px 0"><div style="font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:${MAG};margin-bottom:3px">${label}</div><div style="font-size:13px;line-height:1.55;color:${INK}">${body || '<span style="color:#aaa;font-style:italic">—</span>'}</div></td></tr>`;
+    const sect = (label, body) => `<tr><td style="padding:12px 20px 0"><div style="font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:${MAG};margin-bottom:3px">${label}</div><div style="font-size:13px;line-height:1.55;color:${INK}">${body || '<span style="color:#aaa;font-style:italic">to be completed</span>'}</div></td></tr>`;
     const bullets = t => t.split('\n').filter(Boolean).map(l=>`• ${l}`).join('<br>');
     const html = `<div style="font-family:Arial,sans-serif;background:#fff;max-width:600px;margin:0 auto">
       <div style="background:${NAVY};padding:20px 24px 16px;border-radius:6px 6px 0 0">
@@ -4798,9 +4821,9 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
         <tr><td style="padding:4px 20px 20px;font-size:13px;color:${SLATE}">I'm committed to supporting your success throughout this process — let's make it work.<br><br><strong>Ritch</strong> &nbsp;|&nbsp; cc: HR</td></tr>
       </table>
     </div>`;
-    $('clEmailPreview').innerHTML = html;
-    window._clEmailHtml = html;
-    const plain = [`PERFORMANCE IMPROVEMENT PLAN — ${_clPIPDur} Days`, `${tmName} | Issued: ${clFmtDate(convoDate) || '[Date]'}`, `Period: ${startFmt} → ${endDate}`, '',
+    $('clEmailPreview').innerHTML = clDeDash(html);
+    window._clEmailHtml = clDeDash(html);
+    const plain = [`PERFORMANCE IMPROVEMENT PLAN (${_clPIPDur} Days)`, `${tmName} | Issued: ${clFmtDate(convoDate) || '[Date]'}`, `Period: ${startFmt} to ${endDate}`, '',
       f.gap     ? 'PERFORMANCE GAP\n' + f.gap : '',
       f.targets ? 'TARGETS\n' + f.targets : '',
       f.support ? 'SUPPORT\n' + f.support : '',
@@ -4809,7 +4832,7 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
       '', `Consequences: Failure to meet targets by ${endDate} may result in further action up to and including termination.`,
       '', 'Ritch | cc: HR'
     ].filter(Boolean).join('\n');
-    window._clEmailPlain = plain;
+    window._clEmailPlain = clDeDash(plain);
   }
 
   function clRender() {
@@ -4834,7 +4857,7 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
     const NAVY = '#0C1F42', MAG = '#D6006D', INK = '#1A2233', LINE = '#DDE4EF', SLATE = '#5B6678';
 
     const subject = `${lvl.label} ${lvl.id === 'verbal' ? 'Coaching Note' : 'Warning'} - Post-Booking Cadence${f.leadName ? ' - ' + f.leadName : ''} - ${clFmtDate(f.convoDate) || '[Date]'}`;
-    $('clSubjectLine').textContent = subject;
+    $('clSubjectLine').textContent = clDeDash(subject);
 
     const sect = (label, body) => `
       <tr><td style="padding:12px 20px 0">
@@ -4880,11 +4903,11 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
   </td></tr>
 </table>`;
 
-    $('clEmailPreview').innerHTML = html;
+    $('clEmailPreview').innerHTML = clDeDash(html);
     // store for copy
-    window._clEmailHtml = html;
-    window._clEmailSubject = subject;
-    window._clEmailPlain = clBuildPlain(f, lvl);
+    window._clEmailHtml = clDeDash(html);
+    window._clEmailSubject = clDeDash(subject);
+    window._clEmailPlain = clDeDash(clBuildPlain(f, lvl));
   }
 
   function clBuildPlain(f, lvl) {
