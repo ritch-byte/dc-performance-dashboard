@@ -605,6 +605,12 @@
       </svg>
       Coaching Tracker
     </a>
+    <a class="nav-item" id="navDcmon" href="#" onclick="showPage('dcmon');return false;">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M8 4.5v3.5l2.3 1.4"/><circle cx="8" cy="8" r="6.5"/>
+      </svg>
+      DC Monitoring
+    </a>
     <a class="nav-item" id="navTeam" href="#" onclick="showPage('team');return false;">
       <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
         <circle cx="6" cy="4.5" r="2.5"/>
@@ -1210,6 +1216,17 @@
             Each rep needs <b>1 coaching log per week</b>. <span style="color:#0E9F6E;font-weight:700">●&nbsp;Green</span> = coached · <span style="color:#C00;font-weight:700">●&nbsp;Red</span> = none yet · <span style="color:#999;font-weight:700">●&nbsp;Grey</span> = week not due yet. Sending a coaching log from the Generator (<b>Copy email</b>) records one automatically.
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- ── DC Monitoring (Invite-Accept Tracker) ── -->
+    <div id="dcmonSection" style="display:none;">
+      <div class="content-header">
+        <div class="page-title">DC Monitoring</div>
+        <div class="ch-right" style="font-size:12px;color:var(--slate);font-weight:500">Discovery-Call invite acceptance tracker</div>
+      </div>
+      <div style="padding:0 24px 32px">
+        <div id="dcmonBody"></div>
       </div>
     </div>
 
@@ -1881,6 +1898,7 @@
     $('teamProfileSection').style.display  = page === 'teamProfile' ? '' : 'none';
     $('coachingSection').style.display     = page === 'coaching'    ? '' : 'none';
     $('trackerSection').style.display      = page === 'tracker'     ? '' : 'none';
+    $('dcmonSection').style.display        = page === 'dcmon'       ? '' : 'none';
     $('navDashboard').classList.toggle('active',   page === 'dashboard');
     $('navTeam').classList.toggle('active',        page === 'team');
     $('navReports').classList.toggle('active',     page === 'reports');
@@ -1888,12 +1906,14 @@
     $('navAttendance').classList.toggle('active',  page === 'attendance');
     $('navCoaching').classList.toggle('active',    page === 'coaching');
     $('navTracker').classList.toggle('active',     page === 'tracker');
+    $('navDcmon').classList.toggle('active',        page === 'dcmon');
     if (page === 'team')       renderTeamRoster();
     if (page === 'reports')    { buildReportMonthSelect(); renderReports(); }
     if (page === 'sheet')      { buildSheetWeekSelect(); renderSheet(); if (!_attLoaded && !_attLoading) loadAttendanceData(); }
     if (page === 'attendance') { if (!_attLoaded) loadAttendanceData(); else renderAttendance(); }
     if (page === 'coaching')   clInit();
     if (page === 'tracker')    { buildTrackMonthSelect(); loadCoachingLogs(false); }
+    if (page === 'dcmon')      dcmonInit();
   }
 
   // ── Reports ──
@@ -4944,6 +4964,290 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
   }
   async function clCopySubject() {
     try { await navigator.clipboard.writeText(window._clEmailSubject || ''); } catch {}
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  //  DC Monitoring · Invite-Accept Tracker
+  //  Reads a published Google-Sheet CSV of DC calendar invites/accepts.
+  //  Expected header row (case-insensitive, order-independent):
+  //    Lead | Partner | QC Score | Class | Qualification
+  //    Invite 1 Sent | Invite 1 Status | Invite 1 Accepted
+  //    Invite 2 Sent | Invite 2 Status | Invite 2 Accepted
+  //  Timestamps: any format Date() understands (e.g. 1/10/2026 14:30).
+  // ══════════════════════════════════════════════════════════════════
+  const DC_MON_CSV_URL = '';   // <-- paste the publish-to-web CSV URL here
+  let _dcmonRows = null, _dcmonLoading = false, _dcmonFilter = 'all';
+  const DCM = { navy:'#0C1F42', green:'#0E9F6E', red:'#C0362C', amber:'#C97000', slate:'#5B6678', border:'#E4E9F1', accent:'#B4185A' };
+
+  function dcmonInit() {
+    if (_dcmonRows || _dcmonLoading) { renderDcMon(); return; }
+    if (!DC_MON_CSV_URL) { renderDcMonSetup(); return; }
+    loadDcMon(false);
+  }
+
+  async function loadDcMon(force) {
+    if (!DC_MON_CSV_URL) { renderDcMonSetup(); return; }
+    _dcmonLoading = true;
+    if (force || !_dcmonRows) $('dcmonBody').innerHTML = `<div style="padding:50px;text-align:center;color:${DCM.slate};font-size:13px">Loading monitoring data…</div>`;
+    try {
+      const res = await fetch(DC_MON_CSV_URL + (DC_MON_CSV_URL.includes('?') ? '&' : '?') + 't=' + Date.now());
+      const text = await res.text();
+      _dcmonRows = parseDcMon(text);
+      _dcmonLoading = false;
+      renderDcMon();
+    } catch (err) {
+      _dcmonLoading = false;
+      $('dcmonBody').innerHTML = `<div style="background:#FFF4F4;border:1px solid #F3C2C2;border-radius:12px;padding:20px;color:#B3261E;font-size:13px">Couldn't load the monitoring sheet.<br><span style="color:${DCM.slate}">${esc(String(err))}</span><br><br>Check that the sheet is <b>published to the web as CSV</b> and the URL in <code>DC_MON_CSV_URL</code> is correct.</div>`;
+    }
+  }
+
+  function dcmonTs(s) {
+    if (!s) return null;
+    let d = new Date(s);
+    if (isNaN(d)) d = new Date(String(s).replace(' ', 'T'));
+    return isNaN(d) ? null : d;
+  }
+  function dcmonStatus(s) {
+    const t = String(s || '').toLowerCase();
+    if (!t) return '';
+    if (t.includes('accept')) return 'accepted';
+    if (t.includes('declin')) return 'declined';
+    if (t.includes('tentat')) return 'tentative';
+    if (t.includes('no'))     return 'no response';
+    return t;
+  }
+
+  function parseDcMon(text) {
+    const lines = text.trim().split(/\r?\n/);
+    if (lines.length < 2) return [];
+    const norm = s => String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
+    const H = splitLine(lines[0]).map(norm);
+    // col(...tokenSets): first header containing ALL tokens of any set wins
+    const col = (...sets) => {
+      for (const tokens of sets) for (let i = 0; i < H.length; i++)
+        if (tokens.every(t => H[i].includes(t))) return i;
+      return -1;
+    };
+    const idx = {
+      lead:    col(['lead'], ['name']),
+      partner: col(['partner'], ['vendor']),
+      qc:      col(['qc'], ['score']),
+      cls:     col(['class']),
+      qualif:  col(['qualif'], ['qualified'], ['qual']),
+      s1:  col(['invite1sent'], ['inv1sent'], ['1sent'], ['sent1']),
+      st1: col(['invite1status'], ['inv1status'], ['1status'], ['1response'], ['status1'], ['response1']),
+      a1:  col(['invite1accept'], ['inv1accept'], ['1accept'], ['accept1'], ['1accepted'], ['accepted1']),
+      s2:  col(['invite2sent'], ['inv2sent'], ['2sent'], ['sent2']),
+      st2: col(['invite2status'], ['inv2status'], ['2status'], ['2response'], ['status2'], ['response2']),
+      a2:  col(['invite2accept'], ['inv2accept'], ['2accept'], ['accept2'], ['2accepted'], ['accepted2']),
+    };
+    return lines.slice(1).map(line => {
+      const c = splitLine(line);
+      const g = i => i >= 0 ? (c[i] || '').trim() : '';
+      const s1r = g(idx.s1), a1r = g(idx.a1), s2r = g(idx.s2), a2r = g(idx.a2);
+      const st1 = dcmonStatus(g(idx.st1)), st2 = dcmonStatus(g(idx.st2));
+      const s1 = dcmonTs(s1r), a1 = dcmonTs(a1r), s2 = dcmonTs(s2r), a2 = dcmonTs(a2r);
+      const hasInv1 = !!(s1r || st1 || a1r);
+      const hasInv2 = !!(s2r || st2 || a2r);
+      const d1 = (st1 === 'accepted' && s1 && a1) ? (a1 - s1) : null;
+      const d2 = (st2 === 'accepted' && s2 && a2) ? (a2 - s2) : null;
+      const firstDelta = [d1, d2].filter(x => x != null).sort((a, b) => a - b)[0] ?? null;
+      return {
+        lead: g(idx.lead), partner: g(idx.partner), qc: g(idx.qc), cls: g(idx.cls), qualif: g(idx.qualif),
+        s1, s2, a1, a2, st1, st2, hasInv1, hasInv2, d1, d2, firstDelta,
+        sent: (hasInv1 ? 1 : 0) + (hasInv2 ? 1 : 0),
+        acc: (st1 === 'accepted' ? 1 : 0) + (st2 === 'accepted' ? 1 : 0),
+      };
+    }).filter(r => r.lead);
+  }
+
+  function dcmonFmtDelta(ms) {
+    if (ms == null) return '—';
+    const m = Math.round(ms / 60000);
+    if (m < 60) return m + 'm';
+    const h = Math.floor(m / 60), rm = m % 60;
+    if (h < 24) return rm ? `${h}h ${rm}m` : `${h}h`;
+    const d = Math.floor(h / 24), rh = h % 24;
+    return rh ? `${d}d ${rh}h` : `${d}d`;
+  }
+  function dcmonFmtTs(d) {
+    return d ? d.toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) : '—';
+  }
+  function dcmonMedian(arr) {
+    if (!arr.length) return null;
+    const s = [...arr].sort((a, b) => a - b), n = s.length;
+    return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2;
+  }
+  function dcmonBucket(ms) {
+    const h = ms / 3600000;
+    return h <= 1 ? 0 : h <= 6 ? 1 : h <= 12 ? 2 : h <= 24 ? 3 : h <= 48 ? 4 : 5;
+  }
+
+  function dcmonSetFilter(f) { _dcmonFilter = f; renderDcMon(); }
+
+  function renderDcMonSetup() {
+    $('dcmonBody').innerHTML = `
+      <div style="background:#fff;border:1px solid ${DCM.border};border-radius:12px;padding:24px;max-width:760px">
+        <div style="font-size:16px;font-weight:800;color:${DCM.navy};margin-bottom:8px">Connect your invite-tracking sheet</div>
+        <div style="font-size:13px;color:${DCM.slate};line-height:1.6;margin-bottom:16px">
+          This page reads a live Google Sheet of DC calendar invites and their acceptances, then computes acceptance rate, median time-to-accept, and a per-lead table. To turn it on:
+        </div>
+        <ol style="font-size:13px;color:${DCM.navy};line-height:1.8;margin:0 0 16px;padding-left:20px">
+          <li>Put your invite data in a Google Sheet with these column headers (row 1):</li>
+        </ol>
+        <div style="background:#F7F9FC;border:1px solid ${DCM.border};border-radius:8px;padding:12px 14px;font-family:monospace;font-size:12px;color:${DCM.navy};line-height:1.9;overflow-x:auto;white-space:nowrap;margin-bottom:16px">
+          Lead &nbsp;|&nbsp; Partner &nbsp;|&nbsp; QC Score &nbsp;|&nbsp; Class &nbsp;|&nbsp; Qualification &nbsp;|&nbsp; Invite 1 Sent &nbsp;|&nbsp; Invite 1 Status &nbsp;|&nbsp; Invite 1 Accepted &nbsp;|&nbsp; Invite 2 Sent &nbsp;|&nbsp; Invite 2 Status &nbsp;|&nbsp; Invite 2 Accepted
+        </div>
+        <ol start="2" style="font-size:13px;color:${DCM.navy};line-height:1.8;margin:0 0 4px;padding-left:20px">
+          <li><b>File → Share → Publish to web</b> → pick that tab → <b>CSV</b> → Publish. Copy the link.</li>
+          <li>Send me the link and I'll switch this page on. (Statuses can read Accepted / Declined / Tentative / No response; timestamps like <code>1/10/2026 14:30</code>.)</li>
+        </ol>
+        <div style="margin-top:16px;font-size:12px;color:${DCM.slate}">Only <b>Lead</b> is required; every other column is optional and the page adapts to whatever you include.</div>
+      </div>`;
+  }
+
+  function renderDcMon() {
+    const rows = _dcmonRows || [];
+    if (!rows.length) { renderDcMonSetup(); return; }
+
+    // ── aggregate ──
+    const uniq = rows.length;
+    const sent2 = rows.filter(r => r.hasInv2).length;
+    const sent1 = rows.filter(r => r.hasInv1 && !r.hasInv2).length;
+    let totalInv = 0, accepted = 0, declined = 0, tentative = 0, noresp = 0;
+    rows.forEach(r => {
+      [[r.hasInv1, r.st1], [r.hasInv2, r.st2]].forEach(([has, st]) => {
+        if (!has) return;
+        totalInv++;
+        if (st === 'accepted') accepted++;
+        else if (st === 'declined') declined++;
+        else if (st === 'tentative') tentative++;
+        else noresp++;
+      });
+    });
+    const acceptRate = totalInv ? Math.round(accepted / totalInv * 100) : 0;
+    const firstDeltas = rows.map(r => r.firstDelta).filter(x => x != null);
+    const medFirst = dcmonMedian(firstDeltas);
+    const buckets = [0, 0, 0, 0, 0, 0];
+    firstDeltas.forEach(ms => buckets[dcmonBucket(ms)]++);
+    const within1h = firstDeltas.filter(ms => ms <= 3600000).length;
+    const pct1h = uniq ? Math.round(within1h / uniq * 100) : 0;
+    const allSent = rows.flatMap(r => [r.s1, r.s2]).filter(Boolean).sort((a, b) => a - b);
+    const dateRange = allSent.length
+      ? `${allSent[0].toLocaleDateString('en-US',{month:'short',day:'numeric'})} - ${allSent[allSent.length-1].toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}`
+      : '';
+
+    const tile = (big, label, sub) => `
+      <div style="background:#fff;border:1px solid ${DCM.border};border-radius:12px;padding:16px 18px;min-width:130px;flex:1">
+        <div style="font-size:24px;font-weight:800;color:${DCM.navy};line-height:1.1">${big}</div>
+        <div style="font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:${DCM.slate};margin-top:6px">${label}</div>
+        ${sub ? `<div style="font-size:11px;color:${DCM.slate};margin-top:3px">${sub}</div>` : ''}
+      </div>`;
+
+    const tiles = `<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+      ${tile(medFirst != null ? dcmonFmtDelta(medFirst) : '—', 'Median time to accept', 'invite sent → first accept')}
+      ${tile(pct1h + '%', 'Accepted within 1 hour', `${within1h} of ${uniq} leads`)}
+      ${tile(acceptRate + '%', 'Invite acceptance rate', `${accepted} of ${totalInv} invites`)}
+      ${tile(uniq.toLocaleString(), 'Leads tracked', `${sent2} sent 2 · ${sent1} sent 1`)}
+    </div>`;
+
+    // ── charts (CSS bars) ──
+    const bLabels = ['≤1h', '1-6h', '6-12h', '12-24h', '1-2d', '>2d'];
+    const bMax = Math.max(1, ...buckets);
+    const bColors = [DCM.green, '#4CAF7D', DCM.amber, '#D08A3A', '#C77', DCM.red];
+    const bucketBars = buckets.map((n, i) => `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:7px">
+        <div style="width:56px;font-size:12px;color:${DCM.slate};text-align:right">${bLabels[i]}</div>
+        <div style="flex:1;background:#EEF2F7;border-radius:5px;height:20px;position:relative">
+          <div style="width:${Math.round(n/bMax*100)}%;background:${bColors[i]};height:100%;border-radius:5px;min-width:2px"></div>
+        </div>
+        <div style="width:44px;font-size:12px;font-weight:700;color:${DCM.navy}">${n}</div>
+      </div>`).join('');
+
+    const outcomes = [['Accepted', accepted, DCM.green], ['No response', noresp, DCM.slate], ['Declined', declined, DCM.red], ['Tentative', tentative, DCM.amber]];
+    const oMax = Math.max(1, ...outcomes.map(o => o[1]));
+    const outcomeBars = outcomes.map(([lab, n, col]) => `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:7px">
+        <div style="width:88px;font-size:12px;color:${DCM.slate};text-align:right">${lab}</div>
+        <div style="flex:1;background:#EEF2F7;border-radius:5px;height:20px"><div style="width:${Math.round(n/oMax*100)}%;background:${col};height:100%;border-radius:5px;min-width:2px"></div></div>
+        <div style="width:44px;font-size:12px;font-weight:700;color:${DCM.navy}">${n}</div>
+      </div>`).join('');
+
+    const charts = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+      <div style="background:#fff;border:1px solid ${DCM.border};border-radius:12px;padding:16px 18px">
+        <div style="font-size:12px;font-weight:800;color:${DCM.navy};text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">Time to acceptance</div>
+        ${bucketBars}
+      </div>
+      <div style="background:#fff;border:1px solid ${DCM.border};border-radius:12px;padding:16px 18px">
+        <div style="font-size:12px;font-weight:800;color:${DCM.navy};text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">Invite outcomes <span style="color:${DCM.slate};font-weight:600">(${totalInv} total)</span></div>
+        ${outcomeBars}
+      </div>
+    </div>`;
+
+    // ── table ──
+    let view = rows;
+    if (_dcmonFilter === 'sent2') view = rows.filter(r => r.hasInv2);
+    else if (_dcmonFilter === 'sent1') view = rows.filter(r => r.hasInv1 && !r.hasInv2);
+    else if (_dcmonFilter === 'noqc') view = rows.filter(r => !r.qc);
+
+    const fBtn = (f, lab) => `<button onclick="dcmonSetFilter('${f}')" style="border:1px solid ${_dcmonFilter===f?DCM.navy:DCM.border};background:${_dcmonFilter===f?DCM.navy:'#fff'};color:${_dcmonFilter===f?'#fff':DCM.navy};border-radius:7px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer">${lab}</button>`;
+
+    const stPill = st => {
+      if (!st) return '<span style="color:#B7C0CE">—</span>';
+      const c = st === 'accepted' ? DCM.green : st === 'declined' ? DCM.red : st === 'tentative' ? DCM.amber : DCM.slate;
+      const bg = st === 'accepted' ? '#E7F6EF' : st === 'declined' ? '#FCEBEC' : st === 'tentative' ? '#FBF1E3' : '#EEF2F7';
+      return `<span style="background:${bg};color:${c};font-size:11px;font-weight:700;padding:2px 7px;border-radius:10px;text-transform:capitalize;white-space:nowrap">${st}</span>`;
+    };
+    const inviteCell = (s, st, a, d) => st || s ? `
+      <div style="font-size:11.5px;color:${DCM.slate};white-space:nowrap">${dcmonFmtTs(s)}</div>
+      <div style="margin:2px 0">${stPill(st)}</div>
+      <div style="font-size:11.5px;color:${DCM.navy};white-space:nowrap">${a ? dcmonFmtTs(a) + (d!=null?` <b style="color:${DCM.green}">Δ ${dcmonFmtDelta(d)}</b>`:'') : ''}</div>` : '<span style="color:#B7C0CE">—</span>';
+
+    const qualPill = q => {
+      const t = String(q||'').toLowerCase();
+      if (!t || t === '—') return '<span style="color:#B7C0CE">—</span>';
+      const c = t.includes('pass') ? DCM.green : (t.includes('fail')||t.includes('flag')) ? DCM.red : DCM.slate;
+      return `<span style="color:${c};font-weight:700;font-size:11.5px">${esc(q)}</span>`;
+    };
+
+    const rowsHtml = view.map(r => `
+      <tr style="border-bottom:1px solid #EEF2F7">
+        <td style="padding:8px 10px;font-size:12.5px;color:${DCM.navy};font-weight:600">${esc(r.lead)}<div style="font-size:11px;color:${DCM.slate};font-weight:500">${r.acc}/${r.sent} accepted</div></td>
+        <td style="padding:8px 10px;font-size:12px;color:${DCM.navy};text-align:center">${r.qc ? esc(r.qc) : '<span style="color:#B7C0CE">—</span>'}</td>
+        <td style="padding:8px 10px;font-size:12px;color:${DCM.slate}">${r.cls ? esc(r.cls) : '<span style="color:#B7C0CE">—</span>'}</td>
+        <td style="padding:8px 10px;text-align:center">${qualPill(r.qualif)}</td>
+        <td style="padding:8px 10px;font-size:12px;color:${DCM.slate}">${esc(r.partner) || '<span style=\"color:#B7C0CE\">—</span>'}</td>
+        <td style="padding:8px 10px;border-left:1px solid #EEF2F7">${inviteCell(r.s1, r.st1, r.a1, r.d1)}</td>
+        <td style="padding:8px 10px;border-left:1px solid #EEF2F7">${r.hasInv2 ? inviteCell(r.s2, r.st2, r.a2, r.d2) : '<span style=\"color:#B7C0CE\">—</span>'}</td>
+      </tr>`).join('');
+
+    const table = `<div style="background:#fff;border:1px solid ${DCM.border};border-radius:12px;padding:16px 18px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          ${fBtn('all','All')}${fBtn('sent2','Sent 2')}${fBtn('sent1','Sent 1')}${fBtn('noqc','No QC')}
+          <span style="align-self:center;font-size:12px;color:${DCM.slate}">${view.length} of ${uniq}</span>
+        </div>
+        <button onclick="loadDcMon(true)" class="cl-chip">↻ Refresh</button>
+      </div>
+      <div style="overflow-x:auto;max-height:70vh">
+        <table style="border-collapse:collapse;width:100%;min-width:900px">
+          <thead><tr style="position:sticky;top:0;background:${DCM.navy};color:#fff;z-index:1">
+            <th style="text-align:left;padding:9px 10px;font-size:11px;letter-spacing:.4px">Lead</th>
+            <th style="padding:9px 10px;font-size:11px">QC</th>
+            <th style="text-align:left;padding:9px 10px;font-size:11px">Class</th>
+            <th style="padding:9px 10px;font-size:11px">Qualif.</th>
+            <th style="text-align:left;padding:9px 10px;font-size:11px">Partner</th>
+            <th style="text-align:left;padding:9px 10px;font-size:11px">Invite 1</th>
+            <th style="text-align:left;padding:9px 10px;font-size:11px">Invite 2</th>
+          </tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>
+    </div>`;
+
+    $('dcmonBody').innerHTML =
+      `<div style="font-size:12px;color:${DCM.slate};margin-bottom:12px">${dateRange ? 'Window: <b>'+dateRange+'</b>' : ''}</div>`
+      + tiles + charts + table;
   }
 </script>
 </body>
