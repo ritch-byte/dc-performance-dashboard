@@ -4992,18 +4992,18 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
   function renderDcMonEmbed() {
     const u = DC_MON_EMBED_URL;
     $('dcmonBody').innerHTML = `
-      <div style="background:#fff;border:1px solid ${DCM.border};border-radius:12px;padding:16px 18px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-        <div>
-          <div style="font-size:14px;font-weight:800;color:${DCM.navy}">DC Leads Invite-Accept Tracker</div>
-          <div style="font-size:12px;color:${DCM.slate};margin-top:2px">Maintained by the COO. Tracks how quickly DC leads accept their calendar invites.</div>
+      <div style="background:#fff;border:1px solid ${DCM.border};border-radius:14px;padding:44px 28px;text-align:center;max-width:620px;margin:20px auto;box-shadow:0 1px 3px rgba(16,31,66,.06)">
+        <div style="width:56px;height:56px;border-radius:14px;background:${DCM.navy};display:inline-flex;align-items:center;justify-content:center;margin-bottom:18px">
+          <svg width="28" height="28" viewBox="0 0 16 16" fill="none" stroke="#fff" stroke-width="1.4"><path d="M8 4.5v3.5l2.3 1.4"/><circle cx="8" cy="8" r="6.5"/></svg>
         </div>
-        <a href="${u}" target="_blank" rel="noopener" style="background:${DCM.navy};color:#fff;text-decoration:none;font-size:13px;font-weight:700;padding:10px 18px;border-radius:8px;white-space:nowrap">Open in new tab ↗</a>
-      </div>
-      <div style="background:#fff;border:1px solid ${DCM.border};border-radius:12px;overflow:hidden">
-        <iframe src="${u}" style="width:100%;height:76vh;border:0;display:block" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
-      </div>
-      <div style="font-size:11.5px;color:${DCM.slate};margin-top:10px;line-height:1.5">
-        If the tracker doesn't appear above, your browser is blocking the embed, use <b>Open in new tab</b>. Team leaders may need to be signed in to the account the COO shared the tool with.
+        <div style="font-size:19px;font-weight:800;color:${DCM.navy};margin-bottom:8px">DC Leads Invite-Accept Tracker</div>
+        <div style="font-size:13.5px;color:${DCM.slate};line-height:1.6;max-width:460px;margin:0 auto 24px">
+          Maintained by the COO. Tracks how quickly Discovery-Call leads accept their calendar invites, median time to accept, acceptance rate, and per-lead detail. It opens in a new tab.
+        </div>
+        <a href="${u}" target="_blank" rel="noopener" style="display:inline-block;background:${DCM.navy};color:#fff;text-decoration:none;font-size:14px;font-weight:700;padding:13px 30px;border-radius:9px">Open DC Monitoring Tracker ↗</a>
+        <div style="font-size:11.5px;color:${DCM.slate};margin-top:20px;line-height:1.5">
+          Opens on claude.ai. You may need to be signed in to the account the COO shared the tool with.
+        </div>
       </div>`;
   }
 
