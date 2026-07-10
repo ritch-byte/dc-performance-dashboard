@@ -605,7 +605,7 @@
       </svg>
       Coaching Tracker
     </a>
-    <a class="nav-item" id="navDcmon" href="#" onclick="showPage('dcmon');return false;">
+    <a class="nav-item" id="navDcmon" href="#" onclick="openDcMon();return false;">
       <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
         <path d="M8 4.5v3.5l2.3 1.4"/><circle cx="8" cy="8" r="6.5"/>
       </svg>
@@ -4981,6 +4981,12 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
   const DC_MON_CSV_URL = '';   // (unused while EMBED_URL is set) publish-to-web CSV URL for a self-hosted version
   let _dcmonRows = null, _dcmonLoading = false, _dcmonFilter = 'all';
   const DCM = { navy:'#0C1F42', green:'#0E9F6E', red:'#C0362C', amber:'#C97000', slate:'#5B6678', border:'#E4E9F1', accent:'#B4185A' };
+
+  // Clicking the sidebar item routes straight to the COO's tracker in a new tab.
+  function openDcMon() {
+    if (DC_MON_EMBED_URL) { window.open(DC_MON_EMBED_URL, '_blank', 'noopener'); return; }
+    showPage('dcmon');  // no external link set yet -> fall back to the in-dashboard page
+  }
 
   function dcmonInit() {
     if (DC_MON_EMBED_URL) { renderDcMonEmbed(); return; }
