@@ -642,6 +642,14 @@
       </svg>
       Attendance
     </a>
+    <a class="nav-item" id="navSchedule" href="#" onclick="showPage('schedule');return false;">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="1" y="2" width="14" height="13" rx="1"/>
+        <path d="M1 6h14M5 1v3M11 1v3"/>
+        <path d="M4 9h2M4 11.5h2M7 9h2M7 11.5h2M10 9h2"/>
+      </svg>
+      Schedule
+    </a>
 
     <a class="nav-item" id="navCoaching" href="#" onclick="showPage('coaching');return false;">
       <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -1227,6 +1235,17 @@
       </div>
       <div style="padding:0 24px 32px">
         <div id="dcmonBody"></div>
+      </div>
+    </div>
+
+    <!-- ── Schedule ── -->
+    <div id="scheduleSection" style="display:none;">
+      <div class="content-header">
+        <div class="page-title">Schedule</div>
+        <div class="ch-right" id="schedWeekLabel" style="font-size:12px;color:var(--slate);font-weight:500"></div>
+      </div>
+      <div style="padding:0 24px 32px">
+        <div id="scheduleBody"></div>
       </div>
     </div>
 
@@ -1899,6 +1918,7 @@
     $('coachingSection').style.display     = page === 'coaching'    ? '' : 'none';
     $('trackerSection').style.display      = page === 'tracker'     ? '' : 'none';
     $('dcmonSection').style.display        = page === 'dcmon'       ? '' : 'none';
+    $('scheduleSection').style.display     = page === 'schedule'    ? '' : 'none';
     $('navDashboard').classList.toggle('active',   page === 'dashboard');
     $('navTeam').classList.toggle('active',        page === 'team');
     $('navReports').classList.toggle('active',     page === 'reports');
@@ -1907,6 +1927,7 @@
     $('navCoaching').classList.toggle('active',    page === 'coaching');
     $('navTracker').classList.toggle('active',     page === 'tracker');
     $('navDcmon').classList.toggle('active',        page === 'dcmon');
+    $('navSchedule').classList.toggle('active',     page === 'schedule');
     if (page === 'team')       renderTeamRoster();
     if (page === 'reports')    { buildReportMonthSelect(); renderReports(); }
     if (page === 'sheet')      { buildSheetWeekSelect(); renderSheet(); if (!_attLoaded && !_attLoading) loadAttendanceData(); }
@@ -1914,6 +1935,7 @@
     if (page === 'coaching')   clInit();
     if (page === 'tracker')    { buildTrackMonthSelect(); loadCoachingLogs(false); }
     if (page === 'dcmon')      dcmonInit();
+    if (page === 'schedule')   renderSchedule();
   }
 
   // ── Reports ──
@@ -5276,6 +5298,149 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
     $('dcmonBody').innerHTML =
       `<div style="font-size:12px;color:${DCM.slate};margin-bottom:12px">${dateRange ? 'Window: <b>'+dateRange+'</b>' : ''}</div>`
       + tiles + charts + table;
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  //  Schedule · weekly shift grid (static, swap the object each week)
+  //  Cell codes: W = work (uses the group's shift) · OFF = weekday off ·
+  //  RD = rest day · anything else = literal shift text (Bridge / Mgmt).
+  // ══════════════════════════════════════════════════════════════════
+  const SCHED = {
+    week: 'July Week 2 · Jul 13 - 19, 2026',
+    days: ['Mon 13','Tue 14','Wed 15','Thu 16','Fri 17','Sat 18','Sun 19'],
+    note: 'Cell shows the shift for that day · OFF = weekday off · RD = rest day. Overnight shifts carry through to their scheduled end. Group B works the Manila day (Tue–Sat, rest Sun/Mon). Batch 17 employee numbers pending (—).',
+    groups: [
+      { name:'Group A', shift:'9PM–8AM', meta:'9PM–8AM (4×11) · TL Ritch · SME Vince · 15 HC', rows:[
+        ['OA2153','GADIER, VINCENT TAPERLA (SME)','SME','W,W,OFF,W,W,RD,RD'],
+        ['OA2177','CATOLICO, PEDRO NASAYAO','B10','W,W,W,W,OFF,RD,RD'],
+        ['OA2185','SILVA, GODWIN ESCARO','B10','W,W,W,W,OFF,RD,RD'],
+        ['OA2184','SILANG, GIAN CARLO RIVERA','B10','W,W,W,W,OFF,RD,RD'],
+        ['OA2262','LAVARES, GIAN BERT','B14','W,W,W,OFF,W,RD,RD'],
+        ['OA2277','VILLARUEL, LANCE GABRIEL','B15','W,W,W,OFF,W,RD,RD'],
+        ['OA2175','BALIUAG, CHARLON ORALLO','B10','W,W,W,OFF,W,RD,RD'],
+        ['—','BAUTISTA, DAN MARK ANTHONY','B10','W,W,W,OFF,W,RD,RD'],
+        ['OA2244','DEMAYO, JERRY GUATLO','B13','W,W,OFF,W,W,RD,RD'],
+        ['OA2183','SARMIENTO, JULIUS LEMUEL ALVARAN','B10','W,W,OFF,W,W,RD,RD'],
+        ['OA2276','SUSANA, JOHN CHRISTIAN','B15','W,W,OFF,W,W,RD,RD'],
+        ['OA2182','RUIZ, RENZ GIL TUMAMAO','B10','W,OFF,W,W,W,RD,RD'],
+        ['OA2260','ARESPACOCHAGA, MERVIN BRYANN','B14','W,OFF,W,W,W,RD,RD'],
+        ['OA2163','DECAMORA, MAUREEN ALPUERTO','B9','W,OFF,W,W,W,RD,RD'],
+        ['OA2165','PETRAS, ART JOSEPH BALLESTEROS','B9','W,OFF,W,W,W,RD,RD'],
+      ]},
+      { name:'Group B', shift:'1AM–12NN', meta:'1AM–12NN (4×11) · Manila day Tue–Sat, rest Sun/Mon · TL Jonathan · SME Diana · 16 HC', rows:[
+        ['OA2106','VOSOTROS, DIANA CLEMEN (SME)','SME','RD,W,W,W,W,OFF,RD'],
+        ['OA2047','ANOS, MARC RONGIE','Core','RD,W,W,W,W,OFF,RD'],
+        ['OA2251','VELASCO, EDWARD WINROQS RAMOS','B13','RD,W,W,W,W,OFF,RD'],
+        ['OA2227','SARMIENTO, CHARLES KELVIN DIAZ','B11','RD,W,W,W,W,OFF,RD'],
+        ['OA2156','LENTIJA, JEFFERSON ARGEL','B8','RD,W,W,W,OFF,W,RD'],
+        ['OA2230','TUPAZ, ROMMEL RICO','B11','RD,W,W,W,OFF,W,RD'],
+        ['OA2167','VERASTIGUE, BEDIER JAY LEGASPI','B9','RD,W,W,W,OFF,W,RD'],
+        ['OA2247','MALAVEGA, JOSE CARLOS RAMIREZ','B13','RD,W,W,W,OFF,W,RD'],
+        ['OA2223','GALOSO, LAWRENCE MIRAS','B11','RD,W,W,OFF,W,W,RD'],
+        ['OA2179','FORTEZ, CARLO BEJO','B10','RD,W,W,OFF,W,W,RD'],
+        ['OA2149','ARCENA, CHARLITO OSAYAN','B8','RD,W,W,OFF,W,W,RD'],
+        ['OA2080','SAMINADO, JERVIN CHRISTIAN CUNANAN','Core','RD,W,W,OFF,W,W,RD'],
+        ['OA2263','RAMIREZ, MARK LAUREN','B14','RD,W,OFF,W,W,W,RD'],
+        ['OA2271','BANGALAN, RODERICO','B15','RD,W,OFF,W,W,W,RD'],
+        ['OA2178','ESCABILLAS, KENNETH RYAN APOLINAR','B10','RD,W,OFF,W,W,W,RD'],
+        ['OA2219','BENJAMIN, RUSSELL LUCERO','B11','RD,W,OFF,W,W,W,RD'],
+      ]},
+      { name:'Group C', shift:'11PM–10AM', meta:'11PM–10AM (4×11) · TL AC · SME Vin · 14 HC', rows:[
+        ['OA2089','MELO, ALVIN CABILES (SME)','SME','W,W,W,W,OFF,RD,RD'],
+        ['—','DE CASTRO, CATHERINE BENITO','B17','W,W,W,W,OFF,RD,RD'],
+        ['—','RAMOS, JENNIFER BANDOY','B17','W,W,W,W,OFF,RD,RD'],
+        ['—','AURELIO, RAYMOND NIEVA','B17','W,W,W,OFF,W,RD,RD'],
+        ['—','RAMOS, MA. ISABEL CASINO','B17','W,W,W,OFF,W,RD,RD'],
+        ['—','TAMAYO, MELISSE FLORES','B17','W,W,W,OFF,W,RD,RD'],
+        ['—','DIAZ, SHEILLA MORENO','B17','W,W,W,OFF,W,RD,RD'],
+        ['—','ARIDI, HADI MUSLIMIN','B17','W,W,OFF,W,W,RD,RD'],
+        ['—','RONQUILLO, JOREMIE TUBLE','B17','W,W,OFF,W,W,RD,RD'],
+        ['—','ARANA, MARVIN ASIS','B17','W,W,OFF,W,W,RD,RD'],
+        ['OA2287','BALBIDO, JUSTINE CARAGA','B16','W,OFF,W,W,W,RD,RD'],
+        ['OA2295','CUBOL, JESLEY JUSTO','B16','W,OFF,W,W,W,RD,RD'],
+        ['OA2289','CARDELL, DONALD VENIEGAS','B16','W,OFF,W,W,W,RD,RD'],
+        ['OA2297','MAGTALAS, AYESHA RUTAO','B16','W,OFF,W,W,W,RD,RD'],
+      ]},
+      { name:'Group D', shift:'4PM–1AM', meta:'4PM–1AM (5×9) · No weekday off · TL Jumar · SME Ali · 26 HC', rows:[
+        ['OA2091','BAYHON, ALVIN BESANA (SME)','SME','W,W,W,W,W,RD,RD'],
+        ['—','SAN JOSE, GLEN JERICK DIONISIO','B17','W,W,W,W,W,RD,RD'],
+        ['—','JERUSALEM, DANILO MANALO','B17','W,W,W,W,W,RD,RD'],
+        ['—','JARAULA, JEZZA JEZREEL CAJATOL','B17','W,W,W,W,W,RD,RD'],
+        ['—','TIU, REGINE THERESA TAN','B17','W,W,W,W,W,RD,RD'],
+        ['—','MALINAY JR., REYNALDO DE VERA','B17','W,W,W,W,W,RD,RD'],
+        ['—','MONTICARLO, JOHN VIC MORCO','B17','W,W,W,W,W,RD,RD'],
+        ['—','GUERRA, CHESTER JOHN PEREZ','B17','W,W,W,W,W,RD,RD'],
+        ['—','VELASQUEZ, ARCHIE TURNO','B17','W,W,W,W,W,RD,RD'],
+        ['—','LOTHO, ROBERT CHRISTIAN PANTOJA','B17','W,W,W,W,W,RD,RD'],
+        ['—','SANCHEZ, MARIA ANGELICA BALUBAR','B17','W,W,W,W,W,RD,RD'],
+        ['—','ELAGO, EDNYL CHLOE','B17','W,W,W,W,W,RD,RD'],
+        ['—','TORMON, MICHAEL ANTHONY DORON','B17','W,W,W,W,W,RD,RD'],
+        ['—','CAGUIMBAL, DIVINAMOR INCIONG','B17','W,W,W,W,W,RD,RD'],
+        ['—','TUNGOL, LORENZO LUIZ PASAMONTE','B17','W,W,W,W,W,RD,RD'],
+        ['OA2250','VALENZUELA, AARON KYLE PLAZA','B13','W,W,W,W,W,RD,RD'],
+        ['OA2220','BONDAD, JOSHUA JAMES LOPEZ','B11','W,W,W,W,W,RD,RD'],
+        ['OA2138','REES, JEAN NATHALIE GAMUTAN','Core','W,W,W,W,W,RD,RD'],
+        ['OA2226','PABIONA, CRISTINA LASAY','B11','W,W,W,W,W,RD,RD'],
+        ['OA2275','JAVIER, JOHN STEVEN','B15','W,W,W,W,W,RD,RD'],
+        ['OA2298','RAMPAS, DESIREE FAJARDO','B16','W,W,W,W,W,RD,RD'],
+        ['OA2294','QUISMUNDO, RUTH','B16','W,W,W,W,W,RD,RD'],
+        ['OA2290','CARO, ARMI DELA CRUZ','B16','W,W,W,W,W,RD,RD'],
+        ['OA2292','CHUA, ANGEL CABAGYO','B16','W,W,W,W,W,RD,RD'],
+        ['OA2286','ARIENDA, JOSIE VEGA','B16','W,W,W,W,W,RD,RD'],
+        ['OA2288','CAJAYON, BRYAN MENDOZA','B16','W,W,W,W,W,RD,RD'],
+      ]},
+      { name:'Bridge', shift:'', meta:'Mon 6AM–5PM / Tue–Fri 10AM–9PM · 3 HC', rows:[
+        ['OA2261','BASCOS, JESSICA','B14','6AM–5PM,10AM–9PM,OFF,10AM–9PM,10AM–9PM,RD,RD'],
+        ['OA2186','SINDAC, RENZ FIGUERORA','B10','6AM–5PM,10AM–9PM,10AM–9PM,OFF,10AM–9PM,RD,RD'],
+        ['OA2151','CAVINTA, STEVEN KURT HERNANDEZ','B8','6AM–5PM,OFF,10AM–9PM,10AM–9PM,10AM–9PM,RD,RD'],
+      ]},
+      { name:'Management · Team Leaders', shift:'', meta:'4 TLs', rows:[
+        ['MGT','MANIPOL, RITCH JOY HINOGUIN','STL · Group A','9PM–6AM,9PM–6AM,9PM–6AM,9PM–6AM,9PM–6AM,RD,RD'],
+        ['MGT','JABONETE, JONATHAN','TL · Group B','1AM–10AM,1AM–10AM,1AM–10AM,1AM–10AM,1AM–10AM,RD,RD'],
+        ['MGT','TANATE, ANGELICA (AC)','TL · Group C','11PM–8AM,11PM–8AM,11PM–8AM,11PM–8AM,11PM–8AM,RD,RD'],
+        ['MGT','VERE, JUMAR ZAUSA','TL · Group D','4PM–1AM,4PM–1AM,4PM–1AM,4PM–1AM,4PM–1AM,RD,RD'],
+      ]},
+    ],
+  };
+
+  function renderSchedule() {
+    const S = SCHED, NAVY = '#0C1F42', SLATE = '#5B6678', BORDER = '#E4E9F1';
+    $('schedWeekLabel').textContent = S.week;
+    const cell = (code, shift) => {
+      const v = code === 'W' ? shift : code;
+      if (v === 'OFF') return `<td style="padding:7px 8px;text-align:center;border:1px solid ${BORDER}"><span style="background:#FBF1E3;color:#C97000;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px">OFF</span></td>`;
+      if (v === 'RD')  return `<td style="padding:7px 8px;text-align:center;border:1px solid ${BORDER}"><span style="background:#EEF2F7;color:${SLATE};font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px">RD</span></td>`;
+      return `<td style="padding:7px 8px;text-align:center;border:1px solid ${BORDER};background:#EEF3FB;color:${NAVY};font-size:11.5px;font-weight:600;white-space:nowrap">${esc(v)}</td>`;
+    };
+    const groups = S.groups.map(g => {
+      const head = `<tr style="background:${NAVY};color:#fff">
+        <th style="text-align:left;padding:8px 10px;font-size:11px;position:sticky;left:0;background:${NAVY};min-width:70px">Emp #</th>
+        <th style="text-align:left;padding:8px 10px;font-size:11px;min-width:210px">Full Name</th>
+        <th style="padding:8px 10px;font-size:11px">Batch</th>
+        ${S.days.map(d => `<th style="padding:8px 8px;font-size:11px;white-space:nowrap">${d}</th>`).join('')}
+      </tr>`;
+      const body = g.rows.map((r, i) => {
+        const codes = r[3].split(',');
+        return `<tr style="background:${i%2?'#F8FAFD':'#fff'}">
+          <td style="padding:7px 10px;font-size:11px;color:${SLATE};border:1px solid ${BORDER};position:sticky;left:0;background:${i%2?'#F8FAFD':'#fff'}">${esc(r[0])}</td>
+          <td style="padding:7px 10px;font-size:12px;color:${NAVY};font-weight:600;border:1px solid ${BORDER};white-space:nowrap">${esc(r[1])}</td>
+          <td style="padding:7px 10px;font-size:11px;color:${SLATE};text-align:center;border:1px solid ${BORDER}">${esc(r[2])}</td>
+          ${codes.map(c => cell(c, g.shift)).join('')}
+        </tr>`;
+      }).join('');
+      return `<div style="background:#fff;border:1px solid ${BORDER};border-radius:12px;overflow:hidden;margin-bottom:16px">
+        <div style="background:${NAVY};padding:12px 16px">
+          <div style="color:#fff;font-size:14px;font-weight:800;letter-spacing:.3px">${esc(g.name)}</div>
+          <div style="color:#9FB4DA;font-size:11.5px;margin-top:2px">${esc(g.meta)}</div>
+        </div>
+        <div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;min-width:760px"><thead>${head}</thead><tbody>${body}</tbody></table></div>
+      </div>`;
+    }).join('');
+
+    $('scheduleBody').innerHTML =
+      `<div style="background:#EEF3FB;border:1px solid #C9D8F0;border-radius:10px;padding:10px 14px;font-size:11.5px;color:#142E5C;line-height:1.5;margin-bottom:16px">${esc(S.note)}</div>`
+      + groups
+      + `<div style="font-size:11px;color:${SLATE};text-align:right;margin-top:4px">Headcount: Group A 15 · B 16 · C 14 · D 26 · Bridge 3 = 74 + 4 TLs · Confidential</div>`;
   }
 </script>
 </body>
