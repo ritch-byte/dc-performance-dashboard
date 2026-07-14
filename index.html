@@ -944,7 +944,7 @@
             <div class="cl-field">
               <label class="cl-label">Squad</label>
               <select id="clSquad" class="cl-input" onchange="clSetSquad()">
-                <option>JUMHON</option><option>RV</option><option>ACE</option><option>B17</option><option>POC TEAM</option><option>Other</option>
+                <option>Group A</option><option>Group B</option><option>Group C</option><option>Group D</option><option>POC TEAM</option><option>Other</option>
               </select>
             </div>
             <div class="cl-field">
@@ -1267,122 +1267,101 @@
 
   const TEAMS = [
     {
-      id: 'jumhon', name: 'JUMHON', color: '#d97706',
+      id: 'groupa', name: 'Group A', color: '#1A2DB5',  // TL Ritch · SME Vince
       members: [
-        { id: 'rees',          display: 'Jean Rees',             ln: 'rees' },
-        { id: 'sindac',        display: 'Renz Sindac',           ln: 'sindac' },
-        { id: 'cavinta',       display: 'Steven Kurt Cavinta',   ln: 'cavinta' },
-        { id: 'chua',          display: 'Angel Chua',            ln: 'chua' },
-        { id: 'gaza',          display: 'Raffy Gaza',            ln: 'gaza' },
-        { id: 'rampas',        display: 'Desiree Rampas',        ln: 'rampas' },
-        { id: 'balbido',       display: 'Justine Balbido',       ln: 'balbido' },
-        { id: 'cubol',         display: 'Jesley Cubol',          ln: 'cubol' },
-        { id: 'arienda',       display: 'Josie Arienda',         ln: 'arienda' },
-        { id: 'cajayon',       display: 'Bryan Cajayon',         ln: 'cajayon' },
-        { id: 'quismundo',     display: 'Ruth Quismundo',        ln: 'quismundo' },
-        { id: 'caro',          display: 'Armi Caro',             ln: 'caro' },
-        { id: 'cardell',       display: 'Donald Cardell',        ln: 'cardell' },
-        { id: 'magtalas',      display: 'Ayesha Magtalas',       ln: 'magtalas' },
-        { id: 'conejos',       display: 'Christopher Conejos',   ln: 'conejos' },
-        // PENDING — grouped under JUMHON per June Week 4 schedule
-        { id: 'pabiona',       display: 'Cristina Pabiona',      ln: 'pabiona' },
-        { id: 'delos_reyes',   display: 'Joy Delos Reyes',       ln: 'reyes',    ln2: 'delos reyes' },
-        // POC member seated with JUMHON
-        { id: 'bayhon',        display: 'Alvin Bayhon',          ln: 'bayhon',  hidden: true },
-        // Former members kept hidden so their earlier DCs still count toward team totals
-        { id: 'biron',         display: 'Anne Biron',            ln: 'biron',   hidden: true },
-        { id: 'jumar',         display: 'Jumar Vere',            ln: 'vere',    hidden: true },
-      ]
-    },
-    {
-      id: 'rv', name: 'RV', color: '#1A2DB5',
-      members: [
-        { id: 'sarmiento_j', display: 'Julius Sarmiento',      ln: 'sarmiento', fn: 'julius' },
-        { id: 'bangalan',    display: 'Roderico Bangalan',     ln: 'bangalan' },
-        { id: 'ramirez',     display: 'Mark Lauren Ramirez',   ln: 'ramirez' },
-        { id: 'ruiz',        display: 'Renz Ruiz',             ln: 'ruiz' },
-        { id: 'baliuag',     display: 'Charlon Baliuag',       ln: 'baliuag' },
-        { id: 'susana',      display: 'John Christian Susana', ln: 'susana' },
-        { id: 'fortez',      display: 'Charlie Fortez',        ln: 'fortez' },
-        { id: 'demayo',      display: 'Jerry Demayo',          ln: 'demayo' },
-        { id: 'lavares',     display: 'Gian Lavares',          ln: 'lavares' },
-        { id: 'petras',      display: 'Art Joseph Petras',     ln: 'petras' },
-        { id: 'valenzuela',  display: 'Aaron Kyle Valenzuela', ln: 'valenzuela' },
-        { id: 'silang',      display: 'Gian Carlo Silang',     ln: 'silang' },
-        { id: 'melo',        display: 'Alvin Melo',            ln: 'melo' },
-        { id: 'catolico',    display: 'Pedro Catolico',        ln: 'catolico' },
-        { id: 'silva',       display: 'Godwin Silva',          ln: 'silva' },
-        { id: 'vosotros',    display: 'Diana Vosotros',        ln: 'vosotros' },
-        { id: 'bautista',    display: 'Samara Bautista',       ln: 'bautista' },
-        { id: 'velasco',     display: 'Edward Velasco',        ln: 'velasco' },
-        // POC member seated with RV
-        { id: 'gadier',      display: 'Vincent Gadier',        ln: 'gadier',   hidden: true },
-        // Former members kept hidden so their earlier DCs still count toward team totals
-        { id: 'pastor',      display: 'Alelie Pastor',         ln: 'pastor',   hidden: true },
-        { id: 'mamaclay',    display: 'Bem Mamaclay',          ln: 'mamaclay', hidden: true },
-      ]
-    },
-    {
-      id: 'ace', name: 'ACE', color: '#059669',
-      members: [
-        { id: 'galoso',        display: 'Lawrence Galoso',       ln: 'galoso' },
+        { id: 'silva',         display: 'Godwin Silva',          ln: 'silva' },
+        { id: 'sarmiento_j',   display: 'Julius Sarmiento',      ln: 'sarmiento', fn: 'julius' },
+        { id: 'ruiz',          display: 'Renz Ruiz',             ln: 'ruiz' },
+        { id: 'baliuag',       display: 'Charlon Baliuag',       ln: 'baliuag' },
+        { id: 'susana',        display: 'John Christian Susana', ln: 'susana' },
+        { id: 'demayo',        display: 'Jerry Demayo',          ln: 'demayo' },
+        { id: 'lavares',       display: 'Gian Lavares',          ln: 'lavares' },
+        { id: 'petras',        display: 'Art Joseph Petras',     ln: 'petras' },
+        { id: 'silang',        display: 'Gian Carlo Silang',     ln: 'silang' },
+        { id: 'catolico',      display: 'Pedro Catolico',        ln: 'catolico' },
         { id: 'arespacochaga', display: 'Mervin Arespacochaga',  ln: 'arespacochaga' },
         { id: 'decamora',      display: 'Maureen Decamora',      ln: 'decamora' },
-        { id: 'benjamin',      display: 'Russell Benjamin',      ln: 'benjamin' },
-        { id: 'escabillas',    display: 'Kenneth Escabillas',    ln: 'escabillas' },
-        { id: 'malavega',      display: 'Jose Carlos Malavega',  ln: 'malavega' },
-        { id: 'bondad',        display: 'Joshua Bondad',         ln: 'bondad' },
         { id: 'villaruel',     display: 'Lance Villaruel',       ln: 'villaruel' },
-        { id: 'lentija',       display: 'Jefferson Lentija',     ln: 'lentija' },
-        { id: 'bascos',        display: 'Jessica Bascos',        ln: 'bascos' },
-        { id: 'anos',          display: 'Marc Anos',             ln: 'anos' },
-        { id: 'sarmiento_c',   display: 'Charles Sarmiento',     ln: 'sarmiento', fn: 'charles' },
-        { id: 'tupaz',         display: 'Rommel Tupaz',          ln: 'tupaz' },
-        { id: 'saminado',      display: 'Jervin Saminado',       ln: 'saminado' },
-        { id: 'arcena',        display: 'Charlito Arcena',       ln: 'arcena' },
-        { id: 'verastigue',    display: 'Bedier Verastigue',     ln: 'verastigue' },
-        // POC member seated with ACE
-        { id: 'tanate',        display: 'Angelica Tanate',       ln: 'tanate',  hidden: true },
+        { id: 'bautista',      display: 'Samara Bautista',       ln: 'bautista' },
+      ]
+    },
+    {
+      id: 'groupb', name: 'Group B', color: '#d97706',  // TL Jonathan · SME Diana
+      members: [
+        { id: 'bangalan',    display: 'Roderico Bangalan',     ln: 'bangalan' },
+        { id: 'ramirez',     display: 'Mark Lauren Ramirez',   ln: 'ramirez' },
+        { id: 'fortez',      display: 'Charlie Fortez',        ln: 'fortez' },
+        { id: 'vosotros',    display: 'Diana Vosotros',        ln: 'vosotros' },
+        { id: 'velasco',     display: 'Edward Velasco',        ln: 'velasco' },
+        { id: 'galoso',      display: 'Lawrence Galoso',       ln: 'galoso' },
+        { id: 'benjamin',    display: 'Russell Benjamin',      ln: 'benjamin' },
+        { id: 'escabillas',  display: 'Kenneth Escabillas',    ln: 'escabillas' },
+        { id: 'malavega',    display: 'Jose Carlos Malavega',  ln: 'malavega' },
+        { id: 'lentija',     display: 'Jefferson Lentija',     ln: 'lentija' },
+        { id: 'anos',        display: 'Marc Anos',             ln: 'anos' },
+        { id: 'sarmiento_c', display: 'Charles Sarmiento',     ln: 'sarmiento', fn: 'charles' },
+        { id: 'tupaz',       display: 'Rommel Tupaz',          ln: 'tupaz' },
+        { id: 'saminado',    display: 'Jervin Saminado',       ln: 'saminado' },
+        { id: 'arcena',      display: 'Charlito Arcena',       ln: 'arcena' },
+        { id: 'verastigue',  display: 'Bedier Verastigue',     ln: 'verastigue' },
+      ]
+    },
+    {
+      id: 'groupc', name: 'Group C', color: '#059669',  // TL AC · SME Vin
+      members: [
+        { id: 'cubol',      display: 'Jesley Cubol',          ln: 'cubol' },
+        { id: 'magtalas',   display: 'Ayesha Magtalas',       ln: 'magtalas' },
+        { id: 'balbido',    display: 'Justine Balbido',       ln: 'balbido' },
+        { id: 'cardell',    display: 'Donald Cardell',        ln: 'cardell' },
+        { id: 'melo',       display: 'Alvin Melo',            ln: 'melo' },
+        { id: 'ramos_i',    display: 'Ma. Isabel Ramos',      ln: 'ramos',   fn: 'isabel' },
+        { id: 'ramos_j',    display: 'Jennifer Ramos',        ln: 'ramos',   fn: 'jennifer' },
+        { id: 'aurelio',    display: 'Raymond Aurelio',       ln: 'aurelio' },
+        { id: 'tamayo',     display: 'Melisse Tamayo',        ln: 'tamayo' },
+        { id: 'ronquillo',  display: 'Joremie Ronquillo',     ln: 'ronquillo' },
+        { id: 'decastro',   display: 'Catherine de Castro',   ln: 'castro',  ln2: 'de castro' },
+        { id: 'arana',      display: 'Marvin Arana',          ln: 'arana' },
+        { id: 'diaz',       display: 'Sheilla Diaz',          ln: 'diaz' },
+        { id: 'aridi',      display: 'Hadi Aridi',            ln: 'aridi' },
+      ]
+    },
+    {
+      id: 'groupd', name: 'Group D', color: '#0891b2',  // TL Jumar · SME Ali
+      members: [
+        { id: 'chua',       display: 'Angel Chua',            ln: 'chua' },
+        { id: 'rampas',     display: 'Desiree Rampas',        ln: 'rampas' },
+        { id: 'arienda',    display: 'Josie Arienda',         ln: 'arienda' },
+        { id: 'cajayon',    display: 'Bryan Cajayon',         ln: 'cajayon' },
+        { id: 'quismundo',  display: 'Ruth Quismundo',        ln: 'quismundo' },
+        { id: 'caro',       display: 'Armi Caro',             ln: 'caro' },
+        { id: 'pabiona',    display: 'Cristina Pabiona',      ln: 'pabiona' },
+        { id: 'valenzuela', display: 'Aaron Kyle Valenzuela', ln: 'valenzuela' },
+        { id: 'bondad',     display: 'Joshua Bondad',         ln: 'bondad' },
+        { id: 'tiu',        display: 'Regine Theresa Tiu',    ln: 'tiu' },
+        { id: 'tungol',     display: 'Lorenzo Luiz Tungol',   ln: 'tungol' },
+        { id: 'sanjose',    display: 'Glen Jerick San Jose',  ln: 'jose',    ln2: 'san jose' },
+        { id: 'jerusalem',  display: 'Danilo Jerusalem',      ln: 'jerusalem' },
+        { id: 'jaraula',    display: 'Jezza Jezreel Jaraula', ln: 'jaraula' },
+        { id: 'malinay',    display: 'Reynaldo Malinay Jr',   ln: 'malinay' },
+        { id: 'monticarlo', display: 'Apol Monticarlo',       ln: 'monticarlo' },
+        { id: 'guerra',     display: 'Chester John Guerra',   ln: 'guerra' },
+        { id: 'velasquez',  display: 'Archie Velasquez',      ln: 'velasquez' },
+        { id: 'lotho',      display: 'Robert Christian Lotho',ln: 'lotho' },
+        { id: 'sanchez',    display: 'Maria Angelica Sanchez',ln: 'sanchez' },
+        { id: 'elago',      display: 'Ednyl Chloe Elago',     ln: 'elago' },
+        { id: 'tormon',     display: 'Michael Anthony Tormon',ln: 'tormon' },
+        { id: 'caguimbal',  display: 'Morris Caguimbal',      ln: 'caguimbal' },
       ]
     },
     {
       id: 'poc', name: 'POC TEAM', color: '#7c3aed',
       members: [
-        { id: 'tanate',  display: 'Angelica Tanate',  ln: 'tanate' },
-        { id: 'gadier',  display: 'Vincent Gadier',   ln: 'gadier' },
-        { id: 'bayhon',  display: 'Alvin Bayhon',     ln: 'bayhon' },
-        { id: 'jumar',   display: 'Jumar Vere',       ln: 'vere'   },
-      ]
-    },
-    {
-      id: 'b17', name: 'B17', color: '#0891b2',
-      members: [
-        { id: 'sanjose',    display: 'Glen Jerick San Jose',   ln: 'jose',      ln2: 'san jose' },
-        { id: 'jerusalem',  display: 'Danilo Jerusalem',       ln: 'jerusalem' },
-        { id: 'ramos_i',    display: 'Ma. Isabel Ramos',       ln: 'ramos',     fn: 'isabel' },
-        { id: 'jaraula',    display: 'Jezza Jezreel Jaraula',  ln: 'jaraula' },
-        { id: 'tiu',        display: 'Regine Theresa Tiu',     ln: 'tiu' },
-        { id: 'aurelio',    display: 'Raymond Aurelio',        ln: 'aurelio' },
-        { id: 'tamayo',     display: 'Melisse Tamayo',         ln: 'tamayo' },
-        { id: 'quijano',    display: 'Cenizal Quijano Jr',     ln: 'quijano' },
-        { id: 'ronquillo',  display: 'Joremie Ronquillo',      ln: 'ronquillo' },
-        { id: 'malinay',    display: 'Reynaldo Malinay Jr',    ln: 'malinay' },
-        { id: 'ignacio',    display: 'Aileen Ignacio',         ln: 'ignacio' },
-        { id: 'decastro',   display: 'Catherine de Castro',    ln: 'castro',    ln2: 'de castro' },
-        { id: 'monticarlo', display: 'Apol Monticarlo',        ln: 'monticarlo' },
-        { id: 'guerra',     display: 'Chester John Guerra',    ln: 'guerra' },
-        { id: 'velasquez',  display: 'Archie Velasquez',       ln: 'velasquez' },
-        { id: 'lotho',      display: 'Robert Christian Lotho', ln: 'lotho' },
-        { id: 'sanchez',    display: 'Maria Angelica Sanchez', ln: 'sanchez' },
-        { id: 'arana',      display: 'Marvin Arana',           ln: 'arana' },
-        { id: 'elago',      display: 'Ednyl Chloe Elago',      ln: 'elago' },
-        { id: 'ramos_j',    display: 'Jennifer Ramos',         ln: 'ramos',     fn: 'jennifer' },
-        { id: 'tormon',     display: 'Michael Anthony Tormon', ln: 'tormon' },
-        { id: 'diaz',       display: 'Sheilla Diaz',           ln: 'diaz' },
-        { id: 'caguimbal',  display: 'Morris Caguimbal',       ln: 'caguimbal' },
-        { id: 'tungol',     display: 'Lorenzo Luiz Tungol',    ln: 'tungol' },
-        { id: 'mendoza',    display: 'June Angel Mendoza',     ln: 'mendoza' },
-        { id: 'aridi',      display: 'Hadi Aridi',             ln: 'aridi' },
+        { id: 'tanate',   display: 'Angelica Tanate',  ln: 'tanate' },
+        { id: 'gadier',   display: 'Vincent Gadier',   ln: 'gadier' },
+        { id: 'bayhon',   display: 'Alvin Bayhon',     ln: 'bayhon' },
+        { id: 'jumar',    display: 'Jumar Vere',       ln: 'vere'   },
+        { id: 'vosotros', display: 'Diana Vosotros',   ln: 'vosotros' },
+        { id: 'melo',     display: 'Alvin Melo',       ln: 'melo' },
       ]
     }
   ];
@@ -1415,6 +1394,17 @@
     const fn = parts[0];
     const exact = hits.find(c => c.m.fn && c.m.fn === fn);
     return exact ? exact.m.id : hits[0].m.id;
+  }
+
+  // Org-wide list of visible members, de-duped by id (some members, e.g. SMEs,
+  // appear on both their production group and the POC team; count them once).
+  function allVisibleMembers() {
+    const seen = new Set(), out = [];
+    for (const t of TEAMS) for (const m of t.members) {
+      if (m.hidden || seen.has(m.id)) continue;
+      seen.add(m.id); out.push(m);
+    }
+    return out;
   }
 
   const WEEKLY_TARGET  = 10;
@@ -2874,7 +2864,7 @@
     });
 
     // Summary strip: grand total across all teams
-    const allVisible = TEAMS.flatMap(t => t.members.filter(m => !m.hidden));
+    const allVisible = allVisibleMembers();
     const grandDayTotals = dates.map(d => allVisible.reduce((s,m) => s+(agentDay[m.id]?.[d]||0), 0));
     const grandTotal = grandDayTotals.reduce((s,n) => s+n, 0);
     const grandLeadsTotal = allVisible.reduce((s,m) => s + dates.reduce((s2,d) => s2+(agentDayLeads[m.id]?.[d]||0), 0), 0);
@@ -3337,7 +3327,7 @@
       const id = resolveAgent(row.name);
       if (id && !statusMap[id]) statusMap[id] = row;
     }
-    const allVisible = TEAMS.flatMap(t => t.members.filter(m => !m.hidden));
+    const allVisible = allVisibleMembers();
     const attended   = allVisible.filter(m => isAttended(statusMap[m.id]?.status));
     const absent     = allVisible.filter(m => (statusMap[m.id]?.status||'').toLowerCase() === 'absent');
     const withData   = allVisible.filter(m => statusMap[m.id]);
@@ -3609,22 +3599,21 @@
   // ── COACHING LOG ──────────────────────────────────────────────────────────
   // Synced to the June Week 4 schedule (matches the dashboard TEAMS rosters)
   const CL_ROSTER = {
-    JUMHON: ['Jean Rees','Renz Sindac','Steven Kurt Cavinta','Angel Chua','Raffy Gaza','Desiree Rampas',
-             'Justine Balbido','Jesley Cubol','Josie Arienda','Bryan Cajayon','Ruth Quismundo','Armi Caro',
-             'Donald Cardell','Ayesha Magtalas','Christopher Conejos','Cristina Pabiona','Joy Delos Reyes'],
-    RV: ['Julius Sarmiento','Roderico Bangalan','Mark Lauren Ramirez','Renz Ruiz','Charlon Baliuag',
-         'John Christian Susana','Charlie Fortez','Jerry Demayo','Gian Lavares','Art Joseph Petras',
-         'Aaron Kyle Valenzuela','Gian Carlo Silang','Alvin Melo','Pedro Catolico','Godwin Silva',
-         'Diana Vosotros','Samara Bautista','Edward Velasco'],
-    ACE: ['Lawrence Galoso','Mervin Arespacochaga','Maureen Decamora','Russell Benjamin','Kenneth Escabillas',
-          'Jose Carlos Malavega','Joshua Bondad','Lance Villaruel','Jefferson Lentija','Jessica Bascos',
-          'Marc Anos','Charles Sarmiento','Rommel Tupaz','Jervin Saminado','Charlito Arcena','Bedier Verastigue'],
-    'POC TEAM': ['Angelica Tanate','Vincent Gadier','Alvin Bayhon','Jumar Vere'],
-    B17: ['Glen Jerick San Jose','Danilo Jerusalem','Ma. Isabel Ramos','Jezza Jezreel Jaraula','Regine Theresa Tiu',
-          'Raymond Aurelio','Melisse Tamayo','Cenizal Quijano Jr','Joremie Ronquillo','Reynaldo Malinay Jr',
-          'Aileen Ignacio','Catherine de Castro','Apol Monticarlo','Chester John Guerra','Archie Velasquez',
-          'Robert Christian Lotho','Maria Angelica Sanchez','Marvin Arana','Ednyl Chloe Elago','Jennifer Ramos',
-          'Michael Anthony Tormon','Sheilla Diaz','Morris Caguimbal','Lorenzo Luiz Tungol','June Angel Mendoza','Hadi Aridi'],
+    'Group A': ['Godwin Silva','Julius Sarmiento','Renz Ruiz','Charlon Baliuag','John Christian Susana',
+                'Jerry Demayo','Gian Lavares','Art Joseph Petras','Gian Carlo Silang','Pedro Catolico',
+                'Mervin Arespacochaga','Maureen Decamora','Lance Villaruel','Samara Bautista'],
+    'Group B': ['Roderico Bangalan','Mark Lauren Ramirez','Charlie Fortez','Diana Vosotros','Edward Velasco',
+                'Lawrence Galoso','Russell Benjamin','Kenneth Escabillas','Jose Carlos Malavega','Jefferson Lentija',
+                'Marc Anos','Charles Sarmiento','Rommel Tupaz','Jervin Saminado','Charlito Arcena','Bedier Verastigue'],
+    'Group C': ['Jesley Cubol','Ayesha Magtalas','Justine Balbido','Donald Cardell','Alvin Melo',
+                'Ma. Isabel Ramos','Jennifer Ramos','Raymond Aurelio','Melisse Tamayo','Joremie Ronquillo',
+                'Catherine de Castro','Marvin Arana','Sheilla Diaz','Hadi Aridi'],
+    'Group D': ['Angel Chua','Desiree Rampas','Josie Arienda','Bryan Cajayon','Ruth Quismundo','Armi Caro',
+                'Cristina Pabiona','Aaron Kyle Valenzuela','Joshua Bondad','Regine Theresa Tiu','Lorenzo Luiz Tungol',
+                'Glen Jerick San Jose','Danilo Jerusalem','Jezza Jezreel Jaraula','Reynaldo Malinay Jr','Apol Monticarlo',
+                'Chester John Guerra','Archie Velasquez','Robert Christian Lotho','Maria Angelica Sanchez',
+                'Ednyl Chloe Elago','Michael Anthony Tormon','Morris Caguimbal'],
+    'POC TEAM': ['Angelica Tanate','Vincent Gadier','Alvin Bayhon','Jumar Vere','Diana Vosotros','Alvin Melo'],
   };
   const CL_ALL_TMS = Object.entries(CL_ROSTER).flatMap(([squad,names]) => names.map(name => ({name,squad})));
 
@@ -3708,7 +3697,7 @@
 
   let _clInited = false;
   let _clState = {
-    tmName:'', squad:'JUMHON', leadName:'', hubspot:'', convoDate:'', behaviorDate:'',
+    tmName:'', squad:'Group A', leadName:'', hubspot:'', convoDate:'', behaviorDate:'',
     missed:[], general:true, behaviorEdited:'', useEdited:false, level:'verbal',
     impact:CL_IMPACT_DEFAULT, expectations:CL_EXPECT_DEFAULT, support:CL_SUPPORT_DEFAULT,
     prior:'', followUp:'', mode:'weekly',
@@ -4130,7 +4119,7 @@ ${notes}`;
       html += `<th style="padding:8px 10px;background:${NAVY};color:#fff;white-space:nowrap;text-align:center">Week ${i+1}<br><span style="font-weight:400;color:#9FB4DA;font-size:10px">${getWeekDateRange(mon)}</span></th>`;
     });
     html += `<th style="padding:8px 10px;background:${NAVY};color:#fff;text-align:center">Done</th></tr></thead><tbody>`;
-    ['JUMHON','RV','ACE','B17'].forEach(sq => {
+    ['Group A','Group B','Group C','Group D'].forEach(sq => {
       const reps = CL_ROSTER[sq] || [];
       html += `<tr><td colspan="${weeks.length+2}" style="background:#EEF3FB;color:${NAVY};font-weight:800;padding:6px 10px;font-size:11px;letter-spacing:.5px">${sq}</td></tr>`;
       reps.forEach(rep => {
