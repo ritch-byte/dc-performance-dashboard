@@ -3166,6 +3166,10 @@
     const nIdx = col('sdr name','agent name','name') ?? 4;
     const sIdx = col('attendance status','status') ?? 6;
     const cIdx = col('attendance commitment','commitment') ?? 7;
+    const moIdx  = col('month') ?? 0;
+    const wkIdx  = col('week') ?? 1;
+    const tmIdx  = col('team','squad') ?? 3;
+    const schIdx = col('schedule','shift') ?? 5;
     return lines.slice(1).map(line => {
       const c = splitLine(line);
       return {
@@ -3173,6 +3177,10 @@
         name:       (c[nIdx]||'').trim(),
         status:     (c[sIdx]||'').trim(),
         commitment: (c[cIdx]||'').trim(),
+        month:      (c[moIdx]||'').trim(),
+        week:       (c[wkIdx]||'').trim(),
+        team:       (c[tmIdx]||'').trim(),
+        schedule:   (c[schIdx]||'').trim(),
       };
     }).filter(r => r.rawDate && r.name);
   }
@@ -3187,6 +3195,7 @@
       _attLoaded = true;
       if ($('attErrorBanner')) $('attErrorBanner').classList.remove('show');
       if ($('attendanceSection').style.display !== 'none') renderAttendance();
+      if ($('scheduleSection') && $('scheduleSection').style.display !== 'none') renderSchedule();
       if ($('sheetSection') && $('sheetSection').style.display !== 'none') renderSheet();
       if (_profileMember) {
         const today = localIso(new Date());
@@ -5290,147 +5299,105 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
   }
 
   // ══════════════════════════════════════════════════════════════════
-  //  Schedule · weekly shift grid (static, swap the object each week)
-  //  Cell codes: W = work (uses the group's shift) · OFF = weekday off ·
-  //  RD = rest day · anything else = literal shift text (Bridge / Mgmt).
+  //  Schedule · live weekly shift grid, driven by the Attendance sheet
+  //  Reads the same published CSV as the Attendance page (Month, Week,
+  //  Date, Team, SDR Name, Schedule shift, Attendance Status) and pivots
+  //  the selected Month/Week into Team -> SDR -> per-day shift, tinted by
+  //  attendance status. Updates automatically when the sheet changes.
   // ══════════════════════════════════════════════════════════════════
-  const SCHED = {
-    week: 'July Week 2 · Jul 13 - 19, 2026',
-    days: ['Mon 13','Tue 14','Wed 15','Thu 16','Fri 17','Sat 18','Sun 19'],
-    note: 'Cell shows the shift for that day · OFF = weekday off · RD = rest day. Overnight shifts carry through to their scheduled end. Group B works the Manila day (Tue–Sat, rest Sun/Mon). Batch 17 employee numbers pending (—).',
-    groups: [
-      { name:'Group A', shift:'9PM–8AM', meta:'9PM–8AM (4×11) · TL Ritch · SME Vince · 15 HC', rows:[
-        ['OA2153','GADIER, VINCENT TAPERLA (SME)','SME','W,W,OFF,W,W,RD,RD'],
-        ['OA2177','CATOLICO, PEDRO NASAYAO','B10','W,W,W,W,OFF,RD,RD'],
-        ['OA2185','SILVA, GODWIN ESCARO','B10','W,W,W,W,OFF,RD,RD'],
-        ['OA2184','SILANG, GIAN CARLO RIVERA','B10','W,W,W,W,OFF,RD,RD'],
-        ['OA2262','LAVARES, GIAN BERT','B14','W,W,W,OFF,W,RD,RD'],
-        ['OA2277','VILLARUEL, LANCE GABRIEL','B15','W,W,W,OFF,W,RD,RD'],
-        ['OA2175','BALIUAG, CHARLON ORALLO','B10','W,W,W,OFF,W,RD,RD'],
-        ['—','BAUTISTA, DAN MARK ANTHONY','B10','W,W,W,OFF,W,RD,RD'],
-        ['OA2244','DEMAYO, JERRY GUATLO','B13','W,W,OFF,W,W,RD,RD'],
-        ['OA2183','SARMIENTO, JULIUS LEMUEL ALVARAN','B10','W,W,OFF,W,W,RD,RD'],
-        ['OA2276','SUSANA, JOHN CHRISTIAN','B15','W,W,OFF,W,W,RD,RD'],
-        ['OA2182','RUIZ, RENZ GIL TUMAMAO','B10','W,OFF,W,W,W,RD,RD'],
-        ['OA2260','ARESPACOCHAGA, MERVIN BRYANN','B14','W,OFF,W,W,W,RD,RD'],
-        ['OA2163','DECAMORA, MAUREEN ALPUERTO','B9','W,OFF,W,W,W,RD,RD'],
-        ['OA2165','PETRAS, ART JOSEPH BALLESTEROS','B9','W,OFF,W,W,W,RD,RD'],
-      ]},
-      { name:'Group B', shift:'1AM–12NN', meta:'1AM–12NN (4×11) · Manila day Tue–Sat, rest Sun/Mon · TL Jonathan · SME Diana · 16 HC', rows:[
-        ['OA2106','VOSOTROS, DIANA CLEMEN (SME)','SME','RD,W,W,W,W,OFF,RD'],
-        ['OA2047','ANOS, MARC RONGIE','Core','RD,W,W,W,W,OFF,RD'],
-        ['OA2251','VELASCO, EDWARD WINROQS RAMOS','B13','RD,W,W,W,W,OFF,RD'],
-        ['OA2227','SARMIENTO, CHARLES KELVIN DIAZ','B11','RD,W,W,W,W,OFF,RD'],
-        ['OA2156','LENTIJA, JEFFERSON ARGEL','B8','RD,W,W,W,OFF,W,RD'],
-        ['OA2230','TUPAZ, ROMMEL RICO','B11','RD,W,W,W,OFF,W,RD'],
-        ['OA2167','VERASTIGUE, BEDIER JAY LEGASPI','B9','RD,W,W,W,OFF,W,RD'],
-        ['OA2247','MALAVEGA, JOSE CARLOS RAMIREZ','B13','RD,W,W,W,OFF,W,RD'],
-        ['OA2223','GALOSO, LAWRENCE MIRAS','B11','RD,W,W,OFF,W,W,RD'],
-        ['OA2179','FORTEZ, CARLO BEJO','B10','RD,W,W,OFF,W,W,RD'],
-        ['OA2149','ARCENA, CHARLITO OSAYAN','B8','RD,W,W,OFF,W,W,RD'],
-        ['OA2080','SAMINADO, JERVIN CHRISTIAN CUNANAN','Core','RD,W,W,OFF,W,W,RD'],
-        ['OA2263','RAMIREZ, MARK LAUREN','B14','RD,W,OFF,W,W,W,RD'],
-        ['OA2271','BANGALAN, RODERICO','B15','RD,W,OFF,W,W,W,RD'],
-        ['OA2178','ESCABILLAS, KENNETH RYAN APOLINAR','B10','RD,W,OFF,W,W,W,RD'],
-        ['OA2219','BENJAMIN, RUSSELL LUCERO','B11','RD,W,OFF,W,W,W,RD'],
-      ]},
-      { name:'Group C', shift:'11PM–10AM', meta:'11PM–10AM (4×11) · TL AC · SME Vin · 14 HC', rows:[
-        ['OA2089','MELO, ALVIN CABILES (SME)','SME','W,W,W,W,OFF,RD,RD'],
-        ['—','DE CASTRO, CATHERINE BENITO','B17','W,W,W,W,OFF,RD,RD'],
-        ['—','RAMOS, JENNIFER BANDOY','B17','W,W,W,W,OFF,RD,RD'],
-        ['—','AURELIO, RAYMOND NIEVA','B17','W,W,W,OFF,W,RD,RD'],
-        ['—','RAMOS, MA. ISABEL CASINO','B17','W,W,W,OFF,W,RD,RD'],
-        ['—','TAMAYO, MELISSE FLORES','B17','W,W,W,OFF,W,RD,RD'],
-        ['—','DIAZ, SHEILLA MORENO','B17','W,W,W,OFF,W,RD,RD'],
-        ['—','ARIDI, HADI MUSLIMIN','B17','W,W,OFF,W,W,RD,RD'],
-        ['—','RONQUILLO, JOREMIE TUBLE','B17','W,W,OFF,W,W,RD,RD'],
-        ['—','ARANA, MARVIN ASIS','B17','W,W,OFF,W,W,RD,RD'],
-        ['OA2287','BALBIDO, JUSTINE CARAGA','B16','W,OFF,W,W,W,RD,RD'],
-        ['OA2295','CUBOL, JESLEY JUSTO','B16','W,OFF,W,W,W,RD,RD'],
-        ['OA2289','CARDELL, DONALD VENIEGAS','B16','W,OFF,W,W,W,RD,RD'],
-        ['OA2297','MAGTALAS, AYESHA RUTAO','B16','W,OFF,W,W,W,RD,RD'],
-      ]},
-      { name:'Group D', shift:'4PM–1AM', meta:'4PM–1AM (5×9) · No weekday off · TL Jumar · SME Ali · 26 HC', rows:[
-        ['OA2091','BAYHON, ALVIN BESANA (SME)','SME','W,W,W,W,W,RD,RD'],
-        ['—','SAN JOSE, GLEN JERICK DIONISIO','B17','W,W,W,W,W,RD,RD'],
-        ['—','JERUSALEM, DANILO MANALO','B17','W,W,W,W,W,RD,RD'],
-        ['—','JARAULA, JEZZA JEZREEL CAJATOL','B17','W,W,W,W,W,RD,RD'],
-        ['—','TIU, REGINE THERESA TAN','B17','W,W,W,W,W,RD,RD'],
-        ['—','MALINAY JR., REYNALDO DE VERA','B17','W,W,W,W,W,RD,RD'],
-        ['—','MONTICARLO, JOHN VIC MORCO','B17','W,W,W,W,W,RD,RD'],
-        ['—','GUERRA, CHESTER JOHN PEREZ','B17','W,W,W,W,W,RD,RD'],
-        ['—','VELASQUEZ, ARCHIE TURNO','B17','W,W,W,W,W,RD,RD'],
-        ['—','LOTHO, ROBERT CHRISTIAN PANTOJA','B17','W,W,W,W,W,RD,RD'],
-        ['—','SANCHEZ, MARIA ANGELICA BALUBAR','B17','W,W,W,W,W,RD,RD'],
-        ['—','ELAGO, EDNYL CHLOE','B17','W,W,W,W,W,RD,RD'],
-        ['—','TORMON, MICHAEL ANTHONY DORON','B17','W,W,W,W,W,RD,RD'],
-        ['—','CAGUIMBAL, DIVINAMOR INCIONG','B17','W,W,W,W,W,RD,RD'],
-        ['—','TUNGOL, LORENZO LUIZ PASAMONTE','B17','W,W,W,W,W,RD,RD'],
-        ['OA2250','VALENZUELA, AARON KYLE PLAZA','B13','W,W,W,W,W,RD,RD'],
-        ['OA2220','BONDAD, JOSHUA JAMES LOPEZ','B11','W,W,W,W,W,RD,RD'],
-        ['OA2138','REES, JEAN NATHALIE GAMUTAN','Core','W,W,W,W,W,RD,RD'],
-        ['OA2226','PABIONA, CRISTINA LASAY','B11','W,W,W,W,W,RD,RD'],
-        ['OA2275','JAVIER, JOHN STEVEN','B15','W,W,W,W,W,RD,RD'],
-        ['OA2298','RAMPAS, DESIREE FAJARDO','B16','W,W,W,W,W,RD,RD'],
-        ['OA2294','QUISMUNDO, RUTH','B16','W,W,W,W,W,RD,RD'],
-        ['OA2290','CARO, ARMI DELA CRUZ','B16','W,W,W,W,W,RD,RD'],
-        ['OA2292','CHUA, ANGEL CABAGYO','B16','W,W,W,W,W,RD,RD'],
-        ['OA2286','ARIENDA, JOSIE VEGA','B16','W,W,W,W,W,RD,RD'],
-        ['OA2288','CAJAYON, BRYAN MENDOZA','B16','W,W,W,W,W,RD,RD'],
-      ]},
-      { name:'Bridge', shift:'', meta:'Mon 6AM–5PM / Tue–Fri 10AM–9PM · 3 HC', rows:[
-        ['OA2261','BASCOS, JESSICA','B14','6AM–5PM,10AM–9PM,OFF,10AM–9PM,10AM–9PM,RD,RD'],
-        ['OA2186','SINDAC, RENZ FIGUERORA','B10','6AM–5PM,10AM–9PM,10AM–9PM,OFF,10AM–9PM,RD,RD'],
-        ['OA2151','CAVINTA, STEVEN KURT HERNANDEZ','B8','6AM–5PM,OFF,10AM–9PM,10AM–9PM,10AM–9PM,RD,RD'],
-      ]},
-      { name:'Management · Team Leaders', shift:'', meta:'4 TLs', rows:[
-        ['MGT','MANIPOL, RITCH JOY HINOGUIN','STL · Group A','9PM–6AM,9PM–6AM,9PM–6AM,9PM–6AM,9PM–6AM,RD,RD'],
-        ['MGT','JABONETE, JONATHAN','TL · Group B','1AM–10AM,1AM–10AM,1AM–10AM,1AM–10AM,1AM–10AM,RD,RD'],
-        ['MGT','TANATE, ANGELICA (AC)','TL · Group C','11PM–8AM,11PM–8AM,11PM–8AM,11PM–8AM,11PM–8AM,RD,RD'],
-        ['MGT','VERE, JUMAR ZAUSA','TL · Group D','4PM–1AM,4PM–1AM,4PM–1AM,4PM–1AM,4PM–1AM,RD,RD'],
-      ]},
-    ],
-  };
+  let _schedWeekKey = null;
+
+  function schedStatusStyle(status) {
+    const s = (status || '').toLowerCase();
+    if (s.includes('present'))   return { bg:'#EAF7F0', fg:'#0A7A4A', dot:'#0E9F6E' };
+    if (s.includes('late'))      return { bg:'#FBF1E3', fg:'#B26B00', dot:'#C97000' };
+    if (s.includes('undertime')) return { bg:'#FBF1E3', fg:'#B26B00', dot:'#C97000' };
+    if (s.includes('absent'))    return { bg:'#FCEBEC', fg:'#B3261E', dot:'#C0362C' };
+    if (s.includes('leave'))     return { bg:'#EAF0FB', fg:'#28489C', dot:'#3B5BB5' };
+    if (s.includes('off'))       return { bg:'#EEF2F7', fg:'#5B6678', dot:'#9AA7B8' };
+    return { bg:'#EEF3FB', fg:'#0C1F42', dot:'#9FB4DA' };
+  }
 
   function renderSchedule() {
-    const S = SCHED, NAVY = '#0C1F42', SLATE = '#5B6678', BORDER = '#E4E9F1';
-    $('schedWeekLabel').textContent = S.week;
-    const cell = (code, shift) => {
-      const v = code === 'W' ? shift : code;
-      if (v === 'OFF') return `<td style="padding:7px 8px;text-align:center;border:1px solid ${BORDER}"><span style="background:#FBF1E3;color:#C97000;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px">OFF</span></td>`;
-      if (v === 'RD')  return `<td style="padding:7px 8px;text-align:center;border:1px solid ${BORDER}"><span style="background:#EEF2F7;color:${SLATE};font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px">RD</span></td>`;
-      return `<td style="padding:7px 8px;text-align:center;border:1px solid ${BORDER};background:#EEF3FB;color:${NAVY};font-size:11.5px;font-weight:600;white-space:nowrap">${esc(v)}</td>`;
+    const NAVY='#0C1F42', SLATE='#5B6678', BORDER='#E4E9F1';
+    if (!_attLoaded) {
+      $('scheduleBody').innerHTML = `<div style="padding:50px;text-align:center;color:${SLATE};font-size:13px">Loading schedule…</div>`;
+      if (!_attLoading) loadAttendanceData();
+      return;
+    }
+    // Ordered Month/Week combos (first-seen = chronological order in the sheet)
+    const weeks = [], seen = new Set();
+    for (const r of rawAttRows) {
+      const key = (r.month||'') + ' · ' + (r.week||'');
+      if (r.week && !seen.has(key)) { seen.add(key); weeks.push({ key, month:r.month, week:r.week }); }
+    }
+    if (!weeks.length) { $('scheduleBody').innerHTML = `<div style="padding:40px;text-align:center;color:${SLATE}">No schedule data in the sheet yet.</div>`; return; }
+    if (!_schedWeekKey || !weeks.some(w => w.key === _schedWeekKey)) _schedWeekKey = weeks[weeks.length-1].key;
+    const cur = weeks.find(w => w.key === _schedWeekKey);
+    $('schedWeekLabel').textContent = cur.month + ' · ' + cur.week;
+
+    const wkRows = rawAttRows.filter(r => (r.month||'') + ' · ' + (r.week||'') === _schedWeekKey);
+    const dateMap = {};
+    wkRows.forEach(r => { if (r.rawDate) dateMap[r.rawDate] = normalizeDate(r.rawDate) || r.rawDate; });
+    const dates = Object.keys(dateMap).sort((a,b) => dateMap[a] < dateMap[b] ? -1 : dateMap[a] > dateMap[b] ? 1 : 0);
+    const dayHdr = d => {
+      const iso = dateMap[d];
+      if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return new Date(iso+'T00:00:00').toLocaleDateString('en-US',{weekday:'short'}) + ' ' + d;
+      return d;
     };
-    const groups = S.groups.map(g => {
+    const teams = [], tSeen = new Set(), cellData = {}, sdrByTeam = {};
+    wkRows.forEach(r => {
+      if (!tSeen.has(r.team)) { tSeen.add(r.team); teams.push(r.team); sdrByTeam[r.team] = []; }
+      if (!sdrByTeam[r.team].includes(r.name)) sdrByTeam[r.team].push(r.name);
+      cellData[r.team+'|'+r.name+'|'+r.rawDate] = { schedule:r.schedule, status:r.status };
+    });
+
+    const sel = `<select onchange="_schedWeekKey=this.value;renderSchedule()" class="cl-input" style="width:auto">
+      ${weeks.map(w => `<option value="${esc(w.key)}"${w.key===_schedWeekKey?' selected':''}>${esc(w.month)} · ${esc(w.week)}</option>`).join('')}
+    </select>`;
+
+    const cell = (info) => {
+      if (!info) return `<td style="padding:6px 8px;border:1px solid ${BORDER};text-align:center;color:#C7D0DD">·</td>`;
+      const sh = info.schedule || '', st = (info.status||'').toLowerCase(), style = schedStatusStyle(info.status);
+      let label = sh;
+      if (sh.toUpperCase()==='RD' || st.includes('rest')) label = 'RD';
+      else if (!sh && st.includes('off')) label = 'OFF';
+      else if (!sh) label = '—';
+      return `<td style="padding:6px 8px;border:1px solid ${BORDER};text-align:center;background:${style.bg}">
+        <div style="font-size:11px;font-weight:600;color:${style.fg};white-space:nowrap">${esc(label)}</div>
+        ${info.status ? `<div style="font-size:9.5px;color:${style.fg};opacity:.85;margin-top:1px">${esc(info.status)}</div>` : ''}
+      </td>`;
+    };
+
+    const teamBlocks = teams.map(t => {
       const head = `<tr style="background:${NAVY};color:#fff">
-        <th style="text-align:left;padding:8px 10px;font-size:11px;position:sticky;left:0;background:${NAVY};min-width:70px">Emp #</th>
-        <th style="text-align:left;padding:8px 10px;font-size:11px;min-width:210px">Full Name</th>
-        <th style="padding:8px 10px;font-size:11px">Batch</th>
-        ${S.days.map(d => `<th style="padding:8px 8px;font-size:11px;white-space:nowrap">${d}</th>`).join('')}
+        <th style="text-align:left;padding:8px 10px;font-size:11px;position:sticky;left:0;background:${NAVY};min-width:180px">SDR</th>
+        ${dates.map(d => `<th style="padding:8px 8px;font-size:11px;white-space:nowrap">${esc(dayHdr(d))}</th>`).join('')}
       </tr>`;
-      const body = g.rows.map((r, i) => {
-        const codes = r[3].split(',');
-        return `<tr style="background:${i%2?'#F8FAFD':'#fff'}">
-          <td style="padding:7px 10px;font-size:11px;color:${SLATE};border:1px solid ${BORDER};position:sticky;left:0;background:${i%2?'#F8FAFD':'#fff'}">${esc(r[0])}</td>
-          <td style="padding:7px 10px;font-size:12px;color:${NAVY};font-weight:600;border:1px solid ${BORDER};white-space:nowrap">${esc(r[1])}</td>
-          <td style="padding:7px 10px;font-size:11px;color:${SLATE};text-align:center;border:1px solid ${BORDER}">${esc(r[2])}</td>
-          ${codes.map(c => cell(c, g.shift)).join('')}
-        </tr>`;
-      }).join('');
+      const body = sdrByTeam[t].map((sdr,i) => `<tr style="background:${i%2?'#F8FAFD':'#fff'}">
+        <td style="padding:6px 10px;font-size:12px;color:${NAVY};font-weight:600;border:1px solid ${BORDER};white-space:nowrap;position:sticky;left:0;background:${i%2?'#F8FAFD':'#fff'}">${esc(sdr)}</td>
+        ${dates.map(d => cell(cellData[t+'|'+sdr+'|'+d])).join('')}
+      </tr>`).join('');
       return `<div style="background:#fff;border:1px solid ${BORDER};border-radius:12px;overflow:hidden;margin-bottom:16px">
-        <div style="background:${NAVY};padding:12px 16px">
-          <div style="color:#fff;font-size:14px;font-weight:800;letter-spacing:.3px">${esc(g.name)}</div>
-          <div style="color:#9FB4DA;font-size:11.5px;margin-top:2px">${esc(g.meta)}</div>
-        </div>
-        <div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;min-width:760px"><thead>${head}</thead><tbody>${body}</tbody></table></div>
+        <div style="background:${NAVY};padding:10px 16px"><span style="color:#fff;font-size:14px;font-weight:800">${esc(t)}</span> <span style="color:#9FB4DA;font-size:11.5px">· ${sdrByTeam[t].length} SDRs</span></div>
+        <div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;min-width:640px"><thead>${head}</thead><tbody>${body}</tbody></table></div>
       </div>`;
     }).join('');
 
+    const legend = ['Present','Late','Absent','On Leave','Off'].map(s => {
+      const st = schedStatusStyle(s);
+      return `<span style="display:inline-flex;align-items:center;gap:5px;margin-right:14px"><span style="width:9px;height:9px;border-radius:2px;background:${st.dot}"></span><span style="font-size:11px;color:${SLATE}">${s}</span></span>`;
+    }).join('');
+
     $('scheduleBody').innerHTML =
-      `<div style="background:#EEF3FB;border:1px solid #C9D8F0;border-radius:10px;padding:10px 14px;font-size:11.5px;color:#142E5C;line-height:1.5;margin-bottom:16px">${esc(S.note)}</div>`
-      + groups
-      + `<div style="font-size:11px;color:${SLATE};text-align:right;margin-top:4px">Headcount: Group A 15 · B 16 · C 14 · D 26 · Bridge 3 = 74 + 4 TLs · Confidential</div>`;
+      `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+        <div style="display:flex;align-items:center;gap:10px"><label class="cl-label" style="margin:0">Week</label>${sel}</div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">${legend}<button onclick="loadAttendanceData()" class="cl-chip">↻ Refresh</button></div>
+      </div>`
+      + teamBlocks
+      + `<div style="font-size:11px;color:${SLATE};margin-top:4px">Live from the Attendance sheet · each cell shows the scheduled shift, tinted by attendance status.</div>`;
   }
+
 </script>
 </body>
 </html>
