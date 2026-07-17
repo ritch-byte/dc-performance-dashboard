@@ -5351,6 +5351,12 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
       if (!sdrByTeam[r.team].includes(r.name)) sdrByTeam[r.team].push(r.name);
       cellData[r.team+'|'+r.name+'|'+r.rawDate] = { schedule:r.schedule, status:r.status };
     });
+    // Map the sheet's team names to the dashboard Group labels, and order A -> D.
+    const SCHED_TEAM_MAP = { rv:'Group A', diathan:'Group B', ace:'Group C', jumhon:'Group D' };
+    const teamKey   = t => (t||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+    const teamLabel = t => SCHED_TEAM_MAP[teamKey(t)] || t;
+    const teamOrder = t => { const m = teamLabel(t).match(/Group ([A-D])/); return m ? 'ABCD'.indexOf(m[1]) : 99; };
+    teams.sort((a,b) => teamOrder(a) - teamOrder(b));
 
     const sel = `<select onchange="_schedWeekKey=this.value;renderSchedule()" class="cl-input" style="width:auto">
       ${weeks.map(w => `<option value="${esc(w.key)}"${w.key===_schedWeekKey?' selected':''}>${esc(w.month)} · ${esc(w.week)}</option>`).join('')}
@@ -5379,7 +5385,7 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
         ${dates.map(d => cell(cellData[t+'|'+sdr+'|'+d])).join('')}
       </tr>`).join('');
       return `<div style="background:#fff;border:1px solid ${BORDER};border-radius:12px;overflow:hidden;margin-bottom:16px">
-        <div style="background:${NAVY};padding:10px 16px"><span style="color:#fff;font-size:14px;font-weight:800">${esc(t)}</span> <span style="color:#9FB4DA;font-size:11.5px">· ${sdrByTeam[t].length} SDRs</span></div>
+        <div style="background:${NAVY};padding:10px 16px"><span style="color:#fff;font-size:14px;font-weight:800">${esc(teamLabel(t))}</span> ${teamLabel(t)!==t?`<span style="color:#9FB4DA;font-size:11.5px">· ${esc(t)}</span> `:''}<span style="color:#9FB4DA;font-size:11.5px">· ${sdrByTeam[t].length} SDRs</span></div>
         <div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;min-width:640px"><thead>${head}</thead><tbody>${body}</tbody></table></div>
       </div>`;
     }).join('');
