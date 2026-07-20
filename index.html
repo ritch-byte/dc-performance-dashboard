@@ -620,6 +620,14 @@
       </svg>
       Team
     </a>
+    <a class="nav-item" id="navLeaders" href="#" onclick="showPage('leaders');return false;">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="8" cy="4" r="2.4"/>
+        <path d="M3 14c0-2.8 2.2-5 5-5s5 2.2 5 5"/>
+        <path d="M8 1.2l.7 1.5 1.6.2-1.2 1.1.3 1.6L8 4.9 6.6 5.6l.3-1.6-1.2-1.1 1.6-.2z" fill="currentColor" stroke="none"/>
+      </svg>
+      Team Leaders
+    </a>
     <a class="nav-item" id="navReports" href="#" onclick="showPage('reports');return false;">
       <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
         <path d="M2 12l3-4 3 3 2.5-5 3 4"/>
@@ -1246,6 +1254,21 @@
       </div>
       <div style="padding:0 24px 32px">
         <div id="scheduleBody"></div>
+      </div>
+    </div>
+
+    <!-- ── Team Leaders (accountability scorecards) ── -->
+    <div id="leadersSection" style="display:none;">
+      <div class="content-header">
+        <div class="page-title">Team Leaders</div>
+        <div class="ch-right" style="display:flex;gap:6px">
+          <button class="view-btn" id="tlvBtnDaily"   onclick="setTlView('daily')">Daily</button>
+          <button class="view-btn" id="tlvBtnWeekly"  onclick="setTlView('weekly')">Weekly</button>
+          <button class="view-btn active" id="tlvBtnMonthly" onclick="setTlView('monthly')">Monthly</button>
+        </div>
+      </div>
+      <div style="padding:0 24px 32px">
+        <div id="leadersBody"></div>
       </div>
     </div>
 
@@ -1909,6 +1932,7 @@
     $('trackerSection').style.display      = page === 'tracker'     ? '' : 'none';
     $('dcmonSection').style.display        = page === 'dcmon'       ? '' : 'none';
     $('scheduleSection').style.display     = page === 'schedule'    ? '' : 'none';
+    $('leadersSection').style.display      = page === 'leaders'     ? '' : 'none';
     $('navDashboard').classList.toggle('active',   page === 'dashboard');
     $('navTeam').classList.toggle('active',        page === 'team');
     $('navReports').classList.toggle('active',     page === 'reports');
@@ -1918,7 +1942,9 @@
     $('navTracker').classList.toggle('active',     page === 'tracker');
     $('navDcmon').classList.toggle('active',        page === 'dcmon');
     $('navSchedule').classList.toggle('active',     page === 'schedule');
+    $('navLeaders').classList.toggle('active',      page === 'leaders');
     if (page === 'team')       renderTeamRoster();
+    if (page === 'leaders')    renderTeamLeaders();
     if (page === 'reports')    { buildReportMonthSelect(); renderReports(); }
     if (page === 'sheet')      { buildSheetWeekSelect(); renderSheet(); if (!_attLoaded && !_attLoading) loadAttendanceData(); }
     if (page === 'attendance') { if (!_attLoaded) loadAttendanceData(); else renderAttendance(); }
@@ -2138,6 +2164,105 @@
     $('teamBody').innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(430px,1fr));gap:18px;padding:4px 4px 24px">${cards}</div>`;
 
     if (!_coachLogsLoaded) loadCoachingLogs(false).then(() => { if ($('teamSection').style.display !== 'none') renderTeamRoster(); });
+  }
+
+  // ── Team Leader accountability scorecards ──
+  const TEAM_LEADERS = [
+    { name:'Angelica Tanate',   role:'Team Leader', teamId:'groupc' },
+    { name:'Jonathan Jabonete', role:'Team Leader', teamId:'groupb' },
+    { name:'Jumar Vere',        role:'Team Leader', teamId:'groupd' },
+  ];
+  let _tlView = 'monthly';
+  function setTlView(v) {
+    _tlView = v;
+    ['Daily','Weekly','Monthly'].forEach(x => $('tlvBtn'+x).classList.toggle('active', x.toLowerCase() === v));
+    renderTeamLeaders();
+  }
+
+  function renderTeamLeaders() {
+    const view = _tlView, today = localIso(new Date());
+    const [ty, tm] = today.split('-').map(Number);
+    const ym = `${ty}-${String(tm).padStart(2,'0')}`;
+    const curWeek = getMondayIso(today), monthWeeks = getWeeksForMonth(ym);
+    let dcCounts, periodDates, dcLabel;
+    if (view === 'daily')       { dcCounts = aggregateForDate(today); periodDates = [today];            dcLabel = 'DCs today'; }
+    else if (view === 'weekly') { const w = aggregateWTD(today);       dcCounts = w.counts;  periodDates = w.dates;  dcLabel = 'DCs this week'; }
+    else                        { const mo = aggregateMonth(ym, true); dcCounts = mo.counts; periodDates = mo.dates; dcLabel = 'DCs this month'; }
+    const dateSet = new Set(periodDates);
+    const inPeriod = d => { if (!d) return false; if (view === 'daily') return d === today; let wk; try { wk = getMondayIso(d); } catch (e) { return false; } return view === 'weekly' ? wk === curWeek : monthWeeks.indexOf(wk) >= 0; };
+    const periodWord = view === 'daily' ? 'today' : view === 'weekly' ? 'this week' : 'this month';
+    const perRepTarget = view === 'daily' ? DAILY_TARGET : view === 'weekly' ? WEEKLY_TARGET : MONTHLY_TARGET;
+    const NAVY = '#0C1F42', SLATE = '#5B6678', BORDER = 'var(--border)';
+    const colFor = (v, g, a) => v == null ? SLATE : v >= g ? '#0E9F6E' : v >= a ? '#C97000' : '#C00000';
+
+    const cards = TEAM_LEADERS.map(tl => {
+      const team = TEAMS.find(t => t.id === tl.teamId);
+      if (!team) return '';
+      const visible = team.members.filter(m => !m.hidden);
+      const ids = visible.map(m => m.id);
+      const names = new Set(visible.map(m => m.display.trim().toLowerCase()));
+      const dcs = ids.reduce((s, id) => s + (dcCounts[id] || 0), 0);
+      // show-up over the period
+      let suY = 0, suH = 0;
+      for (const row of rawRows) {
+        if (!ids.includes(resolveAgent(row.agent))) continue;
+        if (!dateSet.has(normalizeDate(row.rawDate))) continue;
+        for (const st of [row.sp1status, row.sp2status]) { if (st === 'yes') { suY++; suH++; } else if (st === 'no' || st === 'cancelled') { suH++; } }
+      }
+      const suPct = suH > 0 ? Math.round(suY / suH * 100) : null;
+      // attendance over the period
+      let att = 0, sch = 0;
+      if (_attLoaded) for (const id of ids) { const a = getAttendanceForDates(id, periodDates); att += a.attended; sch += a.scheduled; }
+      const attPct = (_attLoaded && sch > 0) ? Math.round(att / sch * 100) : null;
+      // coaching over the period
+      const teamLogs = _coachLogs.filter(l => names.has((l.rep || '').trim().toLowerCase()) && inPeriod((l.date || '').slice(0, 10)));
+      const sessions = teamLogs.length;
+      const coached = new Set();
+      teamLogs.forEach(l => { if (['Weekly','Performance'].includes(clCoachType(l).label)) coached.add((l.rep || '').trim().toLowerCase()); });
+      const coachedPct = visible.length ? Math.round(coached.size / visible.length * 100) : 0;
+      const remaining = Math.max(0, visible.length - coached.size);
+      const teamTarget = perRepTarget * visible.length;
+      const dcPct = teamTarget > 0 ? Math.round(dcs / teamTarget * 100) : 0;
+
+      const tile = (label, val, color, sub) => `<div style="background:#F8FAFD;border:1px solid ${BORDER};border-radius:10px;padding:12px 8px;text-align:center">
+        <div style="font-size:22px;font-weight:800;color:${color};line-height:1.05">${val}</div>
+        <div style="font-size:9px;letter-spacing:.4px;text-transform:uppercase;color:${SLATE};margin-top:5px">${label}</div>
+        ${sub ? `<div style="font-size:10px;color:${SLATE};margin-top:2px">${sub}</div>` : ''}
+      </div>`;
+
+      return `<div style="border:1px solid ${BORDER};border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 1px 3px rgba(16,31,66,.05)">
+        <div style="background:${esc(team.color)};padding:16px 20px;display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="color:#fff;font-weight:800;font-size:18px">${esc(tl.name)}</div>
+            <div style="color:rgba(255,255,255,.85);font-size:12px;margin-top:2px">${esc(tl.role)} · ${esc(team.name)} · ${visible.length} reps</div>
+          </div>
+          <div onclick="openTeamProfile('${team.id}')" style="cursor:pointer;background:rgba(255,255,255,.18);color:#fff;font-size:11px;font-weight:700;padding:6px 12px;border-radius:8px">View team →</div>
+        </div>
+        <div style="padding:16px 20px">
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+            ${tile(dcLabel, dcs, 'var(--blue)', 'target ' + teamTarget)}
+            ${tile('Show-up ' + periodWord, suPct == null ? '—' : suPct + '%', colFor(suPct, 80, 60))}
+            ${tile('Attendance', attPct == null ? '—' : attPct + '%', colFor(attPct, 95, 85))}
+            ${tile('SDRs coached', `${coached.size}/${visible.length}`, colFor(coachedPct, 80, 50), `${sessions} session${sessions === 1 ? '' : 's'}`)}
+          </div>
+          <div style="margin-top:14px">
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:${SLATE};margin-bottom:4px"><span>DCs vs ${periodWord} target</span><span><b style="color:${NAVY}">${dcs}</b> / ${teamTarget} · ${dcPct}%</span></div>
+            <div style="height:8px;background:#EEF1F6;border-radius:999px;overflow:hidden"><div style="height:100%;width:${Math.min(100, dcPct)}%;background:${dcPct >= 100 ? '#0E9F6E' : 'var(--blue)'}"></div></div>
+          </div>
+          <div style="margin-top:12px;padding-top:12px;border-top:1px solid ${BORDER};font-size:11px;color:${SLATE}">
+            ${remaining > 0 ? `<b style="color:${coachedPct >= 80 ? '#0E9F6E' : coachedPct >= 50 ? '#C97000' : '#C00000'}">${remaining} SDR${remaining === 1 ? '' : 's'} still to coach ${periodWord}</b>` : `<b style="color:#0E9F6E">All SDRs coached ${periodWord} ✓</b>`}
+            ${!_attLoaded ? ' · <span style="color:#C97000">attendance loading…</span>' : ''}
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+
+    $('leadersBody').innerHTML =
+      `<div style="font-size:12px;color:${SLATE};margin-bottom:14px">Accountability rollup per team leader — their team's DCs, show-up, attendance, and coaching for the selected period. <span style="color:#0E9F6E">●</span> on track · <span style="color:#C97000">●</span> watch · <span style="color:#C00000">●</span> below target.</div>`
+      + `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(430px,1fr));gap:18px">${cards}</div>`;
+
+    if (!_attLoaded && !_attLoading) loadAttendanceData();
+    if (!_coachLogsLoaded) loadCoachingLogs(false).then(() => { if ($('leadersSection').style.display !== 'none') renderTeamLeaders(); });
   }
 
   // ── Member Profile ──
@@ -3196,6 +3321,7 @@
       if ($('attErrorBanner')) $('attErrorBanner').classList.remove('show');
       if ($('attendanceSection').style.display !== 'none') renderAttendance();
       if ($('scheduleSection') && $('scheduleSection').style.display !== 'none') renderSchedule();
+      if ($('leadersSection') && $('leadersSection').style.display !== 'none') renderTeamLeaders();
       if ($('sheetSection') && $('sheetSection').style.display !== 'none') renderSheet();
       if (_profileMember) {
         const today = localIso(new Date());
