@@ -953,7 +953,7 @@
             <div class="cl-field">
               <label class="cl-label">Squad</label>
               <select id="clSquad" class="cl-input" onchange="clSetSquad()">
-                <option>Group A</option><option>Group B</option><option>Group C</option><option>Group D</option><option>POC TEAM</option><option>Other</option>
+                <option>RV</option><option>Diathan</option><option>MeloAce</option><option>JumHon</option><option>POC TEAM</option><option>Other</option>
               </select>
             </div>
             <div class="cl-field">
@@ -1294,7 +1294,7 @@
 
   const TEAMS = [
     {
-      id: 'groupa', name: 'Group A', color: '#1A2DB5',  // TL Ritch · SME Vince
+      id: 'groupa', name: 'RV', color: '#1A2DB5',  // Group A · TL Ritch · SME Vince
       members: [
         { id: 'silva',         display: 'Godwin Silva',          ln: 'silva' },
         { id: 'sarmiento_j',   display: 'Julius Sarmiento',      ln: 'sarmiento', fn: 'julius' },
@@ -1313,7 +1313,7 @@
       ]
     },
     {
-      id: 'groupb', name: 'Group B', color: '#d97706',  // TL Jonathan · SME Diana
+      id: 'groupb', name: 'Diathan', color: '#d97706',  // Group B · TL Jonathan · SME Diana
       members: [
         { id: 'bangalan',    display: 'Roderico Bangalan',     ln: 'bangalan' },
         { id: 'ramirez',     display: 'Mark Lauren Ramirez',   ln: 'ramirez' },
@@ -1334,7 +1334,7 @@
       ]
     },
     {
-      id: 'groupc', name: 'Group C', color: '#059669',  // TL AC · SME Vin
+      id: 'groupc', name: 'MeloAce', color: '#059669',  // Group C · TL AC · SME Vin
       members: [
         { id: 'cubol',      display: 'Jesley Cubol',          ln: 'cubol' },
         { id: 'magtalas',   display: 'Ayesha Magtalas',       ln: 'magtalas' },
@@ -1353,7 +1353,7 @@
       ]
     },
     {
-      id: 'groupd', name: 'Group D', color: '#0891b2',  // TL Jumar · SME Ali
+      id: 'groupd', name: 'JumHon', color: '#0891b2',  // Group D · TL Jumar · SME Ali
       members: [
         { id: 'chua',       display: 'Angel Chua',            ln: 'chua' },
         { id: 'rampas',     display: 'Desiree Rampas',        ln: 'rampas' },
@@ -3748,16 +3748,16 @@
   // ── COACHING LOG ──────────────────────────────────────────────────────────
   // Synced to the June Week 4 schedule (matches the dashboard TEAMS rosters)
   const CL_ROSTER = {
-    'Group A': ['Godwin Silva','Julius Sarmiento','Renz Ruiz','Charlon Baliuag','John Christian Susana',
+    'RV': ['Godwin Silva','Julius Sarmiento','Renz Ruiz','Charlon Baliuag','John Christian Susana',
                 'Jerry Demayo','Gian Lavares','Art Joseph Petras','Gian Carlo Silang','Pedro Catolico',
                 'Mervin Arespacochaga','Maureen Decamora','Lance Villaruel','Samara Bautista'],
-    'Group B': ['Roderico Bangalan','Mark Lauren Ramirez','Charlie Fortez','Diana Vosotros','Edward Velasco',
+    'Diathan': ['Roderico Bangalan','Mark Lauren Ramirez','Charlie Fortez','Diana Vosotros','Edward Velasco',
                 'Lawrence Galoso','Russell Benjamin','Kenneth Escabillas','Jose Carlos Malavega','Jefferson Lentija',
                 'Marc Anos','Charles Sarmiento','Rommel Tupaz','Jervin Saminado','Charlito Arcena','Bedier Verastigue'],
-    'Group C': ['Jesley Cubol','Ayesha Magtalas','Justine Balbido','Donald Cardell','Alvin Melo',
+    'MeloAce': ['Jesley Cubol','Ayesha Magtalas','Justine Balbido','Donald Cardell','Alvin Melo',
                 'Ma. Isabel Ramos','Jennifer Ramos','Raymond Aurelio','Melisse Tamayo','Joremie Ronquillo',
                 'Catherine de Castro','Marvin Arana','Sheilla Diaz','Hadi Aridi'],
-    'Group D': ['Angel Chua','Desiree Rampas','Josie Arienda','Bryan Cajayon','Ruth Quismundo','Armi Caro',
+    'JumHon': ['Angel Chua','Desiree Rampas','Josie Arienda','Bryan Cajayon','Ruth Quismundo','Armi Caro',
                 'Cristina Pabiona','Aaron Kyle Valenzuela','Joshua Bondad','Regine Theresa Tiu','Lorenzo Luiz Tungol',
                 'Glen Jerick San Jose','Danilo Jerusalem','Jezza Jezreel Jaraula','Reynaldo Malinay Jr','Apol Monticarlo',
                 'Chester John Guerra','Archie Velasquez','Robert Christian Lotho','Maria Angelica Sanchez',
@@ -3846,7 +3846,7 @@
 
   let _clInited = false;
   let _clState = {
-    tmName:'', squad:'Group A', leadName:'', hubspot:'', convoDate:'', behaviorDate:'',
+    tmName:'', squad:'RV', leadName:'', hubspot:'', convoDate:'', behaviorDate:'',
     missed:[], general:true, behaviorEdited:'', useEdited:false, level:'verbal',
     impact:CL_IMPACT_DEFAULT, expectations:CL_EXPECT_DEFAULT, support:CL_SUPPORT_DEFAULT,
     prior:'', followUp:'', mode:'weekly',
@@ -4268,7 +4268,7 @@ ${notes}`;
       html += `<th style="padding:8px 10px;background:${NAVY};color:#fff;white-space:nowrap;text-align:center">Week ${i+1}<br><span style="font-weight:400;color:#9FB4DA;font-size:10px">${getWeekDateRange(mon)}</span></th>`;
     });
     html += `<th style="padding:8px 10px;background:${NAVY};color:#fff;text-align:center">Done</th></tr></thead><tbody>`;
-    ['Group A','Group B','Group C','Group D'].forEach(sq => {
+    ['RV','Diathan','MeloAce','JumHon'].forEach(sq => {
       const reps = CL_ROSTER[sq] || [];
       html += `<tr><td colspan="${weeks.length+2}" style="background:#EEF3FB;color:${NAVY};font-weight:800;padding:6px 10px;font-size:11px;letter-spacing:.5px">${sq}</td></tr>`;
       reps.forEach(rep => {
@@ -5492,10 +5492,11 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
       cellData[r.team+'|'+r.name+'|'+r.rawDate] = { schedule:r.schedule, status:r.status };
     });
     // Map the sheet's team names to the dashboard Group labels, and order A -> D.
-    const SCHED_TEAM_MAP = { rv:'Group A', diathan:'Group B', meloace:'Group C', ace:'Group C', jumhon:'Group D' };
+    const SCHED_TEAM_MAP = { rv:'RV', diathan:'Diathan', meloace:'MeloAce', ace:'MeloAce', jumhon:'JumHon' };
     const teamKey   = t => (t||'').toLowerCase().replace(/[^a-z0-9]/g,'');
     const teamLabel = t => SCHED_TEAM_MAP[teamKey(t)] || t;
-    const teamOrder = t => { const m = teamLabel(t).match(/Group ([A-D])/); return m ? 'ABCD'.indexOf(m[1]) : 99; };
+    const SCHED_ORDER = ['RV','Diathan','MeloAce','JumHon'];
+    const teamOrder = t => { const i = SCHED_ORDER.indexOf(teamLabel(t)); return i < 0 ? 99 : i; };
     teams.sort((a,b) => teamOrder(a) - teamOrder(b));
 
     const sel = `<select onchange="_schedWeekKey=this.value;renderSchedule()" class="cl-input" style="width:auto">
