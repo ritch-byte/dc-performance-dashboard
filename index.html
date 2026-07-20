@@ -720,10 +720,11 @@
         <div class="page-title">Team Scorecards</div>
         <div class="ch-right" style="font-size:12px;color:var(--slate);font-weight:500">Click a team for its full trajectory &amp; leaderboard</div>
       </div>
-      <div style="padding:12px 24px 0;display:flex;gap:8px">
+      <div style="padding:12px 24px 0;display:flex;gap:8px;align-items:center">
         <button class="view-btn" id="tvBtnDaily"   onclick="setTeamCardView('daily')">Daily</button>
         <button class="view-btn" id="tvBtnWeekly"  onclick="setTeamCardView('weekly')">Weekly</button>
         <button class="view-btn active" id="tvBtnMonthly" onclick="setTeamCardView('monthly')">Monthly</button>
+        <input type="date" id="tvDate" onchange="_teamDate=this.value;renderTeamRoster()" style="margin-left:6px;padding:5px 8px;border:1px solid var(--border);border-radius:7px;font-size:12px;color:var(--ink)">
       </div>
       <div class="main-body" id="teamBody"></div>
     </div>
@@ -1261,10 +1262,13 @@
     <div id="leadersSection" style="display:none;">
       <div class="content-header">
         <div class="page-title">Team Leaders</div>
-        <div class="ch-right" style="display:flex;gap:6px">
-          <button class="view-btn" id="tlvBtnDaily"   onclick="setTlView('daily')">Daily</button>
-          <button class="view-btn" id="tlvBtnWeekly"  onclick="setTlView('weekly')">Weekly</button>
-          <button class="view-btn active" id="tlvBtnMonthly" onclick="setTlView('monthly')">Monthly</button>
+        <div class="ch-right" style="display:flex;gap:8px;align-items:center">
+          <input type="date" id="tlDate" onchange="_tlDate=this.value;renderTeamLeaders()" style="padding:5px 8px;border:1px solid var(--border);border-radius:7px;font-size:12px;color:var(--ink)">
+          <div style="display:flex;gap:6px">
+            <button class="view-btn" id="tlvBtnDaily"   onclick="setTlView('daily')">Daily</button>
+            <button class="view-btn" id="tlvBtnWeekly"  onclick="setTlView('weekly')">Weekly</button>
+            <button class="view-btn active" id="tlvBtnMonthly" onclick="setTlView('monthly')">Monthly</button>
+          </div>
         </div>
       </div>
       <div style="padding:0 24px 32px">
@@ -2060,7 +2064,7 @@
     }
   }
 
-  let _teamView = 'monthly';
+  let _teamView = 'monthly', _teamDate = '';
   function setTeamCardView(v) {
     _teamView = v;
     ['Daily','Weekly','Monthly'].forEach(x => $('tvBtn'+x).classList.toggle('active', x.toLowerCase() === v));
@@ -2069,7 +2073,9 @@
 
   function renderTeamRoster() {
     const view = _teamView;
-    const today = localIso(new Date());
+    const todayIso = localIso(new Date());
+    const today = _teamDate || todayIso;
+    if ($('tvDate')) { $('tvDate').value = today; $('tvDate').max = todayIso; }
     const [ty, tm] = today.split('-').map(Number);
     const ym = `${ty}-${String(tm).padStart(2,'0')}`;
     const curWeek = getMondayIso(today);
@@ -2077,9 +2083,9 @@
 
     // Pick the period's DC counts, its date set, and a label
     let dcCounts, periodDates, dcLabel;
-    if (view === 'daily')      { dcCounts = aggregateForDate(today);        periodDates = [today];                     dcLabel = 'DCs today'; }
-    else if (view === 'weekly'){ const w = aggregateWTD(today);            dcCounts = w.counts; periodDates = w.dates; dcLabel = 'DCs this week'; }
-    else                       { const mo = aggregateMonth(ym, true);      dcCounts = mo.counts; periodDates = mo.dates; dcLabel = 'DCs this month'; }
+    if (view === 'daily')      { dcCounts = aggregateForDate(today);        periodDates = [today];                     dcLabel = 'DCs (day)'; }
+    else if (view === 'weekly'){ const w = aggregateWTD(today);            dcCounts = w.counts; periodDates = w.dates; dcLabel = 'DCs (week)'; }
+    else                       { const mo = aggregateMonth(ym, true);      dcCounts = mo.counts; periodDates = mo.dates; dcLabel = 'DCs (month)'; }
     const dateSet = new Set(periodDates);
     const inPeriod = d => {
       if (!d) return false;
@@ -2087,7 +2093,7 @@
       let wk; try { wk = getMondayIso(d); } catch (e) { return false; }
       return view === 'weekly' ? wk === curWeek : monthWeeks.indexOf(wk) >= 0;
     };
-    const periodWord = view === 'daily' ? 'today' : view === 'weekly' ? 'this week' : 'this month';
+    const periodWord = view === 'daily' ? 'that day' : view === 'weekly' ? 'that week' : 'that month';
 
     const statCell = (label, val, color, size) =>
       `<div><div style="font-size:${size||22}px;font-weight:800;font-family:'Plus Jakarta Sans',sans-serif;color:${color||'var(--ink)'};line-height:1.1">${val}</div>` +
@@ -2172,7 +2178,7 @@
     { name:'Jonathan Jabonete', role:'Team Leader', teamId:'groupb' },
     { name:'Jumar Vere',        role:'Team Leader', teamId:'groupd' },
   ];
-  let _tlView = 'monthly';
+  let _tlView = 'monthly', _tlDate = '';
   function setTlView(v) {
     _tlView = v;
     ['Daily','Weekly','Monthly'].forEach(x => $('tlvBtn'+x).classList.toggle('active', x.toLowerCase() === v));
@@ -2180,17 +2186,25 @@
   }
 
   function renderTeamLeaders() {
-    const view = _tlView, today = localIso(new Date());
-    const [ty, tm] = today.split('-').map(Number);
-    const ym = `${ty}-${String(tm).padStart(2,'0')}`;
-    const curWeek = getMondayIso(today), monthWeeks = getWeeksForMonth(ym);
-    let dcCounts, periodDates, dcLabel;
-    if (view === 'daily')       { dcCounts = aggregateForDate(today); periodDates = [today];            dcLabel = 'DCs today'; }
-    else if (view === 'weekly') { const w = aggregateWTD(today);       dcCounts = w.counts;  periodDates = w.dates;  dcLabel = 'DCs this week'; }
-    else                        { const mo = aggregateMonth(ym, true); dcCounts = mo.counts; periodDates = mo.dates; dcLabel = 'DCs this month'; }
+    const view = _tlView, todayIso = localIso(new Date());
+    const refDate = _tlDate || todayIso;
+    if ($('tlDate')) { $('tlDate').value = refDate; $('tlDate').max = todayIso; }
+    const [ry, rm] = refDate.split('-').map(Number);
+    const ym = `${ry}-${String(rm).padStart(2,'0')}`;
+    const refWeek = getMondayIso(refDate), monthWeeks = getWeeksForMonth(ym);
+    let dcCounts, periodDates, dcLabel, periodRange;
+    if (view === 'daily')       { dcCounts = aggregateForDate(refDate); periodDates = [refDate];          dcLabel = 'DCs (day)';   }
+    else if (view === 'weekly') { const w = aggregateWTD(refDate);       dcCounts = w.counts;  periodDates = w.dates;  dcLabel = 'DCs (week)';  }
+    else                        { const mo = aggregateMonth(ym, true);   dcCounts = mo.counts; periodDates = mo.dates; dcLabel = 'DCs (month)'; }
     const dateSet = new Set(periodDates);
-    const inPeriod = d => { if (!d) return false; if (view === 'daily') return d === today; let wk; try { wk = getMondayIso(d); } catch (e) { return false; } return view === 'weekly' ? wk === curWeek : monthWeeks.indexOf(wk) >= 0; };
-    const periodWord = view === 'daily' ? 'today' : view === 'weekly' ? 'this week' : 'this month';
+    const inPeriod = d => { if (!d) return false; if (view === 'daily') return d === refDate; let wk; try { wk = getMondayIso(d); } catch (e) { return false; } return view === 'weekly' ? wk === refWeek : monthWeeks.indexOf(wk) >= 0; };
+    const periodWord = view === 'daily' ? 'that day' : view === 'weekly' ? 'that week' : 'that month';
+    const fmtD = iso => { const [y,m,d] = iso.split('-').map(Number); return new Date(y,m-1,d).toLocaleDateString('en-US',{month:'short',day:'numeric'}); };
+    periodRange = view === 'daily'
+      ? new Date(ry,rm-1,refDate.split('-')[2]).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'})
+      : view === 'weekly'
+        ? (periodDates.length ? `Week of ${fmtD(periodDates[0])} – ${fmtD(periodDates[periodDates.length-1])}` : 'Week (no business days yet)')
+        : new Date(ry,rm-1,1).toLocaleDateString('en-US',{month:'long',year:'numeric'});
     const perRepTarget = view === 'daily' ? DAILY_TARGET : view === 'weekly' ? WEEKLY_TARGET : MONTHLY_TARGET;
     const NAVY = '#0C1F42', SLATE = '#5B6678', BORDER = 'var(--border)';
     const colFor = (v, g, a) => v == null ? SLATE : v >= g ? '#0E9F6E' : v >= a ? '#C97000' : '#C00000';
@@ -2258,7 +2272,7 @@
     }).join('');
 
     $('leadersBody').innerHTML =
-      `<div style="font-size:12px;color:${SLATE};margin-bottom:14px">Accountability rollup per team leader — their team's DCs, show-up, attendance, and coaching for the selected period. <span style="color:#0E9F6E">●</span> on track · <span style="color:#C97000">●</span> watch · <span style="color:#C00000">●</span> below target.</div>`
+      `<div style="font-size:12px;color:${SLATE};margin-bottom:14px">Showing <b style="color:${NAVY}">${esc(periodRange)}</b> — each team leader's DCs, show-up, attendance, and coaching. <span style="color:#0E9F6E">●</span> on track · <span style="color:#C97000">●</span> watch · <span style="color:#C00000">●</span> below target.</div>`
       + `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(430px,1fr));gap:18px">${cards}</div>`;
 
     if (!_attLoaded && !_attLoading) loadAttendanceData();
