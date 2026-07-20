@@ -5478,7 +5478,7 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
       cellData[r.team+'|'+r.name+'|'+r.rawDate] = { schedule:r.schedule, status:r.status };
     });
     // Map the sheet's team names to the dashboard Group labels, and order A -> D.
-    const SCHED_TEAM_MAP = { rv:'Group A', diathan:'Group B', ace:'Group C', jumhon:'Group D' };
+    const SCHED_TEAM_MAP = { rv:'Group A', diathan:'Group B', meloace:'Group C', ace:'Group C', jumhon:'Group D' };
     const teamKey   = t => (t||'').toLowerCase().replace(/[^a-z0-9]/g,'');
     const teamLabel = t => SCHED_TEAM_MAP[teamKey(t)] || t;
     const teamOrder = t => { const m = teamLabel(t).match(/Group ([A-D])/); return m ? 'ABCD'.indexOf(m[1]) : 99; };
