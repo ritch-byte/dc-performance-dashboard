@@ -5932,7 +5932,7 @@ Write a concise, honest review a supervisor can paste into a coaching email, in 
       ${aiHtml}
       <div style="padding:16px 26px 6px"><div style="background:#FFF4CE;border:1px solid #E6CE6A;border-left:4px solid #C9A227;border-radius:0 8px 8px 0;padding:12px 16px">
         <div style="font-size:12px;font-weight:800;letter-spacing:.4px;color:#6B5200;margin-bottom:6px">ACKNOWLEDGEMENT REQUIRED WITHIN 48 HOURS</div>
-        <div style="font-size:12.5px;line-height:1.55;color:${INK}">Please reply to this email with <b>your acknowledgement</b> and today's date on or before <b>${esc(deadlineLong)}</b>.<br><br>If no reply is received by that time, this scorecard is recorded as received, read, and fully understood, and is logged as part of your performance record.<br><br>If any figure here looks incorrect, raise it in the same reply before the deadline so it can be checked and corrected.</div>
+        <div style="font-size:12.5px;line-height:1.55;color:${INK}">Please reply to this email to <b>confirm you have received and reviewed this scorecard</b> on or before <b>${esc(deadlineLong)}</b>.<br><br>If no reply is received by that time, this scorecard is recorded as received, read, and fully understood, and is logged as part of your performance record.<br><br>If any figure here looks incorrect, raise it in the same reply before the deadline so it can be checked and corrected.</div>
       </div></div>
       <div style="padding:14px 26px 20px;border-top:1px solid ${LINE};margin-top:12px">
         <div style="font-size:12.5px;color:${INK}">${esc(M.sender)}<br><span style="font-size:11px;color:${SLATE}">${esc(senderTitle)}</span></div>
@@ -5953,7 +5953,7 @@ Write a concise, honest review a supervisor can paste into a coaching email, in 
     P.push(''); P.push('NEXT STEP'); P.push(nextStep);
     if (ai){ P.push(''); P.push('PERFORMANCE REVIEW'); P.push(ai.summary); (ai.suggestions||[]).forEach(s=>P.push('- '+s)); }
     P.push(''); P.push('ACKNOWLEDGEMENT REQUIRED WITHIN 48 HOURS');
-    P.push(`Please reply with your acknowledgement and today's date on or before ${deadlineLong}.`);
+    P.push(`Please reply to this email to confirm you have received and reviewed this scorecard on or before ${deadlineLong}.`);
     P.push('If no reply is received by that time, this scorecard is recorded as received, read, and fully understood, and is logged as part of your performance record.');
     P.push('If any figure here looks incorrect, raise it in the same reply before the deadline so it can be checked and corrected.');
     P.push(''); P.push(M.sender); P.push(senderTitle);
