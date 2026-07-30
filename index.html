@@ -628,6 +628,13 @@
       </svg>
       Team Leaders
     </a>
+    <a class="nav-item" id="navScorecard" href="#" onclick="showPage('scorecard');return false;">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="2" y="1.5" width="12" height="13" rx="1.5"/>
+        <path d="M5 5h6M5 8h6M5 11h3"/>
+      </svg>
+      SDR Scorecard
+    </a>
     <a class="nav-item" id="navReports" href="#" onclick="showPage('reports');return false;">
       <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
         <path d="M2 12l3-4 3 3 2.5-5 3 4"/>
@@ -1277,6 +1284,42 @@
       </div>
       <div style="padding:0 24px 32px">
         <div id="leadersBody"></div>
+      </div>
+    </div>
+
+    <!-- ── SDR Scorecard generator ── -->
+    <div id="scorecardSection" style="display:none;">
+      <div class="content-header">
+        <div class="page-title">SDR Scorecard</div>
+        <div class="ch-right" style="font-size:12px;color:var(--slate);font-weight:500">Month-to-date performance + coaching-based improvement email</div>
+      </div>
+      <div style="padding:16px 24px 32px;display:grid;grid-template-columns:minmax(300px,380px) 1fr;gap:20px;align-items:start">
+        <div>
+          <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px">
+            <div style="display:grid;gap:11px">
+              <div><label class="cl-label">SDR</label><select id="scSdr" class="cl-input" onchange="_scSuggest=null;renderScorecard()"></select></div>
+              <div><label class="cl-label">Month</label><select id="scMonth" class="cl-input" onchange="_scSuggest=null;renderScorecard()"></select></div>
+              <div><label class="cl-label">From (sender)</label>
+                <select id="scSender" class="cl-input" onchange="renderScorecard()">
+                  <option>Ritch Joy Manipol</option><option>Angelica Tanate</option><option>Jonathan Jabonete</option><option>Jumar Vere</option><option>Vincent Gadier</option><option>Alvin Bayhon</option>
+                </select>
+              </div>
+              <button id="scGenBtn" onclick="scGenerate()" style="background:#E91E8C;color:#fff;border:none;border-radius:8px;padding:11px 20px;font-size:14px;font-weight:700;cursor:pointer;letter-spacing:.3px">Generate improvement tips ✨</button>
+              <div id="scStatus" style="font-size:11px;min-height:14px;color:var(--slate)"></div>
+            </div>
+          </div>
+          <div id="scCard"></div>
+        </div>
+        <div>
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px">
+            <div id="scSubject" style="font-size:12px;color:var(--slate);overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+            <div style="display:flex;gap:6px;flex-shrink:0">
+              <button onclick="scCopySubject()" class="cl-chip">Copy subject</button>
+              <button id="scCopyBtn" onclick="scCopyEmail()" style="background:#D6006D;color:#fff;border:none;border-radius:7px;padding:7px 16px;font-size:12px;font-weight:700;cursor:pointer">Copy email</button>
+            </div>
+          </div>
+          <div id="scEmail" style="background:#F4F6FB;border:1px solid var(--border);border-radius:10px;padding:16px;max-height:76vh;overflow:auto"></div>
+        </div>
       </div>
     </div>
 
@@ -1939,6 +1982,7 @@
     $('dcmonSection').style.display        = page === 'dcmon'       ? '' : 'none';
     $('scheduleSection').style.display     = page === 'schedule'    ? '' : 'none';
     $('leadersSection').style.display      = page === 'leaders'     ? '' : 'none';
+    $('scorecardSection').style.display    = page === 'scorecard'   ? '' : 'none';
     $('navDashboard').classList.toggle('active',   page === 'dashboard');
     $('navTeam').classList.toggle('active',        page === 'team');
     $('navReports').classList.toggle('active',     page === 'reports');
@@ -1949,8 +1993,10 @@
     $('navDcmon').classList.toggle('active',        page === 'dcmon');
     $('navSchedule').classList.toggle('active',     page === 'schedule');
     $('navLeaders').classList.toggle('active',      page === 'leaders');
+    $('navScorecard').classList.toggle('active',    page === 'scorecard');
     if (page === 'team')       renderTeamRoster();
     if (page === 'leaders')    renderTeamLeaders();
+    if (page === 'scorecard')  scInit();
     if (page === 'reports')    { buildReportMonthSelect(); renderReports(); }
     if (page === 'sheet')      { buildSheetWeekSelect(); renderSheet(); if (!_attLoaded && !_attLoading) loadAttendanceData(); }
     if (page === 'attendance') { if (!_attLoaded) loadAttendanceData(); else renderAttendance(); }
@@ -5546,6 +5592,212 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
       + teamBlocks
       + `<div style="font-size:11px;color:${SLATE};margin-top:4px">Live from the Attendance sheet · each cell shows the scheduled shift, tinted by attendance status.</div>`;
   }
+
+  // ══════════════════════════════════════════════════════════════════
+  //  SDR Scorecard generator — MTD booked DCs + show-up + coaching-based
+  //  improvement email with a required acknowledgement.
+  // ══════════════════════════════════════════════════════════════════
+  let _scSuggest = null, _scSuggestKey = '';
+
+  function scInit() {
+    const sel = $('scSdr');
+    if (sel && !sel.options.length) {
+      const seen = new Set(); let html = '';
+      for (const t of TEAMS) for (const m of t.members) {
+        if (m.hidden || seen.has(m.id)) continue; seen.add(m.id);
+        html += `<option value="${m.id}">${esc(m.display)} · ${esc(t.name)}</option>`;
+      }
+      sel.innerHTML = html;
+    }
+    const msel = $('scMonth');
+    if (msel && !msel.options.length) {
+      let [y, mo] = localIso(new Date()).split('-').map(Number);
+      let opts = '';
+      while (y > 2026 || (y === 2026 && mo >= 1)) {
+        const ym = `${y}-${String(mo).padStart(2,'0')}`;
+        opts += `<option value="${ym}">${new Date(y, mo-1, 1).toLocaleDateString('en-US',{month:'long',year:'numeric'})}</option>`;
+        mo--; if (mo === 0) { mo = 12; y--; }
+      }
+      msel.innerHTML = opts;
+    }
+    if (!_coachLogsLoaded) loadCoachingLogs(false).then(() => { if ($('scorecardSection').style.display !== 'none') renderScorecard(); });
+    if (!_attLoaded && !_attLoading) loadAttendanceData();
+    renderScorecard();
+  }
+
+  function scFindMember(id) {
+    for (const t of TEAMS) { const m = t.members.find(x => x.id === id && !x.hidden); if (m) return { m, team: t }; }
+    return null;
+  }
+  function scStats(id, ym) {
+    const capToday = ym === localIso(new Date()).slice(0, 7);
+    const mo = aggregateMonth(ym, capToday);
+    const dcs = mo.counts[id] || 0;
+    const su = aggregateShowupForDates(mo.dates)[id] || { yes: 0, happened: 0 };
+    const suPct = su.happened > 0 ? Math.round(su.yes / su.happened * 100) : null;
+    const attObj = _attLoaded ? getAttendanceForDates(id, mo.dates) : null;
+    const attPct = attObj && attObj.scheduled > 0 ? attObj.rate : null;
+    return { dcs, target: MONTHLY_TARGET, su, suPct, attPct, dates: mo.dates };
+  }
+  function scRepLogs(display) {
+    const nm = (display || '').trim().toLowerCase();
+    return _coachLogs.filter(l => (l.rep || '').trim().toLowerCase() === nm)
+      .sort((a, b) => (b.timestamp || b.date || '').localeCompare(a.timestamp || a.date || ''));
+  }
+
+  function renderScorecard() {
+    const id = $('scSdr') && $('scSdr').value, ym = $('scMonth') && $('scMonth').value;
+    if (!id || !ym) { if ($('scCard')) $('scCard').innerHTML = ''; if ($('scEmail')) $('scEmail').innerHTML = ''; return; }
+    const found = scFindMember(id); if (!found) return;
+    const name = found.m.display, team = found.team.name;
+    const st = scStats(id, ym);
+    const dcPct = st.target > 0 ? Math.round(st.dcs / st.target * 100) : 0;
+    const [yy, mm] = ym.split('-').map(Number);
+    const monthLabel = new Date(yy, mm-1, 1).toLocaleDateString('en-US', { month:'long', year:'numeric' });
+    const NAVY = '#0C1F42', SLATE = '#5B6678', GREEN = '#0E9F6E', AMBER = '#C97000', RED = '#C0362C';
+    const suColor = st.suPct == null ? SLATE : st.suPct >= 80 ? GREEN : st.suPct >= 50 ? AMBER : RED;
+    const attColor = st.attPct == null ? SLATE : st.attPct >= 95 ? GREEN : st.attPct >= 85 ? AMBER : RED;
+    const dcColor = dcPct >= 100 ? GREEN : dcPct >= 60 ? AMBER : RED;
+    const logs = scRepLogs(name);
+    const monthLogs = logs.filter(l => (l.date || '').slice(0, 7) === ym);
+
+    const tile = (lab, val, col, sub) => `<div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
+      <div style="font-size:24px;font-weight:800;color:${col};line-height:1.05">${val}</div>
+      <div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:${SLATE};margin-top:5px">${lab}</div>
+      ${sub ? `<div style="font-size:10px;color:${SLATE};margin-top:2px">${sub}</div>` : ''}</div>`;
+    if ($('scCard')) $('scCard').innerHTML = `<div style="background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden">
+      <div style="background:${esc(found.team.color)};padding:14px 16px"><div style="color:#fff;font-weight:800;font-size:16px">${esc(name)}</div><div style="color:rgba(255,255,255,.85);font-size:11px;margin-top:2px">${esc(team)} · ${monthLabel}</div></div>
+      <div style="padding:14px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        ${tile('Booked DCs', st.dcs, 'var(--blue)', `target ${st.target} · ${dcPct}%`)}
+        ${tile('Show-up rate', st.suPct == null ? '—' : st.suPct + '%', suColor, st.su.happened ? `${st.su.yes}/${st.su.happened} showed` : 'no meetings yet')}
+        ${tile('Attendance', st.attPct == null ? '—' : st.attPct + '%', attColor, _attLoaded ? 'MTD' : 'loading…')}
+        ${tile('Coaching', monthLogs.length, NAVY, 'sessions this month')}
+      </div></div>`;
+
+    const built = scBuildEmail({ id, name, team, monthLabel, ym, st, dcPct, logs, monthLogs });
+    window._scEmailHtml = built.html; window._scEmailPlain = built.plain; window._scEmailSubject = built.subject;
+    if ($('scSubject')) $('scSubject').textContent = built.subject;
+    if ($('scEmail')) $('scEmail').innerHTML = built.html;
+  }
+
+  function scBuildEmail(ctx) {
+    const { id, name, team, monthLabel, ym, st, dcPct, logs, monthLogs } = ctx;
+    const sender = ($('scSender') && $('scSender').value) || 'Your Team Lead';
+    const NAVY = '#0C1F42', ACCENT = '#B4185A', INK = '#1F2733', SLATE = '#5B6678', LINE = '#E4E9F1', GREEN = '#0E9F6E', AMBER = '#C97000', RED = '#C0362C';
+    const first = esc((name || '').split(' ')[0]) || 'there';
+    const suColor = st.suPct == null ? SLATE : st.suPct >= 80 ? GREEN : st.suPct >= 50 ? AMBER : RED;
+    const dcColor = dcPct >= 100 ? GREEN : dcPct >= 60 ? AMBER : RED;
+    const today = new Date().toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' });
+    const subject = `[SCORECARD] ${monthLabel} Performance · ${name}`;
+    const standing = (dcPct >= 100 && (st.suPct == null || st.suPct >= 80))
+      ? 'You are hitting the mark this month, strong work. Keep the momentum going.'
+      : dcPct >= 60
+        ? 'You are making solid progress this month. A focused push on the areas below will get you to target.'
+        : 'You are behind target this month. Let us focus on the areas below to turn it around, and I am here to help.';
+
+    const key = id + '|' + ym;
+    let suggestions, suggestNote;
+    if (_scSuggest && _scSuggestKey === key && _scSuggest.length) {
+      suggestions = _scSuggest; suggestNote = 'Tailored from your coaching history.';
+    } else {
+      const topics = [...new Set(logs.map(l => (l.topic || '').trim()).filter(Boolean))].slice(0, 3);
+      suggestions = [];
+      if (st.suPct != null && st.suPct < 80) suggestions.push('Lift your show-up rate by executing the full post-booking reminder cadence for every DC: confirmation, 3-day, 1-day, 1-hour, and the 3-minute in-room message.');
+      if (dcPct < 100) suggestions.push('Increase booked DCs by raising quality dial volume and tightening your qualifying conversation so the meeting is locked before you hang up.');
+      if (topics.length) suggestions.push('Keep working on what we have coached recently: ' + topics.join(', ') + '.');
+      if (!suggestions.length) suggestions.push('Maintain your cadence and consistency, and aim to push your numbers above target.');
+      suggestNote = logs.length ? 'Click “Generate improvement tips” for suggestions tailored to your coaching history.' : 'No coaching notes on file yet.';
+    }
+
+    const metric = (lab, val, col, sub) => `<td style="padding:10px 8px;text-align:center;border:1px solid ${LINE}">
+      <div style="font-size:20px;font-weight:800;color:${col}">${val}</div>
+      <div style="font-size:10px;color:${SLATE};text-transform:uppercase;letter-spacing:.3px;margin-top:3px">${lab}</div>
+      ${sub ? `<div style="font-size:10px;color:${SLATE};margin-top:1px">${sub}</div>` : ''}</td>`;
+
+    const html = clDeDash(`<div style="font-family:'Segoe UI',Roboto,Arial,sans-serif;background:#fff;max-width:620px;margin:0 auto;border:1px solid ${LINE};border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(16,31,66,.07)">
+      <div style="background:${NAVY};padding:22px 26px 18px">
+        <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;color:#8FA6CE;text-transform:uppercase">Outsource Accelerator · Sales Operations</div>
+        <div style="color:#fff;font-size:19px;font-weight:700;margin-top:7px">${esc(name)}</div>
+        <div style="color:rgba(255,255,255,.62);font-size:12px;margin-top:4px">Month-to-Date Scorecard · ${esc(monthLabel)} &nbsp;·&nbsp; ${esc(team)}</div>
+      </div>
+      <div style="padding:20px 26px 6px;font-size:13.5px;line-height:1.6;color:${INK}">Hi ${first},<br><br>Here is your month-to-date performance snapshot as of ${today}.</div>
+      <div style="padding:8px 26px 0"><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse"><tr>
+        ${metric('Booked DCs', st.dcs, dcColor, 'target ' + st.target + ' · ' + dcPct + '%')}
+        ${metric('Show-up rate', st.suPct == null ? '—' : st.suPct + '%', suColor, st.su.happened ? st.su.yes + '/' + st.su.happened + ' showed' : '—')}
+        ${metric('Attendance', st.attPct == null ? '—' : st.attPct + '%', SLATE, 'MTD')}
+      </tr></table></div>
+      <div style="padding:14px 26px 0"><div style="border-top:1px solid ${LINE};padding:14px 0 0"><div style="font-size:10px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:${ACCENT};margin-bottom:5px">Where you stand</div><div style="font-size:13.5px;line-height:1.6;color:${INK}">${standing}</div></div></div>
+      <div style="padding:14px 26px 0"><div style="border-top:1px solid ${LINE};padding:14px 0 0"><div style="font-size:10px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:${ACCENT};margin-bottom:5px">How to improve</div><ul style="margin:0;padding-left:18px">${suggestions.map(s => `<li style="font-size:13.5px;line-height:1.6;color:${INK};margin-bottom:5px">${esc(s)}</li>`).join('')}</ul><div style="font-size:11px;color:${SLATE};margin-top:6px">${esc(suggestNote)}</div></div></div>
+      <div style="padding:16px 26px 4px"><div style="background:#FFF8E6;border:1px solid #F0D98A;border-left:4px solid ${AMBER};border-radius:0 8px 8px 0;padding:12px 16px">
+        <div style="font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#8A6100;margin-bottom:4px">Acknowledgement required</div>
+        <div style="font-size:12.5px;line-height:1.55;color:${INK}">Please reply to this email with <b>“Acknowledged”</b> and today's date to confirm you have reviewed your month-to-date performance. Your acknowledgement is logged as part of your performance record.</div>
+      </div></div>
+      <div style="padding:14px 26px 22px"><div style="border-top:1px solid ${LINE};padding-top:14px;font-size:13px;color:${INK};line-height:1.5">Keep going, and let me know how I can support you.<br><br><strong style="color:${NAVY}">${esc(sender)}</strong><br><span style="color:${SLATE};font-size:11.5px">Sales Operations</span></div></div>
+    </div>`);
+
+    const plain = clDeDash([
+      `MONTH-TO-DATE SCORECARD — ${monthLabel}`,
+      `${name} | ${team} | As of ${today}`, '',
+      `Hi ${(name || '').split(' ')[0] || 'there'},`, '',
+      'Here is your month-to-date performance snapshot.', '',
+      `Booked DCs: ${st.dcs} (target ${st.target}, ${dcPct}%)`,
+      `Show-up rate: ${st.suPct == null ? '—' : st.suPct + '%'}${st.su.happened ? ` (${st.su.yes}/${st.su.happened} showed)` : ''}`,
+      `Attendance: ${st.attPct == null ? '—' : st.attPct + '%'} (MTD)`, '',
+      'WHERE YOU STAND', standing, '',
+      'HOW TO IMPROVE', ...suggestions.map(s => '- ' + s), '',
+      'ACKNOWLEDGEMENT REQUIRED', "Please reply with 'Acknowledged' and today's date to confirm you have reviewed your month-to-date performance. Your acknowledgement is logged as part of your performance record.", '',
+      'Keep going, and let me know how I can support you.', '', sender, 'Sales Operations'
+    ].join('\n'));
+
+    return { html, plain, subject: clDeDash(subject) };
+  }
+
+  async function scGenerate() {
+    const id = $('scSdr') && $('scSdr').value, ym = $('scMonth') && $('scMonth').value;
+    const found = id && scFindMember(id); if (!found) return;
+    const name = found.m.display;
+    const st = scStats(id, ym);
+    const dcPct = st.target > 0 ? Math.round(st.dcs / st.target * 100) : 0;
+    const logs = scRepLogs(name);
+    const btn = $('scGenBtn'), status = $('scStatus');
+    btn.disabled = true; btn.textContent = 'Generating…'; status.style.color = '#5B6678'; status.textContent = 'Reading coaching history…';
+    const notes = logs.slice(0, 20).map(l => `- [${(l.date || '').slice(0, 10)} · ${l.topic || ''} · ${clCoachType(l).label}] ${l.summary || '(no summary)'}`).join('\n') || '(no coaching notes on file)';
+    const prompt = `You are a sales coach at Outsource Accelerator (offshore staffing). Write improvement suggestions for BDR ${name}. "DC" = Discovery Call.
+MONTH-TO-DATE: booked ${st.dcs} DCs vs target ${st.target} (${dcPct}%); show-up rate ${st.suPct == null ? 'n/a' : st.suPct + '%'} (${st.su.yes}/${st.su.happened} showed).
+Their coaching notes (newest first):
+${notes}
+
+Give 3 to 4 specific, encouraging, actionable suggestions to raise their booked DCs and show-up rate, grounded in the coaching history above. Each suggestion one sentence, first person from the coach. Do NOT use em dashes. Return ONLY valid JSON: {"suggestions":["...","..."]}`;
+    try {
+      const res = await fetch(AI_COACH_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 600, messages: [{ role: 'user', content: prompt }] }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error?.message || data.error || ('API ' + res.status));
+      const m = clAiText(data).trim().match(/\{[\s\S]*\}/);
+      if (!m) throw new Error('Could not parse AI response.');
+      const g = JSON.parse(m[0]);
+      _scSuggest = (g.suggestions || []).map(s => clDeDash(String(s))).filter(Boolean);
+      _scSuggestKey = id + '|' + ym;
+      status.style.color = '#0A7A0A'; status.textContent = _scSuggest.length ? '✓ Tips added to the email.' : 'No suggestions returned.';
+      renderScorecard();
+    } catch (err) {
+      status.style.color = '#C00'; status.textContent = 'Error: ' + err.message + ' (standard tips used).';
+    } finally {
+      btn.disabled = false; btn.textContent = 'Generate improvement tips ✨';
+    }
+  }
+
+  async function scCopyEmail() {
+    const btn = $('scCopyBtn');
+    try {
+      await navigator.clipboard.write([new ClipboardItem({
+        'text/html':  new Blob([window._scEmailHtml || ''], { type: 'text/html' }),
+        'text/plain': new Blob([window._scEmailPlain || ''], { type: 'text/plain' }),
+      })]);
+    } catch { try { await navigator.clipboard.writeText(window._scEmailPlain || ''); } catch {} }
+    btn.textContent = 'Copied ✓'; btn.style.background = '#0E9F6E';
+    setTimeout(() => { btn.textContent = 'Copy email'; btn.style.background = '#D6006D'; }, 1600);
+  }
+  async function scCopySubject() { try { await navigator.clipboard.writeText(window._scEmailSubject || ''); } catch {} }
 
 </script>
 </body>
