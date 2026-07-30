@@ -5646,6 +5646,13 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
     groupc: { tl:'Angelica Tanate',    sme:'Alvin Melo' },
     groupd: { tl:'Jumar Vere',         sme:'Ali' },
   };
+  // Shared logging so the Acknowledgements page is visible to everyone, not just this browser.
+  // Writes go to the same Apps Script as the Coaching Tracker (it routes record:'scorecard' to a
+  // "Scorecards" tab). Reads come from that tab published as CSV (paste the link into SC_ACK_CSV_URL).
+  const SC_ACK_POST_URL = (typeof COACH_LOG_POST_URL !== 'undefined') ? COACH_LOG_POST_URL : '';
+  const SC_ACK_CSV_URL  = '';   // <- published-to-web CSV of the "Scorecards" tab
+  function scPostAck(rec){ if (!SC_ACK_POST_URL) return; try { fetch(SC_ACK_POST_URL, { method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify(rec) }); } catch (e) {} }
+
   let _scModel = null, _scAI = {}, _scMembers = [], _scSelId = '';
   const SC_TL_OPTS = [{v:'',t:'All teams'},{v:'groupa',t:'Ritch Joy Manipol — RV'},{v:'groupb',t:'Jonathan Jabonete — Diathan'},{v:'groupc',t:'Angelica Tanate — MeloAce'},{v:'groupd',t:'Jumar Vere — JumHon'}];
 
@@ -5843,6 +5850,7 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
     const snapDate=M.asOf, today=localIso(sent);
     scPersistSnapshot({ sdr_id:id, snapshot_date:snapDate, iso_week:scIsoWeek(snapDate), booked_dcs:M.booked, dcs_scheduled:M.scheduled, dcs_showed:M.showed, attendance_pct:M.attPct, coaching_sessions:M.sessions, composite_score:M.composite });
     scPersistAck({ sdr_id:id, sdr_name:M.name, team:M.team, teamId:M.teamId, month:ym, sent_day:today, sent_at:sent.toISOString(), deadline_at:M.deadline.adj.toISOString(), acknowledged_at:null, ack_method:null, deemed_understood:false });
+    scPostAck({ record:'scorecard', event:'sent', sdr_id:id, sdr_name:M.name, team:M.team, month:ym, sent_day:today, sent_at:sent.toISOString(), deadline_at:M.deadline.adj.toISOString() });
     scRender(M,true);
     const st=$('scStatus'); if (st){ st.style.color='#0A7A0A'; st.textContent='✓ Snapshot logged for '+M.name+' (as of '+snapDate+'). Week-over-week deltas appear on the next send at least 5 days out.'; }
   }
@@ -6003,13 +6011,37 @@ Write in a natural human voice (not robotic, no meta-commentary about being an A
 
   // ── Acknowledgement Tracker ──
   function scAckSweep(){ const now=Date.now(); const a=scLoad('oaScAcks'); let ch=false; for (const r of a){ if (!r.acknowledged_at && !r.deemed_understood && r.deadline_at && Date.parse(r.deadline_at)<now){ r.deemed_understood=true; ch=true; } } if (ch) scSave('oaScAcks',a); return a; }
-  function scMarkAck(sdrId, sentDay){ const a=scLoad('oaScAcks'); const r=a.find(x=>x.sdr_id===sdrId && x.sent_day===sentDay); if (r){ r.acknowledged_at=new Date().toISOString(); r.ack_method='manual'; scSave('oaScAcks',a); } renderAckTracker(); }
-  function renderAckTracker(){
+  function scMarkAck(sdrId, sentDay){ const a=scLoad('oaScAcks'); const r=a.find(x=>x.sdr_id===sdrId && x.sent_day===sentDay); const now=new Date().toISOString(); if (r){ r.acknowledged_at=now; r.ack_method='manual'; scSave('oaScAcks',a); } scPostAck({ record:'scorecard', event:'acknowledged', sdr_id:sdrId, sent_day:sentDay, event_at:now }); renderAckTracker(); }
+  function parseScAckCSV(text){
+    const lines=text.trim().split(/\r?\n/); if (lines.length<2) return [];
+    const H=splitLine(lines[0]).map(h=>h.trim().toLowerCase().replace(/\s+/g,'_'));
+    const gi={}; ['sdr_id','sdr_name','team','month','sent_day','sent_at','deadline_at','event','event_at'].forEach(n=>gi[n]=H.indexOf(n));
+    return lines.slice(1).map(line=>{ const c=splitLine(line); const g=k=>gi[k]>=0?(c[gi[k]]||'').trim():''; return { sdr_id:g('sdr_id'), sdr_name:g('sdr_name'), team:g('team'), month:g('month'), sent_day:g('sent_day'), sent_at:g('sent_at'), deadline_at:g('deadline_at'), event:g('event').toLowerCase(), event_at:g('event_at') }; }).filter(r=>r.sdr_id);
+  }
+  async function scLoadAckRecords(){
+    const local=scAckSweep();
+    if (!SC_ACK_CSV_URL) return local;
+    try {
+      const res=await fetch(SC_ACK_CSV_URL + (SC_ACK_CSV_URL.includes('?')?'&':'?') + 't=' + Date.now());
+      const rows=parseScAckCSV(await res.text());
+      const map={};
+      for (const r of rows){ const key=r.sdr_id+'|'+r.sent_day;
+        if (r.event==='acknowledged'){ map[key]=map[key]||{sdr_id:r.sdr_id,sent_day:r.sent_day}; if (!map[key].acknowledged_at) map[key].acknowledged_at=r.event_at||r.sent_at; }
+        else { map[key]=Object.assign(map[key]||{}, {sdr_id:r.sdr_id,sdr_name:r.sdr_name,team:r.team,month:r.month,sent_day:r.sent_day,sent_at:r.sent_at,deadline_at:r.deadline_at}); }
+      }
+      const remote=Object.values(map), now=Date.now();
+      remote.forEach(r=>{ r.deemed_understood = !r.acknowledged_at && r.deadline_at && Date.parse(r.deadline_at)<now; });
+      const seen=new Set(remote.map(r=>r.sdr_id+'|'+r.sent_day));
+      for (const l of local){ if (!seen.has(l.sdr_id+'|'+l.sent_day)) remote.push(l); }
+      return remote;
+    } catch (e){ return local; }
+  }
+  async function renderAckTracker(){
     const NAVY='#0D1A6E', SLATE='#5B6678', BORDER='var(--border)';
     const fsel=$('ackTeamFilter');
     if (fsel && !fsel.options.length){ fsel.innerHTML='<option value="">All teams</option>'+TEAMS.filter(t=>t.id!=='poc').map(t=>`<option value="${esc(t.name)}">${esc(t.name)}</option>`).join(''); }
     const filter=fsel?fsel.value:'';
-    const all=scAckSweep().slice().sort((x,y)=>(y.sent_at||'').localeCompare(x.sent_at||''));
+    const all=(await scLoadAckRecords()).slice().sort((x,y)=>(y.sent_at||'').localeCompare(x.sent_at||''));
     const rows=all.filter(r=>!filter||r.team===filter);
     const statusOf=r=> r.acknowledged_at?{t:'Acknowledged',c:'#0E9F6E'}: r.deemed_understood?{t:'Deemed Understood',c:'#C97000'}:{t:'Pending',c:'#5B6678'};
     const counts={Pending:0,Acknowledged:0,'Deemed Understood':0}; rows.forEach(r=>counts[statusOf(r).t]++);
@@ -6025,7 +6057,7 @@ Write in a natural human voice (not robotic, no meta-commentary about being an A
       <td style="padding:8px 10px">${r.acknowledged_at?'':`<button onclick="scMarkAck('${esc(r.sdr_id)}','${esc(r.sent_day)}')" class="cl-chip">Mark ack</button>`}</td>
     </tr>`; }).join('') : `<tr><td colspan="7" style="padding:20px;text-align:center;color:${SLATE};font-size:13px">No scorecards generated yet. Generate one on the SDR Scorecard page.</td></tr>`;
     $('ackBody').innerHTML = tiles + `<div style="background:#fff;border:1px solid ${BORDER};border-radius:12px;overflow:hidden"><div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;min-width:720px"><thead><tr style="background:${NAVY};color:#fff"><th style="text-align:left;padding:9px 10px;font-size:11px">SDR</th><th style="text-align:left;padding:9px 10px;font-size:11px">Team</th><th style="text-align:left;padding:9px 10px;font-size:11px">Month</th><th style="text-align:left;padding:9px 10px;font-size:11px">Sent</th><th style="text-align:left;padding:9px 10px;font-size:11px">Deadline</th><th style="text-align:left;padding:9px 10px;font-size:11px">Status</th><th></th></tr></thead><tbody>${body}</tbody></table></div></div>
-      <div style="font-size:11px;color:${SLATE};margin-top:8px">Deemed Understood flips automatically once the 48-hour deadline passes with no acknowledgement. Records are stored in this browser.</div>`;
+      <div style="font-size:11px;color:${SLATE};margin-top:8px">Deemed Understood flips automatically once the 48-hour deadline passes with no acknowledgement. ${SC_ACK_CSV_URL ? 'Shared across the team via the Scorecards sheet.' : 'Records are stored in this browser only until a shared sheet is connected.'}</div>`;
   }
 
 

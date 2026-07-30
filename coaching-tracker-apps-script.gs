@@ -46,6 +46,19 @@ function doPost(e) {
       return ContentService.createTextOutput(resp.getContentText()).setMimeType(ContentService.MimeType.JSON);
     }
 
+    // ── SDR Scorecard events: route to a separate "Scorecards" tab ──
+    // Each generation posts {record:'scorecard', event:'sent', ...}; each
+    // acknowledgement posts {record:'scorecard', event:'acknowledged', ...}.
+    if (data && data.record === 'scorecard') {
+      const SC_HEADERS = ['sdr_id', 'sdr_name', 'team', 'month', 'sent_day', 'sent_at', 'deadline_at', 'event', 'event_at'];
+      const ssc = SpreadsheetApp.getActiveSpreadsheet();
+      let sc = ssc.getSheetByName('Scorecards');
+      if (!sc) { sc = ssc.insertSheet('Scorecards'); }
+      if (sc.getLastRow() === 0) { sc.appendRow(SC_HEADERS); }
+      sc.appendRow(SC_HEADERS.map(function (h) { return data[h] || ''; }));
+      return json_({ ok: true });
+    }
+
     // ── Otherwise: append a coaching-log row ──
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     let sh = ss.getSheetByName(SHEET_NAME);
