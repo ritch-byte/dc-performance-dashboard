@@ -5847,28 +5847,29 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
     const sent=new Date(); M.sent=sent; M.deadline=scDeadline(sent);
     scRender(M,false);
   }
-  function scGenerate(){
+  async function scGenerate(){
     const id=_scSelId, ym=scYM();
     if (!id||!ym){ const st=$('scStatus'); if (st){ st.style.color='#C00'; st.textContent='Pick a team member first.'; } return; }
     const dow=new Date().getDay();
     if ((dow===0||dow===6) && !confirm('Today is a weekend / possible rest day for this rep. Generate and log the scorecard anyway?')) return;
     const M=scCompute(id,ym,scOpts()); if (!M) return;
     const sent=new Date(); M.sent=sent; M.deadline=scDeadline(sent);
+    const btn=$('scGenBtn'), st=$('scStatus');
+    if (btn){ btn.disabled=true; btn.textContent='Generating…'; }
+    if (st){ st.style.color='#5B6678'; st.textContent='Writing the review with AI…'; }
+    const ok=await scFetchAI(id, ym, M);   // auto-run AI so the review is baked into the email, no separate click
+    if (btn){ btn.disabled=false; btn.textContent='Generate & log snapshot'; }
     const snapDate=M.asOf, today=localIso(sent);
     scPersistSnapshot({ sdr_id:id, snapshot_date:snapDate, iso_week:scIsoWeek(snapDate), booked_dcs:M.booked, dcs_scheduled:M.scheduled, dcs_showed:M.showed, attendance_pct:M.attPct, coaching_sessions:M.sessions, composite_score:M.composite });
     scPersistAck({ sdr_id:id, sdr_name:M.name, team:M.team, teamId:M.teamId, month:ym, sent_day:today, sent_at:sent.toISOString(), deadline_at:M.deadline.adj.toISOString(), acknowledged_at:null, ack_method:null, deemed_understood:false });
     scPostAck({ record:'scorecard', event:'sent', sdr_id:id, sdr_name:M.name, team:M.team, month:ym, sent_day:today, sent_at:sent.toISOString(), deadline_at:M.deadline.adj.toISOString() });
     scRender(M,true);
-    const st=$('scStatus'); if (st){ st.style.color='#0A7A0A'; st.textContent='✓ Snapshot logged for '+M.name+' (as of '+snapDate+'). Week-over-week deltas appear on the next send at least 5 days out.'; }
+    if (st){ st.style.color='#0A7A0A'; st.textContent='✓ Snapshot logged for '+M.name+' (as of '+snapDate+').'+(ok?' AI review included.':' AI review unavailable, used the standard write-up.'); }
   }
 
-  // AI review of this BDR — pulls DCs, show-up, attendance (incl. absents/lates), and coaching notes.
-  async function scAnalyze(){
-    const id=_scSelId, ym=scYM(); if (!id||!ym) return;
-    const M=scCompute(id,ym,scOpts()); if (!M) return;
-    const btn=$('scAiBtn'), st=$('scStatus');
-    if (btn){ btn.disabled=true; btn.textContent='Analyzing…'; }
-    if (st){ st.style.color='#5B6678'; st.textContent='Reviewing this BDR with AI…'; }
+  // AI review of this BDR — builds the prompt from DCs, show-up, attendance (incl. absents/lates),
+  // and coaching notes, then stores headline/summary/suggestions in _scAI. Returns true on success.
+  async function scFetchAI(id, ym, M){
     const ab=M.attBreak;
     const asOfLong=new Date(M.asOf+'T00:00:00').toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
     const wowTxt = M.prior ? (M.composite>M.prior.composite_score?'improving vs last week':M.composite<M.prior.composite_score?'sliding vs last week':'flat vs last week') : 'no prior week to compare';
@@ -5892,10 +5893,21 @@ Write in a natural human voice (not robotic, no meta-commentary about being an A
       const m=clAiText(data).trim().match(/\{[\s\S]*\}/); if (!m) throw new Error('Could not parse AI response.');
       const g=JSON.parse(m[0]);
       _scAI[id+'|'+ym]={ headline:clDeDash(g.headline||''), summary:clDeDash(g.summary||''), suggestions:(g.suggestions||[]).map(s=>clDeDash(String(s))).filter(Boolean) };
-      if (st){ st.style.color='#0A7A0A'; st.textContent='✓ AI review added to the email.'; }
-      scPreview();
-    } catch (err){ if (st){ st.style.color='#C00'; st.textContent='AI error: '+err.message; } }
-    finally { if (btn){ btn.disabled=false; btn.textContent='Analyze with AI ✨'; } }
+      return true;
+    } catch (err){ _scAI._lastError = err.message; return false; }
+  }
+
+  // Manual "Analyze with AI" button — re-runs the review on the current preview without logging.
+  async function scAnalyze(){
+    const id=_scSelId, ym=scYM(); if (!id||!ym) return;
+    const M=scCompute(id,ym,scOpts()); if (!M) return;
+    const btn=$('scAiBtn'), st=$('scStatus');
+    if (btn){ btn.disabled=true; btn.textContent='Analyzing…'; }
+    if (st){ st.style.color='#5B6678'; st.textContent='Reviewing this BDR with AI…'; }
+    const ok=await scFetchAI(id, ym, M);
+    if (st){ st.style.color= ok?'#0A7A0A':'#C00'; st.textContent= ok?'✓ AI review added to the email.':('AI error: '+(_scAI._lastError||'failed')); }
+    if (btn){ btn.disabled=false; btn.textContent='Analyze with AI ✨'; }
+    scPreview();
   }
 
   function scRenderCard(M){
