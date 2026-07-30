@@ -5738,8 +5738,8 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
     if (label==='On Track') return 'Keep your current cadence. If you want a stretch goal, aim to finish the month a few DCs above target.';
     if (label==='Ramping')  return 'You are still ramping, so your target is scaled for tenure. Focus on building consistent daily booked DCs and executing the reminder cadence.';
     if (label==='Watch'){ const f = (M.suRateRaw!=null && M.suRateRaw<0.8) ? 'tightening your post-booking reminders so more booked DCs actually show' : (M.paceGap<0 ? 'lifting daily booked DCs to close the pace gap' : 'holding your attendance and consistency'); return 'One focus for the coming week: ' + f + '.'; }
-    if (label==='Behind'){ const f=[]; if (M.paceGap<0) f.push('raise daily booked DCs to get back on pace'); if (M.suRateRaw!=null && M.suRateRaw<0.8) f.push('execute the full reminder cadence so more DCs show'); if (!f.length && M.attPct!=null && M.attPct<95) f.push('protect your attendance'); const areas='Two focus areas: ' + (f.slice(0,2).join(', and ') || 'rebuild booked DC volume and show-up') + '. '; return areas + (isTL ? 'Support is available if you would like to work on these together, just let me know.' : 'Support from your TL or SME is available if you would like to work on these together.'); }
-    return (isTL ? 'Support from me and your SME is available to help you rebuild your numbers.' : 'Support from your TL and SME is available to help you rebuild your numbers.') + ' If the shortfall continues, it may be reviewed under the company\'s standard performance process.';
+    if (label==='Behind'){ const f=[]; if (M.paceGap<0) f.push('raise daily booked DCs to get back on pace'); if (M.suRateRaw!=null && M.suRateRaw<0.8) f.push('execute the full reminder cadence so more DCs show'); if (!f.length && M.attPct!=null && M.attPct<95) f.push('protect your attendance'); const areas='Two focus areas: ' + (f.slice(0,2).join(', and ') || 'rebuild booked DC volume and show-up') + '. '; return areas + (isTL ? 'Support is available if you would like to work on these together, just let me know.' : 'Support from your Sales Supervisor or SME is available if you would like to work on these together.'); }
+    return (isTL ? 'Support from me and your SME is available to help you rebuild your numbers.' : 'Support from your Sales Supervisor and SME is available to help you rebuild your numbers.') + ' If the shortfall continues, it may be reviewed under the company\'s standard performance process.';
   }
   function scStrength(M){
     const p=M.prior;
@@ -5757,7 +5757,6 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
     if (M.suRateRaw!=null && M.suRateRaw>=0.8) over.push({v:(M.suRateRaw-0.8)*100, t:`your show-up rate of ${Math.round(M.suRateRaw*100)}% is at or above the 80% mark`});
     if (M.attPct!=null && M.attPct>=95) over.push({v:M.attPct-95, t:`your attendance of ${Math.round(M.attPct)}% is strong`});
     if (over.length){ over.sort((a,b)=>b.v-a.v); return 'What is working: ' + over[0].t + '.'; }
-    if (M.sessions>=1) return `Good engagement: you have taken part in ${M.sessions} coaching session${M.sessions===1?'':'s'} this month. Let us turn that into results.`;
     if (p && M.booked>=p.booked_dcs && (M.attPct==null || p.attendance_pct==null || M.attPct>=p.attendance_pct)) return 'You have held steady with no metric slipping versus last week. Let us build from that base.';
     return 'This is a fresh week to set the tone. Let us focus on a strong, steady start.';
   }
@@ -5895,9 +5894,10 @@ Write a concise, honest review a supervisor can paste into a coaching email, in 
     const monthLbl=new Date(M.ym+'-01T00:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'});
     const staff=SC_TEAM_STAFF[M.teamId]||{};
     const ccNames=[staff.tl,staff.sme].filter(Boolean).filter(n=>n!==M.sender);
-    const senderTitle = ['Angelica Tanate','Jonathan Jabonete','Jumar Vere'].includes(M.sender) ? 'Team Leader, SD Outbound' : 'Operations Supervisor, SD Outbound';
+    const senderTitle = ['Angelica Tanate','Jonathan Jabonete','Jumar Vere'].includes(M.sender) ? 'Sales Supervisor, SD Outbound' : 'Senior Sales Supervisor, SD Outbound';
+    const senderFirst = (M.sender||'').split(' ')[0];
     const ccLine=`<b>To:</b> ${esc(M.name)} &nbsp;&nbsp; <b>Cc:</b> ${ccNames.map(esc).join(', ')||'—'}`;
-    const subject=`[SDR SCORECARD] ${monthLbl} · ${scWeekOfMonth(M.asOf)} · ${M.name} · ${M.composite}/100 ${band.label}`;
+    const subject=`[SDR SCORECARD] ${monthLbl} · ${scWeekOfMonth(M.asOf)} · ${M.name} · ${band.label} · from ${senderFirst}`;
     const nowStamp=M.sent.toLocaleString('en-PH',{month:'long',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',timeZone:'Asia/Manila'})+' PHT';
     const deadlineLong=scFmtPHT(M.deadline.adj);
     const rampLine=M.ramping?`<div style="font-size:12.5px;color:${SLATE};margin-top:6px">Your target has been adjusted for tenure${M.tenure?' ('+esc(M.tenure)+' weeks)':''}, so this reflects a scaled goal of ${M.target} DCs.</div>`:'';
@@ -5926,7 +5926,7 @@ Write a concise, honest review a supervisor can paste into a coaching email, in 
         <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;color:#9FB0FF;text-transform:uppercase">Outsource Accelerator · SD Outbound</div>
         <div style="color:#fff;font-size:20px;font-weight:700;margin-top:6px">${esc(M.name)}</div>
         <div style="color:rgba(255,255,255,.7);font-size:12px;margin-top:3px">Weekly Scorecard · ${esc(monthLbl)} (month to date) · ${esc(M.team)}</div>
-        <div style="margin-top:12px;display:inline-block;background:${band.color};color:#fff;font-size:13px;font-weight:800;padding:6px 14px;border-radius:8px">${M.composite} / 100 · ${band.label}</div>
+        <div style="margin-top:12px;display:inline-block;background:${band.color};color:#fff;font-size:13px;font-weight:800;padding:6px 14px;border-radius:8px">${band.label}</div>
       </div>
       <div style="padding:18px 26px 4px;font-size:13.5px;line-height:1.6;color:${INK}">Hi ${first},<br><br>${esc(strength)}${rampLine}</div>
       <div style="padding:12px 26px 2px">${cards.join('')}</div>
@@ -5945,7 +5945,7 @@ Write a concise, honest review a supervisor can paste into a coaching email, in 
 
     const P=[];
     P.push(`SDR WEEKLY SCORECARD - ${monthLbl} (month to date)`);
-    P.push(`${M.name} | ${M.team} | Score ${M.composite}/100 (${band.label})`);
+    P.push(`${M.name} | ${M.team} | ${band.label}`);
     P.push(`To: ${M.name}   Cc: ${ccNames.join(', ')||'-'}`); P.push('');
     P.push(`Hi ${(M.name||'').split(' ')[0]||'there'},`); P.push(''); P.push(strength); if (M.ramping) P.push(`(Target adjusted for tenure: scaled goal ${M.target} DCs.)`); P.push('');
     P.push('BOOKED DCS AND PACE');
