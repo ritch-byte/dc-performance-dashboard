@@ -635,6 +635,12 @@
       </svg>
       SDR Scorecard
     </a>
+    <a class="nav-item" id="navAck" href="#" onclick="showPage('ack');return false;">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M2 4.5h12v9H2z"/><path d="M4 8l2 2 4-4"/>
+      </svg>
+      Acknowledgements
+    </a>
     <a class="nav-item" id="navReports" href="#" onclick="showPage('reports');return false;">
       <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
         <path d="M2 12l3-4 3 3 2.5-5 3 4"/>
@@ -1293,34 +1299,55 @@
         <div class="page-title">SDR Scorecard</div>
         <div class="ch-right" style="font-size:12px;color:var(--slate);font-weight:500">Month-to-date performance + coaching-based improvement email</div>
       </div>
-      <div style="padding:16px 24px 32px;display:grid;grid-template-columns:minmax(300px,380px) 1fr;gap:20px;align-items:start">
-        <div>
-          <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px">
-            <div style="display:grid;gap:11px">
-              <div><label class="cl-label">SDR</label><select id="scSdr" class="cl-input" onchange="_scSuggest=null;renderScorecard()"></select></div>
-              <div><label class="cl-label">Month</label><select id="scMonth" class="cl-input" onchange="_scSuggest=null;renderScorecard()"></select></div>
-              <div><label class="cl-label">From (sender)</label>
-                <select id="scSender" class="cl-input" onchange="renderScorecard()">
-                  <option>Ritch Joy Manipol</option><option>Angelica Tanate</option><option>Jonathan Jabonete</option><option>Jumar Vere</option><option>Vincent Gadier</option><option>Alvin Bayhon</option>
-                </select>
-              </div>
-              <button id="scGenBtn" onclick="scGenerate()" style="background:#E91E8C;color:#fff;border:none;border-radius:8px;padding:11px 20px;font-size:14px;font-weight:700;cursor:pointer;letter-spacing:.3px">Generate improvement tips ✨</button>
-              <div id="scStatus" style="font-size:11px;min-height:14px;color:var(--slate)"></div>
+      <div style="padding:16px 24px 32px">
+        <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px">
+          <div><label class="cl-label">SDR</label><select id="scSdr" class="cl-input" onchange="scPreview()"></select></div>
+          <div><label class="cl-label">Month</label><select id="scMonth" class="cl-input" onchange="scPreview()"></select></div>
+          <div><label class="cl-label">Sender (Ops Supervisor)</label><select id="scSender" class="cl-input" onchange="scPreview()"><option>Ritch Joy Manipol</option></select></div>
+          <div><label class="cl-label">SP-side no-shows</label><input id="scNC" type="number" min="0" value="0" class="cl-input" oninput="scPreview()"></div>
+          <div><label class="cl-label">No-show reason</label><input id="scNCReason" class="cl-input" placeholder="e.g. SP cancelled" oninput="scPreview()"></div>
+          <div><label class="cl-label">Ramping (tenure)</label>
+            <div style="display:flex;gap:8px;align-items:center">
+              <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--slate);white-space:nowrap"><input id="scRamp" type="checkbox" onchange="scPreview()"> ramping</label>
+              <input id="scTenure" type="number" min="0" placeholder="weeks" class="cl-input" style="flex:1" oninput="scPreview()">
             </div>
           </div>
-          <div id="scCard"></div>
         </div>
-        <div>
-          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px">
-            <div id="scSubject" style="font-size:12px;color:var(--slate);overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
-            <div style="display:flex;gap:6px;flex-shrink:0">
-              <button onclick="scCopySubject()" class="cl-chip">Copy subject</button>
-              <button id="scCopyBtn" onclick="scCopyEmail()" style="background:#D6006D;color:#fff;border:none;border-radius:7px;padding:7px 16px;font-size:12px;font-weight:700;cursor:pointer">Copy email</button>
+        <div style="display:grid;grid-template-columns:minmax(300px,380px) 1fr;gap:20px;align-items:start">
+          <div>
+            <button id="scGenBtn" onclick="scGenerate()" style="width:100%;background:#1A2DB5;color:#fff;border:none;border-radius:8px;padding:12px 20px;font-size:14px;font-weight:700;cursor:pointer;letter-spacing:.3px;margin-bottom:8px">Generate &amp; log snapshot</button>
+            <div id="scStatus" style="font-size:11px;min-height:14px;color:var(--slate);margin-bottom:12px"></div>
+            <div id="scCard"></div>
+            <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px;margin-top:16px">
+              <div style="font-size:12px;font-weight:700;color:var(--ink);margin-bottom:8px">Batch preview by team</div>
+              <div style="display:flex;gap:8px"><select id="scBatchTeam" class="cl-input" style="flex:1" onchange="scBatchPreview()"></select></div>
+              <div id="scBatch" style="margin-top:10px"></div>
             </div>
           </div>
-          <div id="scEmail" style="background:#F4F6FB;border:1px solid var(--border);border-radius:10px;padding:16px;max-height:76vh;overflow:auto"></div>
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap">
+              <div id="scSubject" style="font-size:12px;color:var(--slate);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0"></div>
+              <div style="display:flex;gap:6px;flex-shrink:0">
+                <button onclick="scCopySubject()" class="cl-chip">Copy subject</button>
+                <button id="scCopyBtn" onclick="scCopyEmail()" style="background:#1A2DB5;color:#fff;border:none;border-radius:7px;padding:7px 16px;font-size:12px;font-weight:700;cursor:pointer">Copy email</button>
+              </div>
+            </div>
+            <div id="scCcLine" style="font-size:11px;color:var(--slate);margin-bottom:8px"></div>
+            <div id="scEmail" style="background:#F4F6FB;border:1px solid var(--border);border-radius:10px;padding:16px;max-height:76vh;overflow:auto"></div>
+          </div>
         </div>
       </div>
+    </div>
+
+    <!-- ── Acknowledgement Tracker ── -->
+    <div id="ackSection" style="display:none;">
+      <div class="content-header">
+        <div class="page-title">Acknowledgements</div>
+        <div class="ch-right" style="display:flex;gap:8px;align-items:center">
+          <select id="ackTeamFilter" class="cl-input" style="width:auto" onchange="renderAckTracker()"></select>
+        </div>
+      </div>
+      <div style="padding:0 24px 32px"><div id="ackBody"></div></div>
     </div>
 
   </main>
@@ -1983,6 +2010,7 @@
     $('scheduleSection').style.display     = page === 'schedule'    ? '' : 'none';
     $('leadersSection').style.display      = page === 'leaders'     ? '' : 'none';
     $('scorecardSection').style.display    = page === 'scorecard'   ? '' : 'none';
+    $('ackSection').style.display          = page === 'ack'         ? '' : 'none';
     $('navDashboard').classList.toggle('active',   page === 'dashboard');
     $('navTeam').classList.toggle('active',        page === 'team');
     $('navReports').classList.toggle('active',     page === 'reports');
@@ -1994,9 +2022,11 @@
     $('navSchedule').classList.toggle('active',     page === 'schedule');
     $('navLeaders').classList.toggle('active',      page === 'leaders');
     $('navScorecard').classList.toggle('active',    page === 'scorecard');
+    $('navAck').classList.toggle('active',          page === 'ack');
     if (page === 'team')       renderTeamRoster();
     if (page === 'leaders')    renderTeamLeaders();
     if (page === 'scorecard')  scInit();
+    if (page === 'ack')        renderAckTracker();
     if (page === 'reports')    { buildReportMonthSelect(); renderReports(); }
     if (page === 'sheet')      { buildSheetWeekSelect(); renderSheet(); if (!_attLoaded && !_attLoading) loadAttendanceData(); }
     if (page === 'attendance') { if (!_attLoaded) loadAttendanceData(); else renderAttendance(); }
@@ -5602,210 +5632,316 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
   }
 
   // ══════════════════════════════════════════════════════════════════
-  //  SDR Scorecard generator — MTD booked DCs + show-up + coaching-based
-  //  improvement email with a required acknowledgement.
+  //  SDR Weekly Scorecard Generator (spec build)
+  //  Data used: booked DCs (MTD), DCs scheduled/showed, attendance %,
+  //  coaching sessions/topics. Pro-rated pace, composite score, bands,
+  //  week-over-week deltas (localStorage snapshots), 48h acknowledgement.
   // ══════════════════════════════════════════════════════════════════
-  let _scSuggest = null, _scSuggestKey = '';
+  const SC_BRAND = { blue:'#1A2DB5', mag:'#FF1FFF', navy:'#0D1A6E' };
+  const SC_FONT  = "Calibri,'Segoe UI',Arial,sans-serif";
+  const SC_RAMP_FACTOR = 0.5;                       // config: ramping target scale
+  // PH public holidays (config — edit as needed). July 2026 has none.
+  const SC_PH_HOLIDAYS = ['2026-01-01','2026-02-17','2026-04-02','2026-04-03','2026-04-09','2026-05-01','2026-06-12','2026-08-21','2026-08-31','2026-11-30','2026-12-08','2026-12-25','2026-12-30','2026-12-31'];
+  // Team -> TL and SME to CC (coaching ownership visible)
+  const SC_TEAM_STAFF = {
+    groupa: { tl:'Ritch Joy Manipol', sme:'Vincent Gadier' },
+    groupb: { tl:'Jonathan Jabonete',  sme:'Diana Vosotros' },
+    groupc: { tl:'Angelica Tanate',    sme:'Alvin Melo' },
+    groupd: { tl:'Jumar Vere',         sme:'Ali' },
+  };
+  let _scModel = null;
 
-  function scInit() {
-    const sel = $('scSdr');
-    if (sel && !sel.options.length) {
-      const seen = new Set(); let html = '';
-      for (const t of TEAMS) for (const m of t.members) {
-        if (m.hidden || seen.has(m.id)) continue; seen.add(m.id);
-        html += `<option value="${m.id}">${esc(m.display)} · ${esc(t.name)}</option>`;
-      }
-      sel.innerHTML = html;
+  function scLoad(k){ try { return JSON.parse(localStorage.getItem(k) || '[]'); } catch (e) { return []; } }
+  function scSave(k,v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+  function scGetPriorSnapshot(sdrId, curIso){
+    let best=null;
+    for (const s of scLoad('oaScSnaps')) {
+      if (s.sdr_id!==sdrId) continue;
+      const diff=(Date.parse(curIso)-Date.parse(s.snapshot_date))/86400000;
+      if (diff>=5 && (!best || s.snapshot_date>best.snapshot_date)) best=s;
     }
-    const msel = $('scMonth');
-    if (msel && !msel.options.length) {
-      let [y, mo] = localIso(new Date()).split('-').map(Number);
-      let opts = '';
-      while (y > 2026 || (y === 2026 && mo >= 1)) {
-        const ym = `${y}-${String(mo).padStart(2,'0')}`;
-        opts += `<option value="${ym}">${new Date(y, mo-1, 1).toLocaleDateString('en-US',{month:'long',year:'numeric'})}</option>`;
-        mo--; if (mo === 0) { mo = 12; y--; }
-      }
-      msel.innerHTML = opts;
+    return best;
+  }
+  function scPersistSnapshot(row){ const a=scLoad('oaScSnaps').filter(s=>!(s.sdr_id===row.sdr_id && s.snapshot_date===row.snapshot_date)); a.push(row); scSave('oaScSnaps',a); }
+  function scPersistAck(row){ const a=scLoad('oaScAcks').filter(s=>!(s.sdr_id===row.sdr_id && s.sent_day===row.sent_day)); a.push(row); scSave('oaScAcks',a); }
+
+  function scWorkingDays(ym){
+    const [y,m]=ym.split('-').map(Number), hol=new Set(SC_PH_HOLIDAYS), out=[];
+    const last=new Date(y,m,0).getDate();
+    for (let d=1; d<=last; d++){ const dt=new Date(y,m-1,d), dow=dt.getDay(), iso=localIso(dt); if (dow!==0 && dow!==6 && !hol.has(iso)) out.push(iso); }
+    return out;
+  }
+  function scIsoWeek(iso){ const [y,m,d]=iso.split('-').map(Number); const dt=new Date(Date.UTC(y,m-1,d)); const day=(dt.getUTCDay()+6)%7; dt.setUTCDate(dt.getUTCDate()-day+3); const f=new Date(Date.UTC(dt.getUTCFullYear(),0,4)); const wk=1+Math.round(((dt-f)/86400000 - 3 + ((f.getUTCDay()+6)%7))/7); return dt.getUTCFullYear()+'-W'+String(wk).padStart(2,'0'); }
+  function scFindMember(id){ for (const t of TEAMS){ const m=t.members.find(x=>x.id===id && !x.hidden); if (m) return {m,team:t}; } return null; }
+  function scRepLogs(display){ const nm=(display||'').trim().toLowerCase(); return _coachLogs.filter(l=>(l.rep||'').trim().toLowerCase()===nm).sort((a,b)=>(b.timestamp||b.date||'').localeCompare(a.timestamp||a.date||'')); }
+
+  function scCompute(id, ym, opts){
+    const found=scFindMember(id); if (!found) return null;
+    const name=found.m.display, team=found.team.name, teamId=found.team.id;
+    const todayIso=localIso(new Date());
+    const capToday = ym===todayIso.slice(0,7);
+    const asOf = capToday ? todayIso : ym+'-28';
+    const moAgg=aggregateMonth(ym, capToday);
+    const booked=moAgg.counts[id]||0;
+    const su=aggregateShowupForDates(moAgg.dates)[id]||{yes:0,happened:0};
+    const scheduled=su.happened, showed=su.yes;
+    const attObj=_attLoaded?getAttendanceForDates(id,moAgg.dates):null;
+    const attPct=attObj && attObj.scheduled>0 ? attObj.rate : null;
+    const logs=scRepLogs(name);
+    const monthLogs=logs.filter(l=>(l.date||'').slice(0,7)===ym);
+    const sessions=monthLogs.length;
+    const topics=[...new Set(monthLogs.map(l=>(l.topic||clCoachType(l).label||'').trim()).filter(Boolean))];
+    const allWD=scWorkingDays(ym);
+    const elapsed=allWD.filter(d=>d<=asOf).length;
+    const totalWD=allWD.length, remaining=Math.max(0,totalWD-elapsed);
+    const ramping=!!opts.ramping;
+    const target=ramping?Math.max(1,Math.round(MONTHLY_TARGET*SC_RAMP_FACTOR)):MONTHLY_TARGET;
+    const expectedMtd=totalWD>0?Math.round(target*(elapsed/totalWD)):0;
+    const paceGap=booked-expectedMtd;
+    const perDayNeeded=remaining>0?Math.max(0,Math.ceil((target-booked)/remaining)):null;
+    const nc=Math.max(0,parseInt(opts.nc||0,10)||0);
+    const suRateRaw=scheduled>0?showed/scheduled:null;
+    const adjDen=scheduled-nc;
+    const suRateAdj=(nc>0 && adjDen>0)?Math.min(1,showed/adjDen):null;
+    const comps=[
+      {w:50, s: expectedMtd>0?Math.min(1,booked/expectedMtd):(booked>0?1:1), avail:true},
+      {w:30, s: scheduled>0?showed/scheduled:0, avail:scheduled>0},
+      {w:20, s: attPct!=null?attPct/100:0, avail:attPct!=null},
+    ];
+    const availW=comps.filter(c=>c.avail).reduce((a,c)=>a+c.w,0);
+    let composite=0;
+    if (availW>0) for (const c of comps){ if (!c.avail) continue; composite += Math.min(1,Math.max(0,c.s))*(c.w*100/availW); }
+    composite=Math.round(composite);
+    return { id,name,team,teamId,ym,booked,target,expectedMtd,paceGap,perDayNeeded,elapsed,totalWD,remaining,
+      scheduled,showed,suRateRaw,suRateAdj,nc,ncReason:(opts.ncReason||'').trim(),attPct,sessions,topics,
+      ramping,tenure:opts.tenure||'',composite,prior:scGetPriorSnapshot(id,todayIso),monthLogs,logs,
+      sender:opts.sender||'Ritch Joy Manipol',asOf,todayIso };
+  }
+
+  function scBand(score, ramping){
+    if (ramping) return { label:'Ramping', color:SC_BRAND.blue };
+    if (score>=85) return { label:'On Track', color:'#0E9F6E' };
+    if (score>=70) return { label:'Watch', color:'#C97000' };
+    if (score>=50) return { label:'Behind', color:'#C0362C' };
+    return { label:'Formal Concern', color:'#8A1414' };
+  }
+  function scBandNextStep(label, M){
+    if (label==='On Track') return 'Keep your current cadence. If you want a stretch goal, aim to finish the month a few DCs above target.';
+    if (label==='Ramping')  return 'You are still ramping, so your target is scaled for tenure. Focus on building consistent daily booked DCs and executing the reminder cadence.';
+    if (label==='Watch'){ const f = (M.suRateRaw!=null && M.suRateRaw<0.8) ? 'tightening your post-booking reminders so more booked DCs actually show' : (M.paceGap<0 ? 'lifting daily booked DCs to close the pace gap' : 'holding your attendance and consistency'); return 'One focus for the coming week: ' + f + '.'; }
+    if (label==='Behind'){ const f=[]; if (M.paceGap<0) f.push('raise daily booked DCs to get back on pace'); if (M.suRateRaw!=null && M.suRateRaw<0.8) f.push('execute the full reminder cadence so more DCs show'); if (!f.length && M.attPct!=null && M.attPct<95) f.push('protect your attendance'); return 'Two focus areas: ' + (f.slice(0,2).join(', and ') || 'rebuild booked DC volume and show-up') + '. A coaching session with your TL or SME will be scheduled this week.'; }
+    return 'A structured coaching session will be set with your TL and SME to rebuild your numbers. Please note that a sustained shortfall may progress to formal performance management.';
+  }
+  function scStrength(M){
+    const p=M.prior;
+    if (p){
+      const c=[];
+      if (M.booked - p.booked_dcs > 0) c.push({v:M.booked-p.booked_dcs, t:`your booked DCs are up ${M.booked-p.booked_dcs} versus last week`});
+      const pSU = p.dcs_scheduled>0 ? p.dcs_showed/p.dcs_scheduled : null;
+      if (M.suRateRaw!=null && pSU!=null && (M.suRateRaw-pSU)>0.005) c.push({v:(M.suRateRaw-pSU)*100, t:`your show-up rate improved by ${Math.round((M.suRateRaw-pSU)*100)} points`});
+      if (M.attPct!=null && p.attendance_pct!=null && (M.attPct-p.attendance_pct)>0) c.push({v:M.attPct-p.attendance_pct, t:`your attendance is up ${Math.round(M.attPct-p.attendance_pct)} points`});
+      if (M.composite - p.composite_score > 0) c.push({v:M.composite-p.composite_score, t:`your overall score climbed ${M.composite-p.composite_score} points`});
+      if (c.length){ c.sort((a,b)=>b.v-a.v); return 'Strong momentum: ' + c[0].t + '. Keep that going.'; }
     }
-    if (!_coachLogsLoaded) loadCoachingLogs(false).then(() => { if ($('scorecardSection').style.display !== 'none') renderScorecard(); });
+    const over=[];
+    if (M.expectedMtd>0 && M.booked>=M.expectedMtd) over.push({v:M.booked-M.expectedMtd, t:'you are on or ahead of your pro-rated DC pace'});
+    if (M.suRateRaw!=null && M.suRateRaw>=0.8) over.push({v:(M.suRateRaw-0.8)*100, t:`your show-up rate of ${Math.round(M.suRateRaw*100)}% is at or above the 80% mark`});
+    if (M.attPct!=null && M.attPct>=95) over.push({v:M.attPct-95, t:`your attendance of ${Math.round(M.attPct)}% is strong`});
+    if (over.length){ over.sort((a,b)=>b.v-a.v); return 'What is working: ' + over[0].t + '.'; }
+    if (M.sessions>=1) return `Good engagement: you have taken part in ${M.sessions} coaching session${M.sessions===1?'':'s'} this month. Let us turn that into results.`;
+    if (p && M.booked>=p.booked_dcs && (M.attPct==null || p.attendance_pct==null || M.attPct>=p.attendance_pct)) return 'You have held steady with no metric slipping versus last week. Let us build from that base.';
+    return 'This is a fresh week to set the tone. Let us focus on a strong, steady start.';
+  }
+  function scDeadline(sent){
+    const raw=new Date(sent.getTime()+48*3600*1000), hol=new Set(SC_PH_HOLIDAYS);
+    const isRest=dt=>{ const dow=dt.getDay(); return dow===0||dow===6||hol.has(localIso(dt)); };
+    let adj=new Date(raw);
+    if (isRest(adj)){ do { adj.setDate(adj.getDate()+1); } while (isRest(adj)); adj.setHours(18,0,0,0); }
+    return { raw, adj };
+  }
+  function scFmtPHT(dt){ return dt.toLocaleString('en-PH',{weekday:'long',month:'long',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',timeZone:'Asia/Manila'}) + ' PHT'; }
+  function scDelta(cur, prior, kind){ if (prior==null) return ''; const d=Math.round(cur-prior); if (d===0) return 'no change'; return `${d>0?'+':''}${d}${kind==='pts'?' pts':''} vs last week`; }
+
+  function scOpts(){ return { nc:$('scNC')?$('scNC').value:0, ncReason:$('scNCReason')?$('scNCReason').value:'', ramping:$('scRamp')?$('scRamp').checked:false, tenure:$('scTenure')?$('scTenure').value:'', sender:$('scSender')?$('scSender').value:'Ritch Joy Manipol' }; }
+
+  function scInit(){
+    const sel=$('scSdr');
+    if (sel && !sel.options.length){
+      let html=''; const seen=new Set();
+      for (const t of TEAMS){ if (t.id==='poc') continue; for (const m of t.members){ if (m.hidden||seen.has(m.id)) continue; seen.add(m.id); html+=`<option value="${m.id}">${esc(m.display)} · ${esc(t.name)}</option>`; } }
+      sel.innerHTML=html;
+    }
+    const msel=$('scMonth');
+    if (msel && !msel.options.length){ let [y,mo]=localIso(new Date()).split('-').map(Number); let o=''; while (y>2026||(y===2026&&mo>=1)){ const ym=`${y}-${String(mo).padStart(2,'0')}`; o+=`<option value="${ym}">${new Date(y,mo-1,1).toLocaleDateString('en-US',{month:'long',year:'numeric'})}</option>`; mo--; if (mo===0){mo=12;y--;} } msel.innerHTML=o; }
+    const bt=$('scBatchTeam');
+    if (bt && !bt.options.length){ bt.innerHTML=TEAMS.filter(t=>t.id!=='poc').map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join(''); }
+    if (!_coachLogsLoaded) loadCoachingLogs(false).then(()=>{ if ($('scorecardSection').style.display!=='none') scPreview(); });
     if (!_attLoaded && !_attLoading) loadAttendanceData();
-    renderScorecard();
+    scPreview();
   }
 
-  function scFindMember(id) {
-    for (const t of TEAMS) { const m = t.members.find(x => x.id === id && !x.hidden); if (m) return { m, team: t }; }
-    return null;
+  function scRender(M, logged){
+    _scModel=M;
+    scRenderCard(M);
+    const built=scBuildEmail(M);
+    window._scEmailHtml=built.html; window._scEmailPlain=built.plain; window._scEmailSubject=built.subject;
+    if ($('scSubject')) $('scSubject').textContent=built.subject;
+    if ($('scCcLine')) $('scCcLine').innerHTML=built.ccLine;
+    if ($('scEmail')) $('scEmail').innerHTML=built.html;
   }
-  function scStats(id, ym) {
-    const capToday = ym === localIso(new Date()).slice(0, 7);
-    const mo = aggregateMonth(ym, capToday);
-    const dcs = mo.counts[id] || 0;
-    const su = aggregateShowupForDates(mo.dates)[id] || { yes: 0, happened: 0 };
-    const suPct = su.happened > 0 ? Math.round(su.yes / su.happened * 100) : null;
-    const attObj = _attLoaded ? getAttendanceForDates(id, mo.dates) : null;
-    const attPct = attObj && attObj.scheduled > 0 ? attObj.rate : null;
-    return { dcs, target: MONTHLY_TARGET, su, suPct, attPct, dates: mo.dates };
+  function scPreview(){
+    const id=$('scSdr')&&$('scSdr').value, ym=$('scMonth')&&$('scMonth').value;
+    if (!id||!ym) return;
+    const M=scCompute(id,ym,scOpts()); if (!M) return;
+    const sent=new Date(); M.sent=sent; M.deadline=scDeadline(sent);
+    scRender(M,false);
   }
-  function scRepLogs(display) {
-    const nm = (display || '').trim().toLowerCase();
-    return _coachLogs.filter(l => (l.rep || '').trim().toLowerCase() === nm)
-      .sort((a, b) => (b.timestamp || b.date || '').localeCompare(a.timestamp || a.date || ''));
-  }
-
-  function renderScorecard() {
-    const id = $('scSdr') && $('scSdr').value, ym = $('scMonth') && $('scMonth').value;
-    if (!id || !ym) { if ($('scCard')) $('scCard').innerHTML = ''; if ($('scEmail')) $('scEmail').innerHTML = ''; return; }
-    const found = scFindMember(id); if (!found) return;
-    const name = found.m.display, team = found.team.name;
-    const st = scStats(id, ym);
-    const dcPct = st.target > 0 ? Math.round(st.dcs / st.target * 100) : 0;
-    const [yy, mm] = ym.split('-').map(Number);
-    const monthLabel = new Date(yy, mm-1, 1).toLocaleDateString('en-US', { month:'long', year:'numeric' });
-    const NAVY = '#0C1F42', SLATE = '#5B6678', GREEN = '#0E9F6E', AMBER = '#C97000', RED = '#C0362C';
-    const suColor = st.suPct == null ? SLATE : st.suPct >= 80 ? GREEN : st.suPct >= 50 ? AMBER : RED;
-    const attColor = st.attPct == null ? SLATE : st.attPct >= 95 ? GREEN : st.attPct >= 85 ? AMBER : RED;
-    const dcColor = dcPct >= 100 ? GREEN : dcPct >= 60 ? AMBER : RED;
-    const logs = scRepLogs(name);
-    const monthLogs = logs.filter(l => (l.date || '').slice(0, 7) === ym);
-
-    const tile = (lab, val, col, sub) => `<div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
-      <div style="font-size:24px;font-weight:800;color:${col};line-height:1.05">${val}</div>
-      <div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:${SLATE};margin-top:5px">${lab}</div>
-      ${sub ? `<div style="font-size:10px;color:${SLATE};margin-top:2px">${sub}</div>` : ''}</div>`;
-    if ($('scCard')) $('scCard').innerHTML = `<div style="background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden">
-      <div style="background:${esc(found.team.color)};padding:14px 16px"><div style="color:#fff;font-weight:800;font-size:16px">${esc(name)}</div><div style="color:rgba(255,255,255,.85);font-size:11px;margin-top:2px">${esc(team)} · ${monthLabel}</div></div>
-      <div style="padding:14px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        ${tile('Booked DCs', st.dcs, 'var(--blue)', `target ${st.target} · ${dcPct}%`)}
-        ${tile('Show-up rate', st.suPct == null ? '—' : st.suPct + '%', suColor, st.su.happened ? `${st.su.yes}/${st.su.happened} showed` : 'no meetings yet')}
-        ${tile('Attendance', st.attPct == null ? '—' : st.attPct + '%', attColor, _attLoaded ? 'MTD' : 'loading…')}
-        ${tile('Coaching', monthLogs.length, NAVY, 'sessions this month')}
-      </div></div>`;
-
-    const built = scBuildEmail({ id, name, team, monthLabel, ym, st, dcPct, logs, monthLogs });
-    window._scEmailHtml = built.html; window._scEmailPlain = built.plain; window._scEmailSubject = built.subject;
-    if ($('scSubject')) $('scSubject').textContent = built.subject;
-    if ($('scEmail')) $('scEmail').innerHTML = built.html;
+  function scGenerate(){
+    const id=$('scSdr')&&$('scSdr').value, ym=$('scMonth')&&$('scMonth').value;
+    if (!id||!ym) return;
+    const dow=new Date().getDay();
+    if ((dow===0||dow===6) && !confirm('Today is a weekend / possible rest day for this rep. Generate and log the scorecard anyway?')) return;
+    const M=scCompute(id,ym,scOpts()); if (!M) return;
+    const sent=new Date(); M.sent=sent; M.deadline=scDeadline(sent);
+    const today=localIso(sent);
+    scPersistSnapshot({ sdr_id:id, snapshot_date:today, iso_week:scIsoWeek(today), booked_dcs:M.booked, dcs_scheduled:M.scheduled, dcs_showed:M.showed, attendance_pct:M.attPct, coaching_sessions:M.sessions, composite_score:M.composite });
+    scPersistAck({ sdr_id:id, sdr_name:M.name, team:M.team, teamId:M.teamId, month:ym, sent_day:today, sent_at:sent.toISOString(), deadline_at:M.deadline.adj.toISOString(), acknowledged_at:null, ack_method:null, deemed_understood:false });
+    scRender(M,true);
+    const st=$('scStatus'); if (st){ st.style.color='#0A7A0A'; st.textContent='✓ Snapshot logged for '+M.name+' ('+today+'). Week-over-week deltas appear on the next send at least 5 days out.'; }
   }
 
-  function scBuildEmail(ctx) {
-    const { id, name, team, monthLabel, ym, st, dcPct, logs, monthLogs } = ctx;
-    const sender = ($('scSender') && $('scSender').value) || 'Your Team Lead';
-    const NAVY = '#0C1F42', ACCENT = '#B4185A', INK = '#1F2733', SLATE = '#5B6678', LINE = '#E4E9F1', GREEN = '#0E9F6E', AMBER = '#C97000', RED = '#C0362C';
-    const first = esc((name || '').split(' ')[0]) || 'there';
-    const suColor = st.suPct == null ? SLATE : st.suPct >= 80 ? GREEN : st.suPct >= 50 ? AMBER : RED;
-    const dcColor = dcPct >= 100 ? GREEN : dcPct >= 60 ? AMBER : RED;
-    const today = new Date().toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' });
-    const subject = `[SCORECARD] ${monthLabel} Performance · ${name}`;
-    const standing = (dcPct >= 100 && (st.suPct == null || st.suPct >= 80))
-      ? 'You are hitting the mark this month, strong work. Keep the momentum going.'
-      : dcPct >= 60
-        ? 'You are making solid progress this month. A focused push on the areas below will get you to target.'
-        : 'You are behind target this month. Let us focus on the areas below to turn it around, and I am here to help.';
-
-    const key = id + '|' + ym;
-    let suggestions, suggestNote;
-    if (_scSuggest && _scSuggestKey === key && _scSuggest.length) {
-      suggestions = _scSuggest; suggestNote = 'Tailored from your coaching history.';
-    } else {
-      const topics = [...new Set(logs.map(l => (l.topic || '').trim()).filter(Boolean))].slice(0, 3);
-      suggestions = [];
-      if (st.suPct != null && st.suPct < 80) suggestions.push('Lift your show-up rate by executing the full post-booking reminder cadence for every DC: confirmation, 3-day, 1-day, 1-hour, and the 3-minute in-room message.');
-      if (dcPct < 100) suggestions.push('Increase booked DCs by raising quality dial volume and tightening your qualifying conversation so the meeting is locked before you hang up.');
-      if (topics.length) suggestions.push('Keep working on what we have coached recently: ' + topics.join(', ') + '.');
-      if (!suggestions.length) suggestions.push('Maintain your cadence and consistency, and aim to push your numbers above target.');
-      suggestNote = logs.length ? 'Click “Generate improvement tips” for suggestions tailored to your coaching history.' : 'No coaching notes on file yet.';
-    }
-
-    const metric = (lab, val, col, sub) => `<td style="padding:10px 8px;text-align:center;border:1px solid ${LINE}">
-      <div style="font-size:20px;font-weight:800;color:${col}">${val}</div>
-      <div style="font-size:10px;color:${SLATE};text-transform:uppercase;letter-spacing:.3px;margin-top:3px">${lab}</div>
-      ${sub ? `<div style="font-size:10px;color:${SLATE};margin-top:1px">${sub}</div>` : ''}</td>`;
-
-    const html = clDeDash(`<div style="font-family:'Segoe UI',Roboto,Arial,sans-serif;background:#fff;max-width:620px;margin:0 auto;border:1px solid ${LINE};border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(16,31,66,.07)">
-      <div style="background:${NAVY};padding:22px 26px 18px">
-        <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;color:#8FA6CE;text-transform:uppercase">Outsource Accelerator · Sales Operations</div>
-        <div style="color:#fff;font-size:19px;font-weight:700;margin-top:7px">${esc(name)}</div>
-        <div style="color:rgba(255,255,255,.62);font-size:12px;margin-top:4px">Month-to-Date Scorecard · ${esc(monthLabel)} &nbsp;·&nbsp; ${esc(team)}</div>
+  function scRenderCard(M){
+    const el=$('scCard'); if (!el) return;
+    const band=scBand(M.composite, M.ramping);
+    const found=scFindMember(M.id), color=found?found.team.color:SC_BRAND.blue, p=M.prior;
+    const suNow=M.suRateRaw!=null?Math.round(M.suRateRaw*100):null;
+    const suPrior=p&&p.dcs_scheduled>0?Math.round(p.dcs_showed/p.dcs_scheduled*100):null;
+    const dl=lab=>lab?`<div style="font-size:9px;color:#8892A6;margin-top:1px">${esc(lab)}</div>`:'';
+    const tile=(lab,val,col,sub,delta)=>`<div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center">
+      <div style="font-size:22px;font-weight:800;color:${col};line-height:1.05">${val}</div>
+      <div style="font-size:9px;letter-spacing:.4px;text-transform:uppercase;color:#5B6678;margin-top:4px">${lab}</div>
+      ${sub?`<div style="font-size:10px;color:#5B6678;margin-top:1px">${sub}</div>`:''}${dl(delta)}</div>`;
+    el.innerHTML=`<div style="background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden">
+      <div style="background:${esc(color)};padding:14px 16px;display:flex;justify-content:space-between;align-items:center">
+        <div><div style="color:#fff;font-weight:800;font-size:16px">${esc(M.name)}</div><div style="color:rgba(255,255,255,.85);font-size:11px">${esc(M.team)} · ${new Date(M.ym+'-01T00:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'})}</div></div>
+        <div style="text-align:right"><div style="color:#fff;font-size:24px;font-weight:800">${M.composite}<span style="font-size:12px;font-weight:600">/100</span></div><div style="background:${band.color};color:#fff;font-size:10px;font-weight:800;padding:2px 8px;border-radius:10px;display:inline-block;margin-top:2px">${band.label}</div></div>
       </div>
-      <div style="padding:20px 26px 6px;font-size:13.5px;line-height:1.6;color:${INK}">Hi ${first},<br><br>Here is your month-to-date performance snapshot as of ${today}.</div>
-      <div style="padding:8px 26px 0"><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse"><tr>
-        ${metric('Booked DCs', st.dcs, dcColor, 'target ' + st.target + ' · ' + dcPct + '%')}
-        ${metric('Show-up rate', st.suPct == null ? '—' : st.suPct + '%', suColor, st.su.happened ? st.su.yes + '/' + st.su.happened + ' showed' : '—')}
-        ${metric('Attendance', st.attPct == null ? '—' : st.attPct + '%', SLATE, 'MTD')}
-      </tr></table></div>
-      <div style="padding:14px 26px 0"><div style="border-top:1px solid ${LINE};padding:14px 0 0"><div style="font-size:10px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:${ACCENT};margin-bottom:5px">Where you stand</div><div style="font-size:13.5px;line-height:1.6;color:${INK}">${standing}</div></div></div>
-      <div style="padding:14px 26px 0"><div style="border-top:1px solid ${LINE};padding:14px 0 0"><div style="font-size:10px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:${ACCENT};margin-bottom:5px">How to improve</div><ul style="margin:0;padding-left:18px">${suggestions.map(s => `<li style="font-size:13.5px;line-height:1.6;color:${INK};margin-bottom:5px">${esc(s)}</li>`).join('')}</ul><div style="font-size:11px;color:${SLATE};margin-top:6px">${esc(suggestNote)}</div></div></div>
-      <div style="padding:16px 26px 4px"><div style="background:#FFF8E6;border:1px solid #F0D98A;border-left:4px solid ${AMBER};border-radius:0 8px 8px 0;padding:12px 16px">
-        <div style="font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#8A6100;margin-bottom:4px">Acknowledgement required</div>
-        <div style="font-size:12.5px;line-height:1.55;color:${INK}">Please reply to this email with <b>“Acknowledged”</b> and today's date to confirm you have reviewed your month-to-date performance. Your acknowledgement is logged as part of your performance record.</div>
+      <div style="padding:14px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        ${tile('Booked DCs', M.booked, SC_BRAND.blue, `pace ${M.expectedMtd} · ${M.paceGap>=0?'+':''}${M.paceGap}`, p?scDelta(M.booked,p.booked_dcs,'count'):'')}
+        ${tile(M.remaining>0?'Need / day':'Days left', M.perDayNeeded==null?'—':M.perDayNeeded, '#C0362C', M.remaining>0?`to hit ${M.target}`:'month closed', '')}
+        ${M.scheduled>0?tile('Show-up', suNow+'%', suNow>=80?'#0E9F6E':suNow>=50?'#C97000':'#C0362C', `${M.showed}/${M.scheduled} showed`, (suNow!=null&&suPrior!=null)?scDelta(suNow,suPrior,'pts'):''):''}
+        ${M.attPct!=null?tile('Attendance', Math.round(M.attPct)+'%', '#0D1A6E', 'MTD', (p&&p.attendance_pct!=null)?scDelta(Math.round(M.attPct),Math.round(p.attendance_pct),'pts'):''):''}
+      </div>
+      ${p?`<div style="padding:0 14px 12px;font-size:11px;color:#5B6678">Overall score ${esc(scDelta(M.composite,p.composite_score,'pts'))}</div>`:''}
+    </div>`;
+  }
+
+  function scBuildEmail(M){
+    const B=SC_BRAND, INK='#1F2733', SLATE='#5B6678', LINE='#D9DEEC';
+    const band=scBand(M.composite, M.ramping);
+    const nextStep=scBandNextStep(band.label, M);
+    const strength=scStrength(M);
+    const first=esc((M.name||'').split(' ')[0])||'there';
+    const monthLbl=new Date(M.ym+'-01T00:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'});
+    const staff=SC_TEAM_STAFF[M.teamId]||{};
+    const ccNames=[staff.tl,staff.sme].filter(Boolean).filter(n=>n!==M.sender);
+    const ccLine=`<b>To:</b> ${esc(M.name)} &nbsp;&nbsp; <b>Cc:</b> ${ccNames.map(esc).join(', ')||'—'}`;
+    const subject=`[SDR SCORECARD] ${monthLbl} · ${M.name} · ${M.composite}/100 ${band.label}`;
+    const nowStamp=M.sent.toLocaleString('en-PH',{month:'long',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',timeZone:'Asia/Manila'})+' PHT';
+    const deadlineLong=scFmtPHT(M.deadline.adj);
+    const rampLine=M.ramping?`<div style="font-size:12.5px;color:${SLATE};margin-top:6px">Your target has been adjusted for tenure${M.tenure?' ('+esc(M.tenure)+' weeks)':''}, so this reflects a scaled goal of ${M.target} DCs.</div>`:'';
+
+    const rows=[];
+    rows.push(`<tr><td style="padding:12px 0 4px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:${B.blue}">Booked DCs and pace</div>
+      <div style="font-size:13.5px;line-height:1.6;color:${INK};margin-top:4px"><b>Booked:</b> ${M.booked} of a ${M.target} monthly target. <b>Expected by today:</b> ${M.expectedMtd} (${M.paceGap>=0?'ahead by '+M.paceGap:'behind by '+Math.abs(M.paceGap)}).</div>
+      ${M.perDayNeeded!=null?`<div style="margin-top:8px;background:#EEF0FB;border-left:4px solid ${B.blue};padding:10px 14px;border-radius:0 6px 6px 0"><span style="font-size:12px;color:${SLATE}">To finish the month at target you need</span><br><span style="font-size:22px;font-weight:800;color:${B.blue}">${M.perDayNeeded} booked DC${M.perDayNeeded===1?'':'s'} per working day</span> <span style="font-size:12px;color:${SLATE}">over the ${M.remaining} working day${M.remaining===1?'':'s'} left.</span></div>`:''}</td></tr>`);
+    if (M.scheduled>0){
+      let line=`<b>Show-up rate:</b> ${Math.round(M.suRateRaw*100)}% (${M.showed} of ${M.scheduled} scheduled DCs showed).`;
+      if (M.nc>0 && M.suRateAdj!=null) line+=` <b>Adjusted:</b> ${Math.round(M.suRateAdj*100)}% excluding ${M.nc} SP-side cancellation${M.nc===1?'':'s'}${M.ncReason?' ('+esc(M.ncReason)+')':''}.`;
+      rows.push(`<tr><td style="padding:12px 0 4px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:${B.blue}">Show-up</div><div style="font-size:13.5px;line-height:1.6;color:${INK};margin-top:4px">${line}</div></td></tr>`);
+    }
+    if (M.attPct!=null) rows.push(`<tr><td style="padding:12px 0 4px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:${B.blue}">Attendance</div><div style="font-size:13.5px;line-height:1.6;color:${INK};margin-top:4px"><b>Attendance MTD:</b> ${Math.round(M.attPct)}%.</div></td></tr>`);
+    if (M.sessions>0) rows.push(`<tr><td style="padding:12px 0 4px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:${B.blue}">Coaching this month</div><div style="font-size:13.5px;line-height:1.6;color:${INK};margin-top:4px"><b>${M.sessions} session${M.sessions===1?'':'s'}.</b>${M.topics.length?' Topics: '+esc(M.topics.join(', '))+'.':''}</div></td></tr>`);
+
+    const html=clDeDash(`<div style="font-family:${SC_FONT};background:#fff;max-width:640px;margin:0 auto;border:1px solid ${LINE};border-radius:10px;overflow:hidden">
+      <div style="background:${B.navy};padding:20px 26px">
+        <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;color:#9FB0FF;text-transform:uppercase">Outsource Accelerator · SD Outbound</div>
+        <div style="color:#fff;font-size:20px;font-weight:700;margin-top:6px">${esc(M.name)}</div>
+        <div style="color:rgba(255,255,255,.7);font-size:12px;margin-top:3px">Weekly Scorecard · ${esc(monthLbl)} (month to date) · ${esc(M.team)}</div>
+        <div style="margin-top:12px;display:inline-block;background:${band.color};color:#fff;font-size:13px;font-weight:800;padding:6px 14px;border-radius:8px">${M.composite} / 100 · ${band.label}</div>
+      </div>
+      <div style="padding:18px 26px 4px;font-size:13.5px;line-height:1.6;color:${INK}">Hi ${first},<br><br>${esc(strength)}${rampLine}</div>
+      <div style="padding:2px 26px"><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">${rows.join('')}</table></div>
+      <div style="padding:14px 26px 4px"><div style="border-top:1px solid ${LINE};padding-top:12px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:${B.mag}">Next step</div><div style="font-size:13.5px;line-height:1.6;color:${INK};margin-top:4px">${esc(nextStep)}</div></div></div>
+      <div style="padding:16px 26px 6px"><div style="background:#FFF4CE;border:1px solid #E6CE6A;border-left:4px solid #C9A227;border-radius:0 8px 8px 0;padding:12px 16px">
+        <div style="font-size:12px;font-weight:800;letter-spacing:.4px;color:#6B5200;margin-bottom:6px">ACKNOWLEDGEMENT REQUIRED WITHIN 48 HOURS</div>
+        <div style="font-size:12.5px;line-height:1.55;color:${INK}">Please reply to this email with <b>"Acknowledged"</b> and today's date on or before <b>${esc(deadlineLong)}</b>.<br><br>If no reply is received by that time, this scorecard is recorded as received, read, and fully understood, and is logged as part of your performance record.<br><br>If any figure here looks incorrect, raise it in the same reply before the deadline so it can be checked and corrected.</div>
       </div></div>
-      <div style="padding:14px 26px 22px"><div style="border-top:1px solid ${LINE};padding-top:14px;font-size:13px;color:${INK};line-height:1.5">Keep going, and let me know how I can support you.<br><br><strong style="color:${NAVY}">${esc(sender)}</strong><br><span style="color:${SLATE};font-size:11.5px">Sales Operations</span></div></div>
+      <div style="padding:14px 26px 20px;border-top:1px solid ${LINE};margin-top:12px">
+        <div style="font-size:12.5px;color:${INK}">${esc(M.sender)}<br><span style="font-size:11px;color:${SLATE}">Operations Supervisor, SD Outbound</span></div>
+        <div style="font-size:10.5px;color:${SLATE};margin-top:10px">Figures as of ${esc(nowStamp)}. Source: DC Dashboard and Attendance sheet.</div>
+      </div>
     </div>`);
 
-    const plain = clDeDash([
-      `MONTH-TO-DATE SCORECARD — ${monthLabel}`,
-      `${name} | ${team} | As of ${today}`, '',
-      `Hi ${(name || '').split(' ')[0] || 'there'},`, '',
-      'Here is your month-to-date performance snapshot.', '',
-      `Booked DCs: ${st.dcs} (target ${st.target}, ${dcPct}%)`,
-      `Show-up rate: ${st.suPct == null ? '—' : st.suPct + '%'}${st.su.happened ? ` (${st.su.yes}/${st.su.happened} showed)` : ''}`,
-      `Attendance: ${st.attPct == null ? '—' : st.attPct + '%'} (MTD)`, '',
-      'WHERE YOU STAND', standing, '',
-      'HOW TO IMPROVE', ...suggestions.map(s => '- ' + s), '',
-      'ACKNOWLEDGEMENT REQUIRED', "Please reply with 'Acknowledged' and today's date to confirm you have reviewed your month-to-date performance. Your acknowledgement is logged as part of your performance record.", '',
-      'Keep going, and let me know how I can support you.', '', sender, 'Sales Operations'
-    ].join('\n'));
+    const P=[];
+    P.push(`SDR WEEKLY SCORECARD - ${monthLbl} (month to date)`);
+    P.push(`${M.name} | ${M.team} | Score ${M.composite}/100 (${band.label})`);
+    P.push(`To: ${M.name}   Cc: ${ccNames.join(', ')||'-'}`); P.push('');
+    P.push(`Hi ${(M.name||'').split(' ')[0]||'there'},`); P.push(''); P.push(strength); if (M.ramping) P.push(`(Target adjusted for tenure: scaled goal ${M.target} DCs.)`); P.push('');
+    P.push('BOOKED DCS AND PACE');
+    P.push(`Booked: ${M.booked} of ${M.target}. Expected by today: ${M.expectedMtd} (${M.paceGap>=0?'ahead '+M.paceGap:'behind '+Math.abs(M.paceGap)}).`);
+    if (M.perDayNeeded!=null) P.push(`Need ${M.perDayNeeded} booked DC(s) per working day over the ${M.remaining} day(s) left.`);
+    if (M.scheduled>0){ let l=`SHOW-UP: ${Math.round(M.suRateRaw*100)}% (${M.showed}/${M.scheduled} showed).`; if (M.nc>0 && M.suRateAdj!=null) l+=` Adjusted ${Math.round(M.suRateAdj*100)}% excluding ${M.nc} SP-side cancellation(s)${M.ncReason?' ('+M.ncReason+')':''}.`; P.push(''); P.push(l); }
+    if (M.attPct!=null){ P.push(''); P.push(`ATTENDANCE MTD: ${Math.round(M.attPct)}%.`); }
+    if (M.sessions>0){ P.push(''); P.push(`COACHING: ${M.sessions} session(s).${M.topics.length?' Topics: '+M.topics.join(', ')+'.':''}`); }
+    P.push(''); P.push('NEXT STEP'); P.push(nextStep);
+    P.push(''); P.push('ACKNOWLEDGEMENT REQUIRED WITHIN 48 HOURS');
+    P.push(`Please reply with "Acknowledged" and today's date on or before ${deadlineLong}.`);
+    P.push('If no reply is received by that time, this scorecard is recorded as received, read, and fully understood, and is logged as part of your performance record.');
+    P.push('If any figure here looks incorrect, raise it in the same reply before the deadline so it can be checked and corrected.');
+    P.push(''); P.push(M.sender); P.push('Operations Supervisor, SD Outbound');
+    P.push(`Figures as of ${nowStamp}. Source: DC Dashboard and Attendance sheet.`);
 
-    return { html, plain, subject: clDeDash(subject) };
+    return { html, plain:clDeDash(P.join('\n')), subject:clDeDash(subject), ccLine };
   }
 
-  async function scGenerate() {
-    const id = $('scSdr') && $('scSdr').value, ym = $('scMonth') && $('scMonth').value;
-    const found = id && scFindMember(id); if (!found) return;
-    const name = found.m.display;
-    const st = scStats(id, ym);
-    const dcPct = st.target > 0 ? Math.round(st.dcs / st.target * 100) : 0;
-    const logs = scRepLogs(name);
-    const btn = $('scGenBtn'), status = $('scStatus');
-    btn.disabled = true; btn.textContent = 'Generating…'; status.style.color = '#5B6678'; status.textContent = 'Reading coaching history…';
-    const notes = logs.slice(0, 20).map(l => `- [${(l.date || '').slice(0, 10)} · ${l.topic || ''} · ${clCoachType(l).label}] ${l.summary || '(no summary)'}`).join('\n') || '(no coaching notes on file)';
-    const prompt = `You are a sales coach at Outsource Accelerator (offshore staffing). Write improvement suggestions for BDR ${name}. "DC" = Discovery Call.
-MONTH-TO-DATE: booked ${st.dcs} DCs vs target ${st.target} (${dcPct}%); show-up rate ${st.suPct == null ? 'n/a' : st.suPct + '%'} (${st.su.yes}/${st.su.happened} showed).
-Their coaching notes (newest first):
-${notes}
-
-Give 3 to 4 specific, encouraging, actionable suggestions to raise their booked DCs and show-up rate, grounded in the coaching history above. Each suggestion one sentence, first person from the coach. Do NOT use em dashes. Return ONLY valid JSON: {"suggestions":["...","..."]}`;
-    try {
-      const res = await fetch(AI_COACH_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 600, messages: [{ role: 'user', content: prompt }] }) });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error?.message || data.error || ('API ' + res.status));
-      const m = clAiText(data).trim().match(/\{[\s\S]*\}/);
-      if (!m) throw new Error('Could not parse AI response.');
-      const g = JSON.parse(m[0]);
-      _scSuggest = (g.suggestions || []).map(s => clDeDash(String(s))).filter(Boolean);
-      _scSuggestKey = id + '|' + ym;
-      status.style.color = '#0A7A0A'; status.textContent = _scSuggest.length ? '✓ Tips added to the email.' : 'No suggestions returned.';
-      renderScorecard();
-    } catch (err) {
-      status.style.color = '#C00'; status.textContent = 'Error: ' + err.message + ' (standard tips used).';
-    } finally {
-      btn.disabled = false; btn.textContent = 'Generate improvement tips ✨';
-    }
+  function scBatchPreview(){
+    const tid=$('scBatchTeam')&&$('scBatchTeam').value, ym=$('scMonth')&&$('scMonth').value;
+    const t=TEAMS.find(x=>x.id===tid); if (!t){ if ($('scBatch')) $('scBatch').innerHTML=''; return; }
+    const rows=t.members.filter(m=>!m.hidden).map(m=>{ const M=scCompute(m.id,ym,{nc:0,ramping:false}); if (!M) return null; const b=scBand(M.composite,false); return {name:M.name,score:M.composite,band:b.label,color:b.color}; }).filter(Boolean).sort((a,b)=>a.score-b.score);
+    $('scBatch').innerHTML = rows.length ? rows.map(r=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #EEF2F7;font-size:12px"><span style="color:var(--ink)">${esc(r.name)}</span><span style="display:flex;gap:8px;align-items:center"><b>${r.score}</b><span style="background:${r.color};color:#fff;font-size:9px;font-weight:800;padding:1px 7px;border-radius:9px">${r.band}</span></span></div>`).join('') : '<div style="font-size:12px;color:var(--slate)">No members.</div>';
   }
 
-  async function scCopyEmail() {
-    const btn = $('scCopyBtn');
-    try {
-      await navigator.clipboard.write([new ClipboardItem({
-        'text/html':  new Blob([window._scEmailHtml || ''], { type: 'text/html' }),
-        'text/plain': new Blob([window._scEmailPlain || ''], { type: 'text/plain' }),
-      })]);
-    } catch { try { await navigator.clipboard.writeText(window._scEmailPlain || ''); } catch {} }
-    btn.textContent = 'Copied ✓'; btn.style.background = '#0E9F6E';
-    setTimeout(() => { btn.textContent = 'Copy email'; btn.style.background = '#D6006D'; }, 1600);
+  async function scCopyEmail(){ const btn=$('scCopyBtn'); try { await navigator.clipboard.write([new ClipboardItem({ 'text/html':new Blob([window._scEmailHtml||''],{type:'text/html'}), 'text/plain':new Blob([window._scEmailPlain||''],{type:'text/plain'}) })]); } catch { try { await navigator.clipboard.writeText(window._scEmailPlain||''); } catch {} } if (btn){ btn.textContent='Copied ✓'; setTimeout(()=>btn.textContent='Copy email',1600); } }
+  async function scCopySubject(){ try { await navigator.clipboard.writeText(window._scEmailSubject||''); } catch {} }
+
+  // ── Acknowledgement Tracker ──
+  function scAckSweep(){ const now=Date.now(); const a=scLoad('oaScAcks'); let ch=false; for (const r of a){ if (!r.acknowledged_at && !r.deemed_understood && r.deadline_at && Date.parse(r.deadline_at)<now){ r.deemed_understood=true; ch=true; } } if (ch) scSave('oaScAcks',a); return a; }
+  function scMarkAck(sdrId, sentDay){ const a=scLoad('oaScAcks'); const r=a.find(x=>x.sdr_id===sdrId && x.sent_day===sentDay); if (r){ r.acknowledged_at=new Date().toISOString(); r.ack_method='manual'; scSave('oaScAcks',a); } renderAckTracker(); }
+  function renderAckTracker(){
+    const NAVY='#0D1A6E', SLATE='#5B6678', BORDER='var(--border)';
+    const fsel=$('ackTeamFilter');
+    if (fsel && !fsel.options.length){ fsel.innerHTML='<option value="">All teams</option>'+TEAMS.filter(t=>t.id!=='poc').map(t=>`<option value="${esc(t.name)}">${esc(t.name)}</option>`).join(''); }
+    const filter=fsel?fsel.value:'';
+    const all=scAckSweep().slice().sort((x,y)=>(y.sent_at||'').localeCompare(x.sent_at||''));
+    const rows=all.filter(r=>!filter||r.team===filter);
+    const statusOf=r=> r.acknowledged_at?{t:'Acknowledged',c:'#0E9F6E'}: r.deemed_understood?{t:'Deemed Understood',c:'#C97000'}:{t:'Pending',c:'#5B6678'};
+    const counts={Pending:0,Acknowledged:0,'Deemed Understood':0}; rows.forEach(r=>counts[statusOf(r).t]++);
+    const tiles=`<div style="display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap">${['Pending','Acknowledged','Deemed Understood'].map(k=>`<div style="background:#fff;border:1px solid ${BORDER};border-radius:10px;padding:12px 16px;min-width:120px"><div style="font-size:22px;font-weight:800;color:${NAVY}">${counts[k]}</div><div style="font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:${SLATE};margin-top:4px">${k}</div></div>`).join('')}</div>`;
+    const fmt=iso=>iso?new Date(iso).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZone:'Asia/Manila'}):'—';
+    const body=rows.length? rows.map(r=>{ const s=statusOf(r); return `<tr style="border-bottom:1px solid #EEF2F7">
+      <td style="padding:8px 10px;font-size:12.5px;color:${NAVY};font-weight:600">${esc(r.sdr_name)}</td>
+      <td style="padding:8px 10px;font-size:12px;color:${SLATE}">${esc(r.team)}</td>
+      <td style="padding:8px 10px;font-size:12px;color:${SLATE}">${esc(r.month)}</td>
+      <td style="padding:8px 10px;font-size:12px;color:${SLATE}">${fmt(r.sent_at)}</td>
+      <td style="padding:8px 10px;font-size:12px;color:${SLATE}">${fmt(r.deadline_at)}</td>
+      <td style="padding:8px 10px"><span style="background:${s.c};color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px">${s.t}</span></td>
+      <td style="padding:8px 10px">${r.acknowledged_at?'':`<button onclick="scMarkAck('${esc(r.sdr_id)}','${esc(r.sent_day)}')" class="cl-chip">Mark ack</button>`}</td>
+    </tr>`; }).join('') : `<tr><td colspan="7" style="padding:20px;text-align:center;color:${SLATE};font-size:13px">No scorecards generated yet. Generate one on the SDR Scorecard page.</td></tr>`;
+    $('ackBody').innerHTML = tiles + `<div style="background:#fff;border:1px solid ${BORDER};border-radius:12px;overflow:hidden"><div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;min-width:720px"><thead><tr style="background:${NAVY};color:#fff"><th style="text-align:left;padding:9px 10px;font-size:11px">SDR</th><th style="text-align:left;padding:9px 10px;font-size:11px">Team</th><th style="text-align:left;padding:9px 10px;font-size:11px">Month</th><th style="text-align:left;padding:9px 10px;font-size:11px">Sent</th><th style="text-align:left;padding:9px 10px;font-size:11px">Deadline</th><th style="text-align:left;padding:9px 10px;font-size:11px">Status</th><th></th></tr></thead><tbody>${body}</tbody></table></div></div>
+      <div style="font-size:11px;color:${SLATE};margin-top:8px">Deemed Understood flips automatically once the 48-hour deadline passes with no acknowledgement. Records are stored in this browser.</div>`;
   }
-  async function scCopySubject() { try { await navigator.clipboard.writeText(window._scEmailSubject || ''); } catch {} }
+
 
 </script>
 </body>
