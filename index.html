@@ -5738,8 +5738,8 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
     if (label==='On Track') return 'Keep your current cadence. If you want a stretch goal, aim to finish the month a few DCs above target.';
     if (label==='Ramping')  return 'You are still ramping, so your target is scaled for tenure. Focus on building consistent daily booked DCs and executing the reminder cadence.';
     if (label==='Watch'){ const f = (M.suRateRaw!=null && M.suRateRaw<0.8) ? 'tightening your post-booking reminders so more booked DCs actually show' : (M.paceGap<0 ? 'lifting daily booked DCs to close the pace gap' : 'holding your attendance and consistency'); return 'One focus for the coming week: ' + f + '.'; }
-    if (label==='Behind'){ const f=[]; if (M.paceGap<0) f.push('raise daily booked DCs to get back on pace'); if (M.suRateRaw!=null && M.suRateRaw<0.8) f.push('execute the full reminder cadence so more DCs show'); if (!f.length && M.attPct!=null && M.attPct<95) f.push('protect your attendance'); const areas='Two focus areas: ' + (f.slice(0,2).join(', and ') || 'rebuild booked DC volume and show-up') + '. '; return areas + (isTL ? 'Let us make time this week to work on these together.' : 'Your TL or SME will follow up to work on these with you.'); }
-    return (isTL ? 'Let us work through a plan together, with your SME, to rebuild your numbers.' : 'Your TL and SME will work with you on a plan to rebuild your numbers.') + ' Please note that a sustained shortfall may progress to formal performance management.';
+    if (label==='Behind'){ const f=[]; if (M.paceGap<0) f.push('raise daily booked DCs to get back on pace'); if (M.suRateRaw!=null && M.suRateRaw<0.8) f.push('execute the full reminder cadence so more DCs show'); if (!f.length && M.attPct!=null && M.attPct<95) f.push('protect your attendance'); const areas='Two focus areas: ' + (f.slice(0,2).join(', and ') || 'rebuild booked DC volume and show-up') + '. '; return areas + (isTL ? 'Support is available if you would like to work on these together, just let me know.' : 'Support from your TL or SME is available if you would like to work on these together.'); }
+    return (isTL ? 'Support from me and your SME is available to help you rebuild your numbers.' : 'Support from your TL and SME is available to help you rebuild your numbers.') + ' If the shortfall continues, it may be reviewed under the company\'s standard performance process.';
   }
   function scStrength(M){
     const p=M.prior;
@@ -5938,7 +5938,8 @@ Write a concise, honest review a supervisor can paste into a coaching email, in 
       </div></div>
       <div style="padding:14px 26px 20px;border-top:1px solid ${LINE};margin-top:12px">
         <div style="font-size:12.5px;color:${INK}">${esc(M.sender)}<br><span style="font-size:11px;color:${SLATE}">${esc(senderTitle)}</span></div>
-        <div style="font-size:10.5px;color:${SLATE};margin-top:10px">Figures as of ${esc(nowStamp)}. Source: DC Dashboard and Attendance sheet.</div>
+        <div style="font-size:10.5px;color:${SLATE};margin-top:10px;line-height:1.5">This scorecard is a performance snapshot shared for your awareness and coaching. It is not, on its own, a disciplinary action. Any formal process would follow the company's standard procedures separately.</div>
+        <div style="font-size:10.5px;color:${SLATE};margin-top:8px">Figures as of ${esc(nowStamp)}. Source: DC Dashboard and Attendance sheet.</div>
       </div>
     </div>`);
 
@@ -5959,6 +5960,8 @@ Write a concise, honest review a supervisor can paste into a coaching email, in 
     P.push('If no reply is received by that time, this scorecard is recorded as received, read, and fully understood, and is logged as part of your performance record.');
     P.push('If any figure here looks incorrect, raise it in the same reply before the deadline so it can be checked and corrected.');
     P.push(''); P.push(M.sender); P.push(senderTitle);
+    P.push('');
+    P.push("This scorecard is a performance snapshot shared for your awareness and coaching. It is not, on its own, a disciplinary action. Any formal process would follow the company's standard procedures separately.");
     P.push(`Figures as of ${nowStamp}. Source: DC Dashboard and Attendance sheet.`);
 
     return { html, plain:clDeDash(P.join('\n')), subject:clDeDash(subject), ccLine };
