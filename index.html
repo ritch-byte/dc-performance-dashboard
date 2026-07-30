@@ -754,6 +754,23 @@
           </button>
         </div>
       </div>
+      <div style="padding:12px 24px 0">
+        <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+            <div>
+              <div style="font-size:14px;font-weight:800;color:var(--ink)">AI Performance Report ✨</div>
+              <div style="font-size:11.5px;color:var(--slate)">Executive read on team and team-leader performance across booked DCs, show-up, attendance and coaching.</div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <select id="repScope" class="cl-input" style="width:auto"></select>
+              <button id="repGenBtn" onclick="generateAiReport()" style="background:#1A2DB5;color:#fff;border:none;border-radius:8px;padding:9px 18px;font-size:13px;font-weight:700;cursor:pointer">Generate report ✨</button>
+              <button id="repCopyBtn" onclick="copyAiReport()" class="cl-chip" style="display:none">Copy</button>
+            </div>
+          </div>
+          <div id="repStatus" style="font-size:11px;color:var(--slate);min-height:14px"></div>
+          <div id="repOutput"></div>
+        </div>
+      </div>
       <div class="main-body" id="reportsBody"></div>
     </div>
 
@@ -2083,6 +2100,11 @@
     const weeks = getWeeksForMonth(ym);
     const body = $('reportsBody');
     body.innerHTML = '';
+    // AI report needs attendance + coaching loaded, and a scope selector
+    if (!_attLoaded && !_attLoading) loadAttendanceData();
+    if (!_coachLogsLoaded) loadCoachingLogs(false);
+    const rs = $('repScope');
+    if (rs && !rs.options.length) rs.innerHTML = '<option value="">All teams (whole floor)</option>' + TEAMS.filter(t=>t.id!=='poc').map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('');
 
     if (!weeks.length) {
       body.innerHTML = '<p style="padding:20px;color:var(--gray)">No data for this period.</p>';
@@ -6102,6 +6124,108 @@ Write in a natural human voice (not robotic, no meta-commentary about being an A
       <div style="font-size:11px;color:${SLATE};margin-top:8px">Deemed Understood flips automatically once the 48-hour deadline passes with no acknowledgement. ${SC_ACK_CSV_URL ? 'Shared across the team via the Scorecards sheet.' : 'Records are stored in this browser only until a shared sheet is connected.'}</div>`;
   }
 
+  // ══════════════════════════════════════════════════════════════════
+  //  AI Performance Report — team + team-leader read across all metrics
+  // ══════════════════════════════════════════════════════════════════
+  function reportSnapshot(ym, teamFilter){
+    const capToday = ym===localIso(new Date()).slice(0,7);
+    const mo=aggregateMonth(ym, capToday);
+    const su=aggregateShowupForDates(mo.dates);
+    const monthName=new Date(ym+'-01T00:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'});
+    const teams=[];
+    for (const t of TEAMS){
+      if (t.id==='poc') continue;
+      if (teamFilter && t.id!==teamFilter) continue;
+      const visible=t.members.filter(m=>!m.hidden);
+      const staff=(typeof SC_TEAM_STAFF!=='undefined'?SC_TEAM_STAFF[t.id]:null)||{};
+      let tYes=0,tHap=0,tAtt=0,tSch=0,tDcs=0,tCoach=0;
+      const members=visible.map(m=>{
+        const dcs=mo.counts[m.id]||0; tDcs+=dcs;
+        const s=su[m.id]||{yes:0,happened:0}; tYes+=s.yes; tHap+=s.happened;
+        const a=_attLoaded?getAttendanceForDates(m.id,mo.dates):null; if (a){ tAtt+=a.attended; tSch+=a.scheduled; }
+        const cc=_coachLogs.filter(l=>(l.rep||'').trim().toLowerCase()===m.display.trim().toLowerCase() && (l.date||'').slice(0,7)===ym).length; tCoach+=cc;
+        return { name:m.display, dcs, suPct:s.happened>0?Math.round(s.yes/s.happened*100):null, showed:s.yes,
+          attPct:(a&&a.scheduled>0)?a.rate:null, onTime:(a&&a.scheduled>0)?Math.round(a.present/a.scheduled*100):null,
+          late:a?a.late:0, absent:a?a.absent:0, coaching:cc };
+      });
+      teams.push({ id:t.id, name:t.name, tl:staff.tl||'(unassigned)', sme:staff.sme||'',
+        members, totalDcs:tDcs, target:MONTHLY_TARGET*visible.length,
+        teamSu:tHap>0?Math.round(tYes/tHap*100):null, teamAtt:tSch>0?Math.round(tAtt/tSch*100):null,
+        coaching:tCoach, memberCount:visible.length });
+    }
+    return { monthName, ym, teams };
+  }
+  function reportDataText(snap){
+    let s=`Floor: SD Outbound. Period: ${snap.monthName} (month to date). Target is ${MONTHLY_TARGET} booked DCs per rep per month.\n\n`;
+    snap.teams.forEach(t=>{
+      s+=`TEAM ${t.name} | Leader: ${t.tl} | SME: ${t.sme} | ${t.memberCount} reps\n`;
+      s+=`  Team totals: ${t.totalDcs} booked DCs (team target ${t.target}), show-up ${t.teamSu==null?'n/a':t.teamSu+'%'}, attendance ${t.teamAtt==null?'n/a':t.teamAtt+'%'}, coaching sessions logged ${t.coaching}\n`;
+      t.members.forEach(m=>{ s+=`   - ${m.name}: ${m.dcs} DCs, show-up ${m.suPct==null?'n/a':m.suPct+'%'} (${m.showed} showed), attendance ${m.attPct==null?'n/a':m.attPct+'%'}${(m.onTime!=null&&m.late>0)?' (on-time '+m.onTime+'%, '+m.late+' late)':''}, coaching ${m.coaching}\n`; });
+      s+='\n';
+    });
+    return s;
+  }
+
+  async function generateAiReport(){
+    const ym=$('reportMonthSelect').value||localIso(new Date()).slice(0,7);
+    const scope=$('repScope')?$('repScope').value:'';
+    const snap=reportSnapshot(ym, scope);
+    if (!snap.teams.length){ $('repStatus').textContent='No teams in scope.'; return; }
+    const btn=$('repGenBtn'), st=$('repStatus');
+    if (btn){ btn.disabled=true; btn.textContent='Generating…'; }
+    if (st){ st.style.color='#5B6678'; st.textContent='Analyzing the floor with AI…'; }
+    if ($('repOutput')) $('repOutput').innerHTML='<div style="padding:40px;text-align:center;color:#5B6678;font-size:13px">Reading every team’s metrics and writing the report…</div>';
+    const prompt=`You are a sales operations analyst for Outsource Accelerator's SD Outbound floor. Below is month-to-date performance data. "DC" = Discovery Call.
+
+${reportDataText(snap)}
+Notes for your analysis: Booked DCs versus the per-rep target and show-up rate are the primary performance signals. Attendance percent counts late arrivals as present, so judge punctuality by the on-time figure. Coaching sessions logged reflect how engaged each team leader is with their reps. Be candid and specific, name reps and leaders. Do NOT use em dashes. Return ONLY valid JSON:
+{
+ "floorSummary":"3 to 5 sentences: overall floor read, which team is leading, where the biggest gaps are",
+ "teams":[{"team":"team name","leader":"leader name","read":"2 to 3 sentences on the team AND how its leader is performing (results plus coaching engagement)","standouts":["Rep: one line reason"],"concerns":["Rep: one line reason"]}],
+ "topPerformers":["Rep (Team): reason"],
+ "watchlist":["Rep (Team): reason"],
+ "recommendations":["specific action for leaders or ops"]
+}`;
+    try {
+      const res=await fetch(AI_COACH_URL,{ method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify({ model:'claude-haiku-4-5-20251001', max_tokens:2200, messages:[{role:'user',content:prompt}] }) });
+      const data=await res.json();
+      if (!res.ok) throw new Error(data.error?.message||data.error||('API '+res.status));
+      const m=clAiText(data).trim().match(/\{[\s\S]*\}/); if (!m) throw new Error('Could not parse AI response.');
+      const g=JSON.parse(m[0]);
+      reportRender(g, snap);
+      if (st){ st.style.color='#0A7A0A'; st.textContent='✓ Report generated for '+snap.monthName+(scope?' · '+(snap.teams[0]||{}).name:' · whole floor')+'.'; }
+      if ($('repCopyBtn')) $('repCopyBtn').style.display='';
+    } catch (err){ if (st){ st.style.color='#C00'; st.textContent='AI error: '+err.message; } if ($('repOutput')) $('repOutput').innerHTML=''; }
+    finally { if (btn){ btn.disabled=false; btn.textContent='Generate report ✨'; } }
+  }
+
+  function reportRender(g, snap){
+    const NAVY='#0D1A6E', INK='#1F2733', SLATE='#5B6678', BORDER='var(--border)';
+    const list=(arr,col)=> (arr&&arr.length)?'<ul style="margin:4px 0 0;padding-left:18px">'+arr.map(x=>`<li style="font-size:13px;color:${col||INK};line-height:1.5;margin-bottom:3px">${esc(x)}</li>`).join('')+'</ul>':'<div style="font-size:12px;color:'+SLATE+'">None.</div>';
+    const teamCards=(g.teams||[]).map(t=>`<div style="border:1px solid ${BORDER};border-radius:10px;padding:14px;margin-bottom:10px">
+      <div style="font-size:13px;font-weight:800;color:${NAVY}">${esc(t.team||'')} <span style="color:${SLATE};font-weight:600">· Leader: ${esc(t.leader||'')}</span></div>
+      <div style="font-size:13px;color:${INK};line-height:1.6;margin-top:4px">${esc(t.read||'')}</div>
+      ${t.standouts&&t.standouts.length?`<div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#0E9F6E;margin-top:8px">Standouts</div>${list(t.standouts,INK)}`:''}
+      ${t.concerns&&t.concerns.length?`<div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#C0362C;margin-top:8px">Concerns</div>${list(t.concerns,INK)}`:''}
+    </div>`).join('');
+    const section=(title,color,inner)=>`<div style="margin-top:14px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:${color}">${title}</div>${inner}</div>`;
+    $('repOutput').innerHTML=`<div style="margin-top:10px">
+      <div style="background:#F4F6FB;border-left:4px solid ${NAVY};border-radius:0 8px 8px 0;padding:12px 16px;font-size:13.5px;color:${INK};line-height:1.6">${esc(g.floorSummary||'')}</div>
+      <div style="margin-top:14px">${teamCards}</div>
+      ${section('Top performers','#0E9F6E',list(g.topPerformers,INK))}
+      ${section('Watchlist','#C97000',list(g.watchlist,INK))}
+      ${section('Recommendations','#1A2DB5',list(g.recommendations,INK))}
+      <div style="font-size:10.5px;color:${SLATE};margin-top:12px">AI synthesis of ${snap.monthName} data from the DC Dashboard, Attendance sheet and Coaching Tracker. Verify before acting.</div>
+    </div>`;
+    // plain text for copy
+    const P=[`SD OUTBOUND PERFORMANCE REPORT — ${snap.monthName}`,'',g.floorSummary||'',''];
+    (g.teams||[]).forEach(t=>{ P.push(`${(t.team||'').toUpperCase()} (Leader: ${t.leader||''})`); P.push(t.read||''); (t.standouts||[]).forEach(s=>P.push('  + '+s)); (t.concerns||[]).forEach(s=>P.push('  - '+s)); P.push(''); });
+    P.push('TOP PERFORMERS'); (g.topPerformers||[]).forEach(x=>P.push('- '+x)); P.push('');
+    P.push('WATCHLIST'); (g.watchlist||[]).forEach(x=>P.push('- '+x)); P.push('');
+    P.push('RECOMMENDATIONS'); (g.recommendations||[]).forEach(x=>P.push('- '+x));
+    window._repText=clDeDash(P.join('\n'));
+  }
+  async function copyAiReport(){ const b=$('repCopyBtn'); try{ await navigator.clipboard.writeText(window._repText||''); }catch{} if (b){ b.textContent='Copied ✓'; setTimeout(()=>b.textContent='Copy',1500); } }
 
 </script>
 </body>
