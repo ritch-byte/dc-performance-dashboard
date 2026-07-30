@@ -74,3 +74,85 @@ function doPost(e) {
 function doGet() {
   return ContentService.createTextOutput('OA Coaching Log Tracker + AI endpoint is live.');
 }
+
+/**
+ * AUTO-ACKNOWLEDGEMENT (optional)
+ * ------------------------------------------------------------------
+ * Scans Gmail for replies to scorecard emails and logs them as
+ * "acknowledged" in the Scorecards tab, so the dashboard flips the
+ * status automatically without anyone clicking "Mark ack".
+ *
+ * SETUP (one time):
+ * 1. Paste this whole file. Save.
+ * 2. Run `scanScorecardReplies` once from the editor and grant the
+ *    Gmail permission it asks for.
+ * 3. Triggers (clock icon, left) -> Add Trigger -> function
+ *    scanScorecardReplies -> Time-driven -> Minutes timer -> Every 15
+ *    minutes -> Save.
+ *
+ * How it matches: it reads the SDR name from the scorecard subject
+ * (`[SDR SCORECARD] Month W## - Name - Band - from X`) and, when a
+ * reply from anyone other than you appears in that thread, logs an
+ * acknowledgement against that SDR's most recent pending scorecard.
+ *
+ * LIMITATION: it only sees replies that land in THIS account's Gmail,
+ * so scorecards must be sent from (or Cc'd to, with reply-all) this
+ * same account.
+ */
+function scanScorecardReplies() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sc = ss.getSheetByName('Scorecards');
+  if (!sc || sc.getLastRow() < 2) return;
+
+  var data = sc.getDataRange().getValues();
+  var col = {};
+  data[0].forEach(function (h, i) { col[h] = i; });
+
+  var acked = {};        // "sdr_id|sent_day" already acknowledged
+  var sentByName = {};   // lowercased sdr_name -> [{sdr_id, sent_day, sent_at}]
+  for (var r = 1; r < data.length; r++) {
+    var row = data[r];
+    var ev = String(row[col.event] || '').toLowerCase();
+    var key = row[col.sdr_id] + '|' + row[col.sent_day];
+    if (ev === 'acknowledged') { acked[key] = true; continue; }
+    var nm = String(row[col.sdr_name] || '').trim().toLowerCase();
+    (sentByName[nm] = sentByName[nm] || []).push({ sdr_id: row[col.sdr_id], sent_day: row[col.sent_day], sent_at: row[col.sent_at] });
+  }
+
+  var me = Session.getActiveUser().getEmail();
+  var label = GmailApp.getUserLabelByName('ScorecardAcked') || GmailApp.createLabel('ScorecardAcked');
+  var threads = GmailApp.search('subject:"[SDR SCORECARD]" newer_than:21d -label:ScorecardAcked');
+  var SC_HEADERS = ['sdr_id', 'sdr_name', 'team', 'month', 'sent_day', 'sent_at', 'deadline_at', 'event', 'event_at'];
+
+  for (var t = 0; t < threads.length; t++) {
+    var th = threads[t];
+    var msgs = th.getMessages();
+    var subj = msgs[0].getSubject() || '';
+    if (subj.indexOf('[SDR SCORECARD]') < 0) continue;
+
+    var replied = false;
+    for (var m = 1; m < msgs.length; m++) {
+      var from = msgs[m].getFrom() || '';
+      if (me && from.indexOf(me) >= 0) continue;  // skip my own messages
+      replied = true; break;
+    }
+    if (!replied) continue;
+
+    var parts = subj.split('·');            // split on the middle dot
+    var name = parts.length >= 3 ? String(parts[2]).trim() : '';
+    if (!name) { th.addLabel(label); continue; }
+
+    var list = (sentByName[name.toLowerCase()] || []).slice()
+      .sort(function (a, b) { return String(b.sent_at).localeCompare(String(a.sent_at)); });
+    var target = null;
+    for (var i = 0; i < list.length; i++) {
+      if (!acked[list[i].sdr_id + '|' + list[i].sent_day]) { target = list[i]; break; }
+    }
+    if (!target) { th.addLabel(label); continue; }
+
+    var out = { sdr_id: target.sdr_id, sdr_name: name, sent_day: target.sent_day, event: 'acknowledged', event_at: new Date().toISOString() };
+    sc.appendRow(SC_HEADERS.map(function (h) { return out[h] || ''; }));
+    acked[target.sdr_id + '|' + target.sent_day] = true;
+    th.addLabel(label);
+  }
+}
