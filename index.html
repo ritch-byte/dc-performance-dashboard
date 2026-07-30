@@ -1316,6 +1316,7 @@
         <div style="display:grid;grid-template-columns:minmax(300px,380px) 1fr;gap:20px;align-items:start">
           <div>
             <button id="scGenBtn" onclick="scGenerate()" style="width:100%;background:#1A2DB5;color:#fff;border:none;border-radius:8px;padding:12px 20px;font-size:14px;font-weight:700;cursor:pointer;letter-spacing:.3px;margin-bottom:8px">Generate &amp; log snapshot</button>
+            <button id="scAiBtn" onclick="scAnalyze()" style="width:100%;background:#fff;color:#1A2DB5;border:1px solid #1A2DB5;border-radius:8px;padding:10px 20px;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:8px">Analyze with AI ✨</button>
             <div id="scStatus" style="font-size:11px;min-height:14px;color:var(--slate);margin-bottom:12px"></div>
             <div id="scCard"></div>
             <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px;margin-top:16px">
@@ -5649,7 +5650,7 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
     groupc: { tl:'Angelica Tanate',    sme:'Alvin Melo' },
     groupd: { tl:'Jumar Vere',         sme:'Ali' },
   };
-  let _scModel = null;
+  let _scModel = null, _scAI = {};
 
   function scLoad(k){ try { return JSON.parse(localStorage.getItem(k) || '[]'); } catch (e) { return []; } }
   function scSave(k,v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
@@ -5712,8 +5713,11 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
     let composite=0;
     if (availW>0) for (const c of comps){ if (!c.avail) continue; composite += Math.min(1,Math.max(0,c.s))*(c.w*100/availW); }
     composite=Math.round(composite);
-    return { id,name,team,teamId,ym,booked,target,expectedMtd,paceGap,perDayNeeded,elapsed,totalWD,remaining,
-      scheduled,showed,suRateRaw,suRateAdj,nc,ncReason:(opts.ncReason||'').trim(),attPct,sessions,topics,
+    const attBreak = (attObj && attObj.scheduled>0) ? { present:attObj.present, late:attObj.late, absent:attObj.absent, undertime:attObj.undertime, scheduled:attObj.scheduled } : null;
+    // Is the full monthly target realistically reachable in the days left?
+    const stretch = perDayNeeded!=null && perDayNeeded > DAILY_TARGET*2;
+    return { id,name,team,teamId,ym,booked,target,expectedMtd,paceGap,perDayNeeded,elapsed,totalWD,remaining,stretch,
+      scheduled,showed,suRateRaw,suRateAdj,nc,ncReason:(opts.ncReason||'').trim(),attPct,attBreak,sessions,topics,
       ramping,tenure:opts.tenure||'',composite,prior:scGetPriorSnapshot(id,todayIso),monthLogs,logs,
       sender:opts.sender||'Ritch Joy Manipol',asOf,todayIso };
   }
@@ -5810,6 +5814,38 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
     const st=$('scStatus'); if (st){ st.style.color='#0A7A0A'; st.textContent='✓ Snapshot logged for '+M.name+' ('+today+'). Week-over-week deltas appear on the next send at least 5 days out.'; }
   }
 
+  // AI review of this BDR — pulls DCs, show-up, attendance (incl. absents/lates), and coaching notes.
+  async function scAnalyze(){
+    const id=$('scSdr')&&$('scSdr').value, ym=$('scMonth')&&$('scMonth').value; if (!id||!ym) return;
+    const M=scCompute(id,ym,scOpts()); if (!M) return;
+    const btn=$('scAiBtn'), st=$('scStatus');
+    if (btn){ btn.disabled=true; btn.textContent='Analyzing…'; }
+    if (st){ st.style.color='#5B6678'; st.textContent='Reviewing this BDR with AI…'; }
+    const ab=M.attBreak;
+    const notes=M.logs.slice(0,15).map(l=>`- [${(l.date||'').slice(0,10)} · ${l.topic||clCoachType(l).label||''}] ${l.summary||'(no summary)'}`).join('\n') || '(no coaching notes on file)';
+    const prompt=`You are a sales performance coach at Outsource Accelerator (offshore staffing). Review this BDR for ${new Date(M.ym+'-01T00:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'})} (month to date). "DC" = Discovery Call.
+NAME: ${M.name} (team ${M.team})
+Booked DCs: ${M.booked} of ${M.target} (at ${DAILY_TARGET}/day the steady mark by now is ${M.expectedMtd}).
+Show-up: ${M.scheduled>0?Math.round(M.suRateRaw*100)+'% ('+M.showed+' of '+M.scheduled+' scheduled showed)':'no scheduled DCs yet'}.
+Attendance MTD: ${M.attPct!=null?Math.round(M.attPct)+'%':'not available'}${ab?`, made up of ${ab.present} present, ${ab.late} late, ${ab.absent} absent, ${ab.undertime} undertime across ${ab.scheduled} logged days`:''}.
+Coaching this month: ${M.sessions} session(s)${M.topics.length?', topics: '+M.topics.join(', '):''}.
+Recent coaching notes (newest first):
+${notes}
+
+Write a concise, honest review a supervisor can paste into a coaching email. If attendance issues (absences, lates, undertime) are material, name them plainly. Be specific and encouraging, not generic. Do NOT use em dashes. Return ONLY valid JSON: {"summary":"2 to 3 sentences overall read", "suggestions":["specific action","specific action","specific action"]}`;
+    try {
+      const res=await fetch(AI_COACH_URL,{ method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify({ model:'claude-haiku-4-5-20251001', max_tokens:700, messages:[{role:'user',content:prompt}] }) });
+      const data=await res.json();
+      if (!res.ok) throw new Error(data.error?.message||data.error||('API '+res.status));
+      const m=clAiText(data).trim().match(/\{[\s\S]*\}/); if (!m) throw new Error('Could not parse AI response.');
+      const g=JSON.parse(m[0]);
+      _scAI[id+'|'+ym]={ summary:clDeDash(g.summary||''), suggestions:(g.suggestions||[]).map(s=>clDeDash(String(s))).filter(Boolean) };
+      if (st){ st.style.color='#0A7A0A'; st.textContent='✓ AI review added to the email.'; }
+      scPreview();
+    } catch (err){ if (st){ st.style.color='#C00'; st.textContent='AI error: '+err.message; } }
+    finally { if (btn){ btn.disabled=false; btn.textContent='Analyze with AI ✨'; } }
+  }
+
   function scRenderCard(M){
     const el=$('scCard'); if (!el) return;
     const band=scBand(M.composite, M.ramping);
@@ -5851,18 +5887,25 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
     const deadlineLong=scFmtPHT(M.deadline.adj);
     const rampLine=M.ramping?`<div style="font-size:12.5px;color:${SLATE};margin-top:6px">Your target has been adjusted for tenure${M.tenure?' ('+esc(M.tenure)+' weeks)':''}, so this reflects a scaled goal of ${M.target} DCs.</div>`:'';
 
+    const paceMark = `${M.paceGap>=0 ? 'ahead of that by '+M.paceGap : Math.abs(M.paceGap)+' below that'}`;
+    const paceCallout = M.perDayNeeded==null ? ''
+      : M.stretch
+        ? `<div style="margin-top:8px;background:#F3F5FC;border-left:4px solid ${SLATE};padding:10px 14px;border-radius:0 6px 6px 0;font-size:12.5px;color:${INK};line-height:1.55">Reaching the full ${M.target} would need about <b>${M.perDayNeeded} a day</b> over the ${M.remaining} working day${M.remaining===1?'':'s'} left, which is a stretch this late in the month. Focus on finishing as strong as you can; we reset the pace next month.</div>`
+        : `<div style="margin-top:8px;background:#EEF0FB;border-left:4px solid ${B.blue};padding:10px 14px;border-radius:0 6px 6px 0"><span style="font-size:12px;color:${SLATE}">To finish the month at target, aim for</span><br><span style="font-size:22px;font-weight:800;color:${B.blue}">${M.perDayNeeded} booked DC${M.perDayNeeded===1?'':'s'} per working day</span> <span style="font-size:12px;color:${SLATE}">over the ${M.remaining} working day${M.remaining===1?'':'s'} left.</span></div>`;
     const rows=[];
     rows.push(`<tr><td style="padding:12px 0 4px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:${B.blue}">Booked DCs and pace</div>
-      <div style="font-size:13.5px;line-height:1.6;color:${INK};margin-top:4px"><b>Booked:</b> ${M.booked} of a ${M.target} monthly target. <b>Expected by today:</b> ${M.expectedMtd} (${M.paceGap>=0?'ahead by '+M.paceGap:'behind by '+Math.abs(M.paceGap)}).</div>
-      ${M.perDayNeeded!=null?`<div style="margin-top:8px;background:#EEF0FB;border-left:4px solid ${B.blue};padding:10px 14px;border-radius:0 6px 6px 0"><span style="font-size:12px;color:${SLATE}">To finish the month at target you need</span><br><span style="font-size:22px;font-weight:800;color:${B.blue}">${M.perDayNeeded} booked DC${M.perDayNeeded===1?'':'s'} per working day</span> <span style="font-size:12px;color:${SLATE}">over the ${M.remaining} working day${M.remaining===1?'':'s'} left.</span></div>`:''}</td></tr>`);
+      <div style="font-size:13.5px;line-height:1.6;color:${INK};margin-top:4px"><b>Booked:</b> ${M.booked} of a ${M.target} monthly target. At the steady pace of ${DAILY_TARGET} DCs a day you would be around <b>${M.expectedMtd}</b> by now, so you are ${paceMark}.</div>
+      ${paceCallout}</td></tr>`);
     if (M.scheduled>0){
       let line=`<b>Show-up rate:</b> ${Math.round(M.suRateRaw*100)}% (${M.showed} of ${M.scheduled} scheduled DCs showed).`;
       if (M.nc>0 && M.suRateAdj!=null) line+=` <b>Adjusted:</b> ${Math.round(M.suRateAdj*100)}% excluding ${M.nc} SP-side cancellation${M.nc===1?'':'s'}${M.ncReason?' ('+esc(M.ncReason)+')':''}.`;
       rows.push(`<tr><td style="padding:12px 0 4px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:${B.blue}">Show-up</div><div style="font-size:13.5px;line-height:1.6;color:${INK};margin-top:4px">${line}</div></td></tr>`);
     }
-    if (M.attPct!=null) rows.push(`<tr><td style="padding:12px 0 4px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:${B.blue}">Attendance</div><div style="font-size:13.5px;line-height:1.6;color:${INK};margin-top:4px"><b>Attendance MTD:</b> ${Math.round(M.attPct)}%.</div></td></tr>`);
+    if (M.attPct!=null){ const ab=M.attBreak; const abTxt = ab ? ` (${ab.present} present, ${ab.late} late, ${ab.absent} absent${ab.undertime?', '+ab.undertime+' undertime':''} of ${ab.scheduled} logged days)` : ''; rows.push(`<tr><td style="padding:12px 0 4px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:${B.blue}">Attendance</div><div style="font-size:13.5px;line-height:1.6;color:${INK};margin-top:4px"><b>Attendance MTD:</b> ${Math.round(M.attPct)}%${abTxt}.</div></td></tr>`); }
     if (M.sessions>0) rows.push(`<tr><td style="padding:12px 0 4px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:${B.blue}">Coaching this month</div><div style="font-size:13.5px;line-height:1.6;color:${INK};margin-top:4px"><b>${M.sessions} session${M.sessions===1?'':'s'}.</b>${M.topics.length?' Topics: '+esc(M.topics.join(', '))+'.':''}</div></td></tr>`);
 
+    const ai = _scAI[M.id+'|'+M.ym];
+    const aiHtml = ai ? `<div style="padding:14px 26px 4px"><div style="border-top:1px solid ${LINE};padding-top:12px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:${B.mag}">AI performance review</div><div style="font-size:13px;line-height:1.6;color:${INK};margin-top:4px">${esc(ai.summary)}</div>${ai.suggestions&&ai.suggestions.length?`<ul style="margin:8px 0 0;padding-left:18px">${ai.suggestions.map(s=>`<li style="font-size:13px;line-height:1.55;color:${INK};margin-bottom:4px">${esc(s)}</li>`).join('')}</ul>`:''}</div></div>` : '';
     const html=clDeDash(`<div style="font-family:${SC_FONT};background:#fff;max-width:640px;margin:0 auto;border:1px solid ${LINE};border-radius:10px;overflow:hidden">
       <div style="background:${B.navy};padding:20px 26px">
         <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;color:#9FB0FF;text-transform:uppercase">Outsource Accelerator · SD Outbound</div>
@@ -5873,6 +5916,7 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
       <div style="padding:18px 26px 4px;font-size:13.5px;line-height:1.6;color:${INK}">Hi ${first},<br><br>${esc(strength)}${rampLine}</div>
       <div style="padding:2px 26px"><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">${rows.join('')}</table></div>
       <div style="padding:14px 26px 4px"><div style="border-top:1px solid ${LINE};padding-top:12px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:${B.mag}">Next step</div><div style="font-size:13.5px;line-height:1.6;color:${INK};margin-top:4px">${esc(nextStep)}</div></div></div>
+      ${aiHtml}
       <div style="padding:16px 26px 6px"><div style="background:#FFF4CE;border:1px solid #E6CE6A;border-left:4px solid #C9A227;border-radius:0 8px 8px 0;padding:12px 16px">
         <div style="font-size:12px;font-weight:800;letter-spacing:.4px;color:#6B5200;margin-bottom:6px">ACKNOWLEDGEMENT REQUIRED WITHIN 48 HOURS</div>
         <div style="font-size:12.5px;line-height:1.55;color:${INK}">Please reply to this email with <b>"Acknowledged"</b> and today's date on or before <b>${esc(deadlineLong)}</b>.<br><br>If no reply is received by that time, this scorecard is recorded as received, read, and fully understood, and is logged as part of your performance record.<br><br>If any figure here looks incorrect, raise it in the same reply before the deadline so it can be checked and corrected.</div>
@@ -5889,12 +5933,13 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
     P.push(`To: ${M.name}   Cc: ${ccNames.join(', ')||'-'}`); P.push('');
     P.push(`Hi ${(M.name||'').split(' ')[0]||'there'},`); P.push(''); P.push(strength); if (M.ramping) P.push(`(Target adjusted for tenure: scaled goal ${M.target} DCs.)`); P.push('');
     P.push('BOOKED DCS AND PACE');
-    P.push(`Booked: ${M.booked} of ${M.target}. Expected by today: ${M.expectedMtd} (${M.paceGap>=0?'ahead '+M.paceGap:'behind '+Math.abs(M.paceGap)}).`);
-    if (M.perDayNeeded!=null) P.push(`Need ${M.perDayNeeded} booked DC(s) per working day over the ${M.remaining} day(s) left.`);
+    P.push(`Booked: ${M.booked} of ${M.target}. At ${DAILY_TARGET} DCs/day you would be around ${M.expectedMtd} by now, so you are ${M.paceGap>=0?'ahead of that by '+M.paceGap:Math.abs(M.paceGap)+' below that'}.`);
+    if (M.perDayNeeded!=null) P.push(M.stretch ? `Reaching the full ${M.target} would need about ${M.perDayNeeded}/day over the ${M.remaining} day(s) left, a stretch this late. Finish as strong as you can; pace resets next month.` : `To finish at target, aim for ${M.perDayNeeded} booked DC(s) per working day over the ${M.remaining} day(s) left.`);
     if (M.scheduled>0){ let l=`SHOW-UP: ${Math.round(M.suRateRaw*100)}% (${M.showed}/${M.scheduled} showed).`; if (M.nc>0 && M.suRateAdj!=null) l+=` Adjusted ${Math.round(M.suRateAdj*100)}% excluding ${M.nc} SP-side cancellation(s)${M.ncReason?' ('+M.ncReason+')':''}.`; P.push(''); P.push(l); }
-    if (M.attPct!=null){ P.push(''); P.push(`ATTENDANCE MTD: ${Math.round(M.attPct)}%.`); }
+    if (M.attPct!=null){ const ab=M.attBreak; P.push(''); P.push(`ATTENDANCE MTD: ${Math.round(M.attPct)}%${ab?` (${ab.present} present, ${ab.late} late, ${ab.absent} absent${ab.undertime?', '+ab.undertime+' undertime':''} of ${ab.scheduled} logged days)`:''}.`); }
     if (M.sessions>0){ P.push(''); P.push(`COACHING: ${M.sessions} session(s).${M.topics.length?' Topics: '+M.topics.join(', ')+'.':''}`); }
     P.push(''); P.push('NEXT STEP'); P.push(nextStep);
+    if (ai){ P.push(''); P.push('AI PERFORMANCE REVIEW'); P.push(ai.summary); (ai.suggestions||[]).forEach(s=>P.push('- '+s)); }
     P.push(''); P.push('ACKNOWLEDGEMENT REQUIRED WITHIN 48 HOURS');
     P.push(`Please reply with "Acknowledged" and today's date on or before ${deadlineLong}.`);
     P.push('If no reply is received by that time, this scorecard is recorded as received, read, and fully understood, and is logged as part of your performance record.');
