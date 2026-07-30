@@ -1307,7 +1307,7 @@
             <div id="scSearchBox" style="position:absolute;left:0;right:0;top:100%;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.12);z-index:30;max-height:240px;overflow:auto;display:none"></div>
           </div>
           <div><label class="cl-label">As of date</label><input type="date" id="scDate" class="cl-input" onchange="scPreview()"></div>
-          <div><label class="cl-label">Sender (Ops Supervisor)</label><select id="scSender" class="cl-input" onchange="scPreview()"><option>Ritch Joy Manipol</option></select></div>
+          <div><label class="cl-label">Sender</label><select id="scSender" class="cl-input" onchange="scPreview()"><option>Ritch Joy Manipol</option><option>Angelica Tanate</option><option>Jonathan Jabonete</option><option>Jumar Vere</option></select></div>
           <div><label class="cl-label">SP-side no-shows</label><input id="scNC" type="number" min="0" value="0" class="cl-input" oninput="scPreview()"></div>
           <div><label class="cl-label">No-show reason</label><input id="scNCReason" class="cl-input" placeholder="e.g. SP cancelled" oninput="scPreview()"></div>
           <div><label class="cl-label">Ramping (tenure)</label>
@@ -5901,6 +5901,7 @@ Write a concise, honest review a supervisor can paste into a coaching email. If 
     const monthLbl=new Date(M.ym+'-01T00:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'});
     const staff=SC_TEAM_STAFF[M.teamId]||{};
     const ccNames=[staff.tl,staff.sme].filter(Boolean).filter(n=>n!==M.sender);
+    const senderTitle = ['Angelica Tanate','Jonathan Jabonete','Jumar Vere'].includes(M.sender) ? 'Team Leader, SD Outbound' : 'Operations Supervisor, SD Outbound';
     const ccLine=`<b>To:</b> ${esc(M.name)} &nbsp;&nbsp; <b>Cc:</b> ${ccNames.map(esc).join(', ')||'—'}`;
     const subject=`[SDR SCORECARD] ${monthLbl} · ${M.name} · ${M.composite}/100 ${band.label}`;
     const nowStamp=M.sent.toLocaleString('en-PH',{month:'long',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',timeZone:'Asia/Manila'})+' PHT';
@@ -5942,7 +5943,7 @@ Write a concise, honest review a supervisor can paste into a coaching email. If 
         <div style="font-size:12.5px;line-height:1.55;color:${INK}">Please reply to this email with <b>"Acknowledged"</b> and today's date on or before <b>${esc(deadlineLong)}</b>.<br><br>If no reply is received by that time, this scorecard is recorded as received, read, and fully understood, and is logged as part of your performance record.<br><br>If any figure here looks incorrect, raise it in the same reply before the deadline so it can be checked and corrected.</div>
       </div></div>
       <div style="padding:14px 26px 20px;border-top:1px solid ${LINE};margin-top:12px">
-        <div style="font-size:12.5px;color:${INK}">${esc(M.sender)}<br><span style="font-size:11px;color:${SLATE}">Operations Supervisor, SD Outbound</span></div>
+        <div style="font-size:12.5px;color:${INK}">${esc(M.sender)}<br><span style="font-size:11px;color:${SLATE}">${esc(senderTitle)}</span></div>
         <div style="font-size:10.5px;color:${SLATE};margin-top:10px">Figures as of ${esc(nowStamp)}. Source: DC Dashboard and Attendance sheet.</div>
       </div>
     </div>`);
@@ -5963,7 +5964,7 @@ Write a concise, honest review a supervisor can paste into a coaching email. If 
     P.push(`Please reply with "Acknowledged" and today's date on or before ${deadlineLong}.`);
     P.push('If no reply is received by that time, this scorecard is recorded as received, read, and fully understood, and is logged as part of your performance record.');
     P.push('If any figure here looks incorrect, raise it in the same reply before the deadline so it can be checked and corrected.');
-    P.push(''); P.push(M.sender); P.push('Operations Supervisor, SD Outbound');
+    P.push(''); P.push(M.sender); P.push(senderTitle);
     P.push(`Figures as of ${nowStamp}. Source: DC Dashboard and Attendance sheet.`);
 
     return { html, plain:clDeDash(P.join('\n')), subject:clDeDash(subject), ccLine };
