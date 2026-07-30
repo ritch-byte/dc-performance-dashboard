@@ -1301,8 +1301,12 @@
       </div>
       <div style="padding:16px 24px 32px">
         <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px">
-          <div><label class="cl-label">SDR</label><select id="scSdr" class="cl-input" onchange="scPreview()"></select></div>
-          <div><label class="cl-label">Month</label><select id="scMonth" class="cl-input" onchange="scPreview()"></select></div>
+          <div><label class="cl-label">Team leader</label><select id="scTL" class="cl-input" onchange="scTLChange()"></select></div>
+          <div style="position:relative"><label class="cl-label">Team member</label>
+            <input id="scSearch" class="cl-input" autocomplete="off" placeholder="Search name…" oninput="scSearchInput()" onfocus="scSearchInput()" onblur="setTimeout(scSearchHide,150)">
+            <div id="scSearchBox" style="position:absolute;left:0;right:0;top:100%;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.12);z-index:30;max-height:240px;overflow:auto;display:none"></div>
+          </div>
+          <div><label class="cl-label">As of date</label><input type="date" id="scDate" class="cl-input" onchange="scPreview()"></div>
           <div><label class="cl-label">Sender (Ops Supervisor)</label><select id="scSender" class="cl-input" onchange="scPreview()"><option>Ritch Joy Manipol</option></select></div>
           <div><label class="cl-label">SP-side no-shows</label><input id="scNC" type="number" min="0" value="0" class="cl-input" oninput="scPreview()"></div>
           <div><label class="cl-label">No-show reason</label><input id="scNCReason" class="cl-input" placeholder="e.g. SP cancelled" oninput="scPreview()"></div>
@@ -5650,7 +5654,8 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
     groupc: { tl:'Angelica Tanate',    sme:'Alvin Melo' },
     groupd: { tl:'Jumar Vere',         sme:'Ali' },
   };
-  let _scModel = null, _scAI = {};
+  let _scModel = null, _scAI = {}, _scMembers = [], _scSelId = '';
+  const SC_TL_OPTS = [{v:'',t:'All teams'},{v:'groupa',t:'Ritch Joy Manipol — RV'},{v:'groupb',t:'Jonathan Jabonete — Diathan'},{v:'groupc',t:'Angelica Tanate — MeloAce'},{v:'groupd',t:'Jumar Vere — JumHon'}];
 
   function scLoad(k){ try { return JSON.parse(localStorage.getItem(k) || '[]'); } catch (e) { return []; } }
   function scSave(k,v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
@@ -5680,13 +5685,19 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
     const found=scFindMember(id); if (!found) return null;
     const name=found.m.display, team=found.team.name, teamId=found.team.id;
     const todayIso=localIso(new Date());
-    const capToday = ym===todayIso.slice(0,7);
-    const asOf = capToday ? todayIso : ym+'-28';
-    const moAgg=aggregateMonth(ym, capToday);
-    const booked=moAgg.counts[id]||0;
-    const su=aggregateShowupForDates(moAgg.dates)[id]||{yes:0,happened:0};
+    const [yy,mmn]=ym.split('-').map(Number);
+    const monthEnd=localIso(new Date(yy,mmn,0));
+    let asOf = opts.asOf || todayIso;
+    if (asOf.slice(0,7)!==ym) asOf = (ym < todayIso.slice(0,7)) ? monthEnd : todayIso;  // keep as-of within the chosen month
+    if (asOf > monthEnd) asOf = monthEnd;
+    if (asOf > todayIso) asOf = todayIso;
+    // Business days (Mon-Fri) of the month, capped at the as-of date
+    const monthBiz=[]; const lastDay=new Date(yy,mmn,0).getDate();
+    for (let d=1; d<=lastDay; d++){ const dt=new Date(yy,mmn-1,d), dow=dt.getDay(), iso=localIso(dt); if (dow!==0 && dow!==6 && iso<=asOf) monthBiz.push(iso); }
+    const booked=monthBiz.reduce((s,d)=>s+(aggregateForDate(d)[id]||0),0);
+    const su=aggregateShowupForDates(monthBiz)[id]||{yes:0,happened:0};
     const scheduled=su.happened, showed=su.yes;
-    const attObj=_attLoaded?getAttendanceForDates(id,moAgg.dates):null;
+    const attObj=_attLoaded?getAttendanceForDates(id,monthBiz):null;
     const attPct=attObj && attObj.scheduled>0 ? attObj.rate : null;
     const logs=scRepLogs(name);
     const monthLogs=logs.filter(l=>(l.date||'').slice(0,7)===ym);
@@ -5718,7 +5729,7 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
     const stretch = perDayNeeded!=null && perDayNeeded > DAILY_TARGET*2;
     return { id,name,team,teamId,ym,booked,target,expectedMtd,paceGap,perDayNeeded,elapsed,totalWD,remaining,stretch,
       scheduled,showed,suRateRaw,suRateAdj,nc,ncReason:(opts.ncReason||'').trim(),attPct,attBreak,sessions,topics,
-      ramping,tenure:opts.tenure||'',composite,prior:scGetPriorSnapshot(id,todayIso),monthLogs,logs,
+      ramping,tenure:opts.tenure||'',composite,prior:scGetPriorSnapshot(id,asOf),monthLogs,logs,
       sender:opts.sender||'Ritch Joy Manipol',asOf,todayIso };
   }
 
@@ -5766,19 +5777,28 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
   function scFmtPHT(dt){ return dt.toLocaleString('en-PH',{weekday:'long',month:'long',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',timeZone:'Asia/Manila'}) + ' PHT'; }
   function scDelta(cur, prior, kind){ if (prior==null) return ''; const d=Math.round(cur-prior); if (d===0) return 'no change'; return `${d>0?'+':''}${d}${kind==='pts'?' pts':''} vs last week`; }
 
-  function scOpts(){ return { nc:$('scNC')?$('scNC').value:0, ncReason:$('scNCReason')?$('scNCReason').value:'', ramping:$('scRamp')?$('scRamp').checked:false, tenure:$('scTenure')?$('scTenure').value:'', sender:$('scSender')?$('scSender').value:'Ritch Joy Manipol' }; }
+  function scYM(){ const d=($('scDate')&&$('scDate').value)||localIso(new Date()); return d.slice(0,7); }
+  function scOpts(){ return { nc:$('scNC')?$('scNC').value:0, ncReason:$('scNCReason')?$('scNCReason').value:'', ramping:$('scRamp')?$('scRamp').checked:false, tenure:$('scTenure')?$('scTenure').value:'', sender:$('scSender')?$('scSender').value:'Ritch Joy Manipol', asOf:($('scDate')&&$('scDate').value)||localIso(new Date()) }; }
+
+  function scMemberPool(){ const tl=$('scTL')?$('scTL').value:''; return _scMembers.filter(m=>!tl||m.teamId===tl); }
+  function scSearchInput(){
+    const box=$('scSearchBox'); if (!box) return;
+    const q=($('scSearch')?$('scSearch').value:'').trim().toLowerCase();
+    const pool=scMemberPool().filter(m=>!q||m.name.toLowerCase().includes(q));
+    if (!pool.length){ box.style.display='none'; return; }
+    box.innerHTML=pool.slice(0,20).map(m=>`<div onmousedown="scPick('${esc(m.id)}')" style="padding:8px 12px;font-size:13px;color:var(--ink);cursor:pointer;border-bottom:1px solid #EEF2F7">${esc(m.name)} <span style="color:var(--slate);font-size:11px">· ${esc(m.team)}</span></div>`).join('');
+    box.style.display='';
+  }
+  function scSearchHide(){ const box=$('scSearchBox'); if (box) box.style.display='none'; }
+  function scPick(id){ _scSelId=id; const m=_scMembers.find(x=>x.id===id); if (m && $('scSearch')) $('scSearch').value=m.name; scSearchHide(); scPreview(); }
+  function scTLChange(){ const pool=scMemberPool(); if (!pool.some(m=>m.id===_scSelId)){ _scSelId=pool.length?pool[0].id:''; if ($('scSearch')) $('scSearch').value=_scSelId?_scMembers.find(x=>x.id===_scSelId).name:''; } scPreview(); }
 
   function scInit(){
-    const sel=$('scSdr');
-    if (sel && !sel.options.length){
-      let html=''; const seen=new Set();
-      for (const t of TEAMS){ if (t.id==='poc') continue; for (const m of t.members){ if (m.hidden||seen.has(m.id)) continue; seen.add(m.id); html+=`<option value="${m.id}">${esc(m.display)} · ${esc(t.name)}</option>`; } }
-      sel.innerHTML=html;
-    }
-    const msel=$('scMonth');
-    if (msel && !msel.options.length){ let [y,mo]=localIso(new Date()).split('-').map(Number); let o=''; while (y>2026||(y===2026&&mo>=1)){ const ym=`${y}-${String(mo).padStart(2,'0')}`; o+=`<option value="${ym}">${new Date(y,mo-1,1).toLocaleDateString('en-US',{month:'long',year:'numeric'})}</option>`; mo--; if (mo===0){mo=12;y--;} } msel.innerHTML=o; }
-    const bt=$('scBatchTeam');
-    if (bt && !bt.options.length){ bt.innerHTML=TEAMS.filter(t=>t.id!=='poc').map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join(''); }
+    if (!_scMembers.length){ const seen=new Set(); for (const t of TEAMS){ if (t.id==='poc') continue; for (const m of t.members){ if (m.hidden||seen.has(m.id)) continue; seen.add(m.id); _scMembers.push({id:m.id,name:m.display,team:t.name,teamId:t.id}); } } }
+    const tl=$('scTL'); if (tl && !tl.options.length) tl.innerHTML=SC_TL_OPTS.map(o=>`<option value="${o.v}">${esc(o.t)}</option>`).join('');
+    const dt=$('scDate'); if (dt && !dt.value){ dt.value=localIso(new Date()); dt.max=localIso(new Date()); }
+    if (!_scSelId){ const pool=scMemberPool(); if (pool.length){ _scSelId=pool[0].id; if ($('scSearch') && !$('scSearch').value) $('scSearch').value=pool[0].name; } }
+    const bt=$('scBatchTeam'); if (bt && !bt.options.length){ bt.innerHTML=TEAMS.filter(t=>t.id!=='poc').map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join(''); }
     if (!_coachLogsLoaded) loadCoachingLogs(false).then(()=>{ if ($('scorecardSection').style.display!=='none') scPreview(); });
     if (!_attLoaded && !_attLoading) loadAttendanceData();
     scPreview();
@@ -5794,29 +5814,29 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
     if ($('scEmail')) $('scEmail').innerHTML=built.html;
   }
   function scPreview(){
-    const id=$('scSdr')&&$('scSdr').value, ym=$('scMonth')&&$('scMonth').value;
+    const id=_scSelId, ym=scYM();
     if (!id||!ym) return;
     const M=scCompute(id,ym,scOpts()); if (!M) return;
     const sent=new Date(); M.sent=sent; M.deadline=scDeadline(sent);
     scRender(M,false);
   }
   function scGenerate(){
-    const id=$('scSdr')&&$('scSdr').value, ym=$('scMonth')&&$('scMonth').value;
-    if (!id||!ym) return;
+    const id=_scSelId, ym=scYM();
+    if (!id||!ym){ const st=$('scStatus'); if (st){ st.style.color='#C00'; st.textContent='Pick a team member first.'; } return; }
     const dow=new Date().getDay();
     if ((dow===0||dow===6) && !confirm('Today is a weekend / possible rest day for this rep. Generate and log the scorecard anyway?')) return;
     const M=scCompute(id,ym,scOpts()); if (!M) return;
     const sent=new Date(); M.sent=sent; M.deadline=scDeadline(sent);
-    const today=localIso(sent);
-    scPersistSnapshot({ sdr_id:id, snapshot_date:today, iso_week:scIsoWeek(today), booked_dcs:M.booked, dcs_scheduled:M.scheduled, dcs_showed:M.showed, attendance_pct:M.attPct, coaching_sessions:M.sessions, composite_score:M.composite });
+    const snapDate=M.asOf, today=localIso(sent);
+    scPersistSnapshot({ sdr_id:id, snapshot_date:snapDate, iso_week:scIsoWeek(snapDate), booked_dcs:M.booked, dcs_scheduled:M.scheduled, dcs_showed:M.showed, attendance_pct:M.attPct, coaching_sessions:M.sessions, composite_score:M.composite });
     scPersistAck({ sdr_id:id, sdr_name:M.name, team:M.team, teamId:M.teamId, month:ym, sent_day:today, sent_at:sent.toISOString(), deadline_at:M.deadline.adj.toISOString(), acknowledged_at:null, ack_method:null, deemed_understood:false });
     scRender(M,true);
-    const st=$('scStatus'); if (st){ st.style.color='#0A7A0A'; st.textContent='✓ Snapshot logged for '+M.name+' ('+today+'). Week-over-week deltas appear on the next send at least 5 days out.'; }
+    const st=$('scStatus'); if (st){ st.style.color='#0A7A0A'; st.textContent='✓ Snapshot logged for '+M.name+' (as of '+snapDate+'). Week-over-week deltas appear on the next send at least 5 days out.'; }
   }
 
   // AI review of this BDR — pulls DCs, show-up, attendance (incl. absents/lates), and coaching notes.
   async function scAnalyze(){
-    const id=$('scSdr')&&$('scSdr').value, ym=$('scMonth')&&$('scMonth').value; if (!id||!ym) return;
+    const id=_scSelId, ym=scYM(); if (!id||!ym) return;
     const M=scCompute(id,ym,scOpts()); if (!M) return;
     const btn=$('scAiBtn'), st=$('scStatus');
     if (btn){ btn.disabled=true; btn.textContent='Analyzing…'; }
@@ -5950,9 +5970,9 @@ Write a concise, honest review a supervisor can paste into a coaching email. If 
   }
 
   function scBatchPreview(){
-    const tid=$('scBatchTeam')&&$('scBatchTeam').value, ym=$('scMonth')&&$('scMonth').value;
+    const tid=$('scBatchTeam')&&$('scBatchTeam').value, ym=scYM(), asOf=($('scDate')&&$('scDate').value)||localIso(new Date());
     const t=TEAMS.find(x=>x.id===tid); if (!t){ if ($('scBatch')) $('scBatch').innerHTML=''; return; }
-    const rows=t.members.filter(m=>!m.hidden).map(m=>{ const M=scCompute(m.id,ym,{nc:0,ramping:false}); if (!M) return null; const b=scBand(M.composite,false); return {name:M.name,score:M.composite,band:b.label,color:b.color}; }).filter(Boolean).sort((a,b)=>a.score-b.score);
+    const rows=t.members.filter(m=>!m.hidden).map(m=>{ const M=scCompute(m.id,ym,{nc:0,ramping:false,asOf}); if (!M) return null; const b=scBand(M.composite,false); return {name:M.name,score:M.composite,band:b.label,color:b.color}; }).filter(Boolean).sort((a,b)=>a.score-b.score);
     $('scBatch').innerHTML = rows.length ? rows.map(r=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #EEF2F7;font-size:12px"><span style="color:var(--ink)">${esc(r.name)}</span><span style="display:flex;gap:8px;align-items:center"><b>${r.score}</b><span style="background:${r.color};color:#fff;font-size:9px;font-weight:800;padding:1px 7px;border-radius:9px">${r.band}</span></span></div>`).join('') : '<div style="font-size:12px;color:var(--slate)">No members.</div>';
   }
 
