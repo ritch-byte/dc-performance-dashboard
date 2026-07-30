@@ -5760,6 +5760,26 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
     if (p && M.booked>=p.booked_dcs && (M.attPct==null || p.attendance_pct==null || M.attPct>=p.attendance_pct)) return 'You have held steady with no metric slipping versus last week. Let us build from that base.';
     return 'This is a fresh week to set the tone. Let us focus on a strong, steady start.';
   }
+  // Decision-first intro: verdict + as-of date + headline DC pace + week-over-week + paired bright spot / fix.
+  function scIntro(M){
+    const band=scBand(M.composite,M.ramping);
+    const asOfLong=new Date(M.asOf+'T00:00:00').toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+    const verdict={ 'Strong Performer':'you are performing strongly','On Track':'you are on track','Needs Improvement':'this month needs improvement','Declining':'your numbers are sliding','Ramping':'you are still ramping' }[band.label] || ('you are '+band.label.toLowerCase());
+    const pace = M.paceGap>=0 ? `ahead of the steady pace by ${M.paceGap}` : `behind the steady pace by ${Math.abs(M.paceGap)}`;
+    const daysTxt = M.remaining>0 ? ` with ${M.remaining} working day${M.remaining===1?'':'s'} to close the month` : ', and the month has closed';
+    let wow=''; const p=M.prior;
+    if (p){ const d=M.composite-p.composite_score; wow = d>0?', and you are trending up from last week':d<0?', and you are sliding from last week':', holding steady versus last week'; }
+    // paired bright spot (a performance metric only, attendance is a baseline) and the main thing to fix (any metric)
+    const mets=[{k:'dc', v:M.expectedMtd>0?M.booked/M.expectedMtd:1, good:M.paceGap>=0, pos:'your booked DC pace', neg:'your booked DC volume'}];
+    if (M.scheduled>0) mets.push({k:'su', v:M.suRateRaw, good:M.suRateRaw>=0.8, pos:`your ${Math.round(M.suRateRaw*100)}% show-up rate`, neg:`your ${Math.round(M.suRateRaw*100)}% show-up rate`});
+    if (M.attPct!=null) mets.push({k:'att', v:M.attPct/100, good:M.attPct>=95, pos:`your ${Math.round(M.attPct)}% attendance`, neg:`your ${Math.round(M.attPct)}% attendance`});
+    const goodPerf = mets.filter(m=>(m.k==='dc'||m.k==='su') && m.good).sort((a,b)=>b.v-a.v)[0];
+    const worst = [...mets].sort((a,b)=>a.v-b.v)[0];
+    let paired='';
+    if (goodPerf && worst && goodPerf.k!==worst.k) paired=` The bright spot is ${goodPerf.pos}; the main thing to fix is ${worst.neg}.`;
+    else if (worst) paired=` The main thing to fix is ${worst.neg}.`;
+    return `As of ${asOfLong}, here is where you stand: ${verdict}. You have booked ${M.booked} of ${M.target} DCs, ${pace}${daysTxt}${wow}.${paired}`;
+  }
   function scDeadline(sent){
     const raw=new Date(sent.getTime()+48*3600*1000), hol=new Set(SC_PH_HOLIDAYS);
     const isRest=dt=>{ const dow=dt.getDay(); return dow===0||dow===6||hol.has(localIso(dt)); };
@@ -5835,24 +5855,28 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
     if (btn){ btn.disabled=true; btn.textContent='Analyzing…'; }
     if (st){ st.style.color='#5B6678'; st.textContent='Reviewing this BDR with AI…'; }
     const ab=M.attBreak;
+    const asOfLong=new Date(M.asOf+'T00:00:00').toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+    const wowTxt = M.prior ? (M.composite>M.prior.composite_score?'improving vs last week':M.composite<M.prior.composite_score?'sliding vs last week':'flat vs last week') : 'no prior week to compare';
     const notes=M.logs.slice(0,15).map(l=>`- [${(l.date||'').slice(0,10)} · ${l.topic||clCoachType(l).label||''}] ${l.summary||'(no summary)'}`).join('\n') || '(no coaching notes on file)';
-    const prompt=`You are a sales performance coach at Outsource Accelerator (offshore staffing). Review this BDR for ${new Date(M.ym+'-01T00:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'})} (month to date). "DC" = Discovery Call.
-NAME: ${M.name} (team ${M.team})
-Booked DCs: ${M.booked} of ${M.target} (at ${DAILY_TARGET}/day the steady mark by now is ${M.expectedMtd}).
+    const prompt=`You are a sales performance coach at Outsource Accelerator (offshore staffing). Review this BDR for ${new Date(M.ym+'-01T00:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'})} (month to date). "DC" = Discovery Call. Data is through ${asOfLong}.
+NAME: ${M.name} (team ${M.team}), verdict ${scBand(M.composite,M.ramping).label}
+Booked DCs: ${M.booked} of ${M.target} (steady pace by now is ${M.expectedMtd}, so ${M.paceGap>=0?'ahead by '+M.paceGap:'behind by '+Math.abs(M.paceGap)}), ${M.remaining} working days left.
 Show-up: ${M.scheduled>0?Math.round(M.suRateRaw*100)+'% ('+M.showed+' of '+M.scheduled+' scheduled showed)':'no scheduled DCs yet'}.
 Attendance MTD: ${M.attPct!=null?Math.round(M.attPct)+'%':'not available'}${ab?`, made up of ${ab.present} present, ${ab.late} late, ${ab.absent} absent, ${ab.undertime} undertime across ${ab.scheduled} logged days`:''}.
+Trajectory: ${wowTxt}.
 Coaching this month: ${M.sessions} session(s)${M.topics.length?', topics: '+M.topics.join(', '):''}.
 Recent coaching notes (newest first):
 ${notes}
 
-Write a concise, honest review a supervisor can paste into a coaching email, in a natural human voice (not robotic, no meta-commentary about being an AI). If attendance issues (absences, lates, undertime) are material, name them plainly. Be specific and encouraging, not generic. IMPORTANT: always call them "DCs" or "Discovery Calls", never "calls" (e.g. "40 DC target", not "40-call target"). Do NOT use em dashes. Return ONLY valid JSON: {"summary":"2 to 3 sentences overall read", "suggestions":["specific action","specific action","specific action"]}`;
+Write in a natural human voice (not robotic, no meta-commentary about being an AI). Attendance is a baseline expectation, NOT an achievement, so do not lead with it or praise it as a win. Always call them "DCs" or "Discovery Calls", never "calls". Do NOT use em dashes. Return ONLY valid JSON with three fields:
+{"headline":"2 to 3 sentences that OPEN the email: state the verdict and where they stand as of ${asOfLong}, lead with the booked DC pace (the real headline), note the week-over-week direction, and name one genuine bright spot and the one main thing to fix", "summary":"2 to 3 sentence deeper read", "suggestions":["specific action","specific action","specific action"]}`;
     try {
       const res=await fetch(AI_COACH_URL,{ method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify({ model:'claude-haiku-4-5-20251001', max_tokens:700, messages:[{role:'user',content:prompt}] }) });
       const data=await res.json();
       if (!res.ok) throw new Error(data.error?.message||data.error||('API '+res.status));
       const m=clAiText(data).trim().match(/\{[\s\S]*\}/); if (!m) throw new Error('Could not parse AI response.');
       const g=JSON.parse(m[0]);
-      _scAI[id+'|'+ym]={ summary:clDeDash(g.summary||''), suggestions:(g.suggestions||[]).map(s=>clDeDash(String(s))).filter(Boolean) };
+      _scAI[id+'|'+ym]={ headline:clDeDash(g.headline||''), summary:clDeDash(g.summary||''), suggestions:(g.suggestions||[]).map(s=>clDeDash(String(s))).filter(Boolean) };
       if (st){ st.style.color='#0A7A0A'; st.textContent='✓ AI review added to the email.'; }
       scPreview();
     } catch (err){ if (st){ st.style.color='#C00'; st.textContent='AI error: '+err.message; } }
@@ -5889,7 +5913,8 @@ Write a concise, honest review a supervisor can paste into a coaching email, in 
     const B=SC_BRAND, INK='#1F2733', SLATE='#5B6678', LINE='#D9DEEC';
     const band=scBand(M.composite, M.ramping);
     const nextStep=scBandNextStep(band.label, M);
-    const strength=scStrength(M);
+    const ai = _scAI[M.id+'|'+M.ym];
+    const intro = (ai && ai.headline) ? ai.headline : scIntro(M);
     const first=esc((M.name||'').split(' ')[0])||'there';
     const monthLbl=new Date(M.ym+'-01T00:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'});
     const staff=SC_TEAM_STAFF[M.teamId]||{};
@@ -5919,7 +5944,6 @@ Write a concise, honest review a supervisor can paste into a coaching email, in 
     }
     if (M.attPct!=null){ const ab=M.attBreak; const abTxt = ab ? ` (${ab.present} present, ${ab.late} late, ${ab.absent} absent${ab.undertime?', '+ab.undertime+' undertime':''} of ${ab.scheduled} logged days)` : ''; cards.push(card('Attendance', `<b>Attendance MTD:</b> ${Math.round(M.attPct)}%${abTxt}.`)); }
 
-    const ai = _scAI[M.id+'|'+M.ym];
     const aiHtml = ai ? `<div style="padding:14px 26px 4px"><div style="border-top:1px solid ${LINE};padding-top:12px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:${B.mag}">Performance review</div><div style="font-size:13px;line-height:1.6;color:${INK};margin-top:4px">${esc(ai.summary)}</div>${ai.suggestions&&ai.suggestions.length?`<ul style="margin:8px 0 0;padding-left:18px">${ai.suggestions.map(s=>`<li style="font-size:13px;line-height:1.55;color:${INK};margin-bottom:4px">${esc(s)}</li>`).join('')}</ul>`:''}</div></div>` : '';
     const html=clDeDash(`<div style="font-family:${SC_FONT};background:#fff;max-width:640px;margin:0 auto;border:1px solid ${LINE};border-radius:10px;overflow:hidden">
       <div style="background:${B.navy};padding:20px 26px">
@@ -5928,7 +5952,7 @@ Write a concise, honest review a supervisor can paste into a coaching email, in 
         <div style="color:rgba(255,255,255,.7);font-size:12px;margin-top:3px">Weekly Scorecard · ${esc(monthLbl)} (month to date) · ${esc(M.team)}</div>
         <div style="margin-top:12px;display:inline-block;background:${band.color};color:#fff;font-size:13px;font-weight:800;padding:6px 14px;border-radius:8px">${band.label}</div>
       </div>
-      <div style="padding:18px 26px 4px;font-size:13.5px;line-height:1.6;color:${INK}">Hi ${first},<br><br>${esc(strength)}${rampLine}</div>
+      <div style="padding:18px 26px 4px;font-size:13.5px;line-height:1.6;color:${INK}">Hi ${first},<br><br>${esc(intro)}${rampLine}</div>
       <div style="padding:12px 26px 2px">${cards.join('')}</div>
       <div style="padding:14px 26px 4px"><div style="border-top:1px solid ${LINE};padding-top:12px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:${B.mag}">Next step</div><div style="font-size:13.5px;line-height:1.6;color:${INK};margin-top:4px">${esc(nextStep)}</div></div></div>
       ${aiHtml}
@@ -5947,7 +5971,7 @@ Write a concise, honest review a supervisor can paste into a coaching email, in 
     P.push(`SDR WEEKLY SCORECARD - ${monthLbl} (month to date)`);
     P.push(`${M.name} | ${M.team} | ${band.label}`);
     P.push(`To: ${M.name}   Cc: ${ccNames.join(', ')||'-'}`); P.push('');
-    P.push(`Hi ${(M.name||'').split(' ')[0]||'there'},`); P.push(''); P.push(strength); if (M.ramping) P.push(`(Target adjusted for tenure: scaled goal ${M.target} DCs.)`); P.push('');
+    P.push(`Hi ${(M.name||'').split(' ')[0]||'there'},`); P.push(''); P.push(intro); if (M.ramping) P.push(`(Target adjusted for tenure: scaled goal ${M.target} DCs.)`); P.push('');
     P.push('BOOKED DCS AND PACE');
     P.push(`Booked: ${M.booked} of ${M.target}. At ${DAILY_TARGET} DCs/day you would be around ${M.expectedMtd} by now, so you are ${M.paceGap>=0?'ahead of that by '+M.paceGap:Math.abs(M.paceGap)+' below that'}.`);
     if (M.perDayNeeded!=null) P.push(M.stretch ? `Reaching the full ${M.target} would need about ${M.perDayNeeded}/day over the ${M.remaining} day(s) left, a stretch this late. Finish as strong as you can; pace resets next month.` : `To finish at target, aim for ${M.perDayNeeded} booked DC(s) per working day over the ${M.remaining} day(s) left.`);
