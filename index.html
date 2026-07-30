@@ -5877,7 +5877,7 @@ Write a concise, honest review a supervisor can paste into a coaching email. If 
       <div style="padding:14px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
         ${tile('Booked DCs', M.booked, SC_BRAND.blue, `pace ${M.expectedMtd} · ${M.paceGap>=0?'+':''}${M.paceGap}`, p?scDelta(M.booked,p.booked_dcs,'count'):'')}
         ${tile(M.remaining>0?'Need / day':'Days left', M.perDayNeeded==null?'—':M.perDayNeeded, '#C0362C', M.remaining>0?`to hit ${M.target}`:'month closed', '')}
-        ${M.scheduled>0?tile('Show-up', suNow+'%', suNow>=80?'#0E9F6E':suNow>=50?'#C97000':'#C0362C', `${M.showed}/${M.scheduled} showed`, (suNow!=null&&suPrior!=null)?scDelta(suNow,suPrior,'pts'):''):''}
+        ${M.scheduled>0?tile('Show-up', suNow+'%', suNow>=80?'#0E9F6E':suNow>=50?'#C97000':'#C0362C', `${M.showed} showed`, (suNow!=null&&suPrior!=null)?scDelta(suNow,suPrior,'pts'):''):''}
         ${M.attPct!=null?tile('Attendance', Math.round(M.attPct)+'%', '#0D1A6E', 'MTD', (p&&p.attendance_pct!=null)?scDelta(Math.round(M.attPct),Math.round(p.attendance_pct),'pts'):''):''}
       </div>
       ${p?`<div style="padding:0 14px 12px;font-size:11px;color:#5B6678">Overall score ${esc(scDelta(M.composite,p.composite_score,'pts'))}</div>`:''}
@@ -5911,7 +5911,7 @@ Write a concise, honest review a supervisor can paste into a coaching email. If 
     const cards=[];
     cards.push(card('Booked DCs and pace', `<b>Booked:</b> ${M.booked} of a ${M.target} monthly target. At the steady pace of ${DAILY_TARGET} DCs a day you would be around <b>${M.expectedMtd}</b> by now, so you are ${paceMark}.${paceCallout}`));
     if (M.scheduled>0){
-      let line=`<b>Show-up rate:</b> ${Math.round(M.suRateRaw*100)}% (${M.showed} of ${M.scheduled} scheduled DCs showed).`;
+      let line=`<b>Show-up rate:</b> ${Math.round(M.suRateRaw*100)}% (${M.showed} DC${M.showed===1?'':'s'} showed).`;
       if (M.nc>0 && M.suRateAdj!=null) line+=` <b>Adjusted:</b> ${Math.round(M.suRateAdj*100)}% excluding ${M.nc} SP-side cancellation${M.nc===1?'':'s'}${M.ncReason?' ('+esc(M.ncReason)+')':''}.`;
       cards.push(card('Show-up', line));
     }
@@ -5948,7 +5948,7 @@ Write a concise, honest review a supervisor can paste into a coaching email. If 
     P.push('BOOKED DCS AND PACE');
     P.push(`Booked: ${M.booked} of ${M.target}. At ${DAILY_TARGET} DCs/day you would be around ${M.expectedMtd} by now, so you are ${M.paceGap>=0?'ahead of that by '+M.paceGap:Math.abs(M.paceGap)+' below that'}.`);
     if (M.perDayNeeded!=null) P.push(M.stretch ? `Reaching the full ${M.target} would need about ${M.perDayNeeded}/day over the ${M.remaining} day(s) left, a stretch this late. Finish as strong as you can; pace resets next month.` : `To finish at target, aim for ${M.perDayNeeded} booked DC(s) per working day over the ${M.remaining} day(s) left.`);
-    if (M.scheduled>0){ let l=`SHOW-UP: ${Math.round(M.suRateRaw*100)}% (${M.showed}/${M.scheduled} showed).`; if (M.nc>0 && M.suRateAdj!=null) l+=` Adjusted ${Math.round(M.suRateAdj*100)}% excluding ${M.nc} SP-side cancellation(s)${M.ncReason?' ('+M.ncReason+')':''}.`; P.push(''); P.push(l); }
+    if (M.scheduled>0){ let l=`SHOW-UP: ${Math.round(M.suRateRaw*100)}% (${M.showed} showed).`; if (M.nc>0 && M.suRateAdj!=null) l+=` Adjusted ${Math.round(M.suRateAdj*100)}% excluding ${M.nc} SP-side cancellation(s)${M.ncReason?' ('+M.ncReason+')':''}.`; P.push(''); P.push(l); }
     if (M.attPct!=null){ const ab=M.attBreak; P.push(''); P.push(`ATTENDANCE MTD: ${Math.round(M.attPct)}%${ab?` (${ab.present} present, ${ab.late} late, ${ab.absent} absent${ab.undertime?', '+ab.undertime+' undertime':''} of ${ab.scheduled} logged days)`:''}.`); }
     P.push(''); P.push('NEXT STEP'); P.push(nextStep);
     if (ai){ P.push(''); P.push('AI PERFORMANCE REVIEW'); P.push(ai.summary); (ai.suggestions||[]).forEach(s=>P.push('- '+s)); }
