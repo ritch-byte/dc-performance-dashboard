@@ -5892,17 +5892,17 @@ Write a concise, honest review a supervisor can paste into a coaching email. If 
       : M.stretch
         ? `<div style="margin-top:8px;background:#F3F5FC;border-left:4px solid ${SLATE};padding:10px 14px;border-radius:0 6px 6px 0;font-size:12.5px;color:${INK};line-height:1.55">Reaching the full ${M.target} would need about <b>${M.perDayNeeded} a day</b> over the ${M.remaining} working day${M.remaining===1?'':'s'} left, which is a stretch this late in the month. Focus on finishing as strong as you can; we reset the pace next month.</div>`
         : `<div style="margin-top:8px;background:#EEF0FB;border-left:4px solid ${B.blue};padding:10px 14px;border-radius:0 6px 6px 0"><span style="font-size:12px;color:${SLATE}">To finish the month at target, aim for</span><br><span style="font-size:22px;font-weight:800;color:${B.blue}">${M.perDayNeeded} booked DC${M.perDayNeeded===1?'':'s'} per working day</span> <span style="font-size:12px;color:${SLATE}">over the ${M.remaining} working day${M.remaining===1?'':'s'} left.</span></div>`;
-    const rows=[];
-    rows.push(`<tr><td style="padding:12px 0 4px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:${B.blue}">Booked DCs and pace</div>
-      <div style="font-size:13.5px;line-height:1.6;color:${INK};margin-top:4px"><b>Booked:</b> ${M.booked} of a ${M.target} monthly target. At the steady pace of ${DAILY_TARGET} DCs a day you would be around <b>${M.expectedMtd}</b> by now, so you are ${paceMark}.</div>
-      ${paceCallout}</td></tr>`);
+    const card=(title,body)=>`<div style="border:1px solid ${LINE};border-radius:8px;padding:12px 14px;margin-bottom:10px;background:#fff">
+      <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:${B.blue};margin-bottom:5px">${title}</div>
+      <div style="font-size:13.5px;line-height:1.6;color:${INK}">${body}</div></div>`;
+    const cards=[];
+    cards.push(card('Booked DCs and pace', `<b>Booked:</b> ${M.booked} of a ${M.target} monthly target. At the steady pace of ${DAILY_TARGET} DCs a day you would be around <b>${M.expectedMtd}</b> by now, so you are ${paceMark}.${paceCallout}`));
     if (M.scheduled>0){
       let line=`<b>Show-up rate:</b> ${Math.round(M.suRateRaw*100)}% (${M.showed} of ${M.scheduled} scheduled DCs showed).`;
       if (M.nc>0 && M.suRateAdj!=null) line+=` <b>Adjusted:</b> ${Math.round(M.suRateAdj*100)}% excluding ${M.nc} SP-side cancellation${M.nc===1?'':'s'}${M.ncReason?' ('+esc(M.ncReason)+')':''}.`;
-      rows.push(`<tr><td style="padding:12px 0 4px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:${B.blue}">Show-up</div><div style="font-size:13.5px;line-height:1.6;color:${INK};margin-top:4px">${line}</div></td></tr>`);
+      cards.push(card('Show-up', line));
     }
-    if (M.attPct!=null){ const ab=M.attBreak; const abTxt = ab ? ` (${ab.present} present, ${ab.late} late, ${ab.absent} absent${ab.undertime?', '+ab.undertime+' undertime':''} of ${ab.scheduled} logged days)` : ''; rows.push(`<tr><td style="padding:12px 0 4px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:${B.blue}">Attendance</div><div style="font-size:13.5px;line-height:1.6;color:${INK};margin-top:4px"><b>Attendance MTD:</b> ${Math.round(M.attPct)}%${abTxt}.</div></td></tr>`); }
-    if (M.sessions>0) rows.push(`<tr><td style="padding:12px 0 4px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:${B.blue}">Coaching this month</div><div style="font-size:13.5px;line-height:1.6;color:${INK};margin-top:4px"><b>${M.sessions} session${M.sessions===1?'':'s'}.</b>${M.topics.length?' Topics: '+esc(M.topics.join(', '))+'.':''}</div></td></tr>`);
+    if (M.attPct!=null){ const ab=M.attBreak; const abTxt = ab ? ` (${ab.present} present, ${ab.late} late, ${ab.absent} absent${ab.undertime?', '+ab.undertime+' undertime':''} of ${ab.scheduled} logged days)` : ''; cards.push(card('Attendance', `<b>Attendance MTD:</b> ${Math.round(M.attPct)}%${abTxt}.`)); }
 
     const ai = _scAI[M.id+'|'+M.ym];
     const aiHtml = ai ? `<div style="padding:14px 26px 4px"><div style="border-top:1px solid ${LINE};padding-top:12px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:${B.mag}">AI performance review</div><div style="font-size:13px;line-height:1.6;color:${INK};margin-top:4px">${esc(ai.summary)}</div>${ai.suggestions&&ai.suggestions.length?`<ul style="margin:8px 0 0;padding-left:18px">${ai.suggestions.map(s=>`<li style="font-size:13px;line-height:1.55;color:${INK};margin-bottom:4px">${esc(s)}</li>`).join('')}</ul>`:''}</div></div>` : '';
@@ -5914,7 +5914,7 @@ Write a concise, honest review a supervisor can paste into a coaching email. If 
         <div style="margin-top:12px;display:inline-block;background:${band.color};color:#fff;font-size:13px;font-weight:800;padding:6px 14px;border-radius:8px">${M.composite} / 100 · ${band.label}</div>
       </div>
       <div style="padding:18px 26px 4px;font-size:13.5px;line-height:1.6;color:${INK}">Hi ${first},<br><br>${esc(strength)}${rampLine}</div>
-      <div style="padding:2px 26px"><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">${rows.join('')}</table></div>
+      <div style="padding:12px 26px 2px">${cards.join('')}</div>
       <div style="padding:14px 26px 4px"><div style="border-top:1px solid ${LINE};padding-top:12px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:${B.mag}">Next step</div><div style="font-size:13.5px;line-height:1.6;color:${INK};margin-top:4px">${esc(nextStep)}</div></div></div>
       ${aiHtml}
       <div style="padding:16px 26px 6px"><div style="background:#FFF4CE;border:1px solid #E6CE6A;border-left:4px solid #C9A227;border-radius:0 8px 8px 0;padding:12px 16px">
@@ -5937,7 +5937,6 @@ Write a concise, honest review a supervisor can paste into a coaching email. If 
     if (M.perDayNeeded!=null) P.push(M.stretch ? `Reaching the full ${M.target} would need about ${M.perDayNeeded}/day over the ${M.remaining} day(s) left, a stretch this late. Finish as strong as you can; pace resets next month.` : `To finish at target, aim for ${M.perDayNeeded} booked DC(s) per working day over the ${M.remaining} day(s) left.`);
     if (M.scheduled>0){ let l=`SHOW-UP: ${Math.round(M.suRateRaw*100)}% (${M.showed}/${M.scheduled} showed).`; if (M.nc>0 && M.suRateAdj!=null) l+=` Adjusted ${Math.round(M.suRateAdj*100)}% excluding ${M.nc} SP-side cancellation(s)${M.ncReason?' ('+M.ncReason+')':''}.`; P.push(''); P.push(l); }
     if (M.attPct!=null){ const ab=M.attBreak; P.push(''); P.push(`ATTENDANCE MTD: ${Math.round(M.attPct)}%${ab?` (${ab.present} present, ${ab.late} late, ${ab.absent} absent${ab.undertime?', '+ab.undertime+' undertime':''} of ${ab.scheduled} logged days)`:''}.`); }
-    if (M.sessions>0){ P.push(''); P.push(`COACHING: ${M.sessions} session(s).${M.topics.length?' Topics: '+M.topics.join(', ')+'.':''}`); }
     P.push(''); P.push('NEXT STEP'); P.push(nextStep);
     if (ai){ P.push(''); P.push('AI PERFORMANCE REVIEW'); P.push(ai.summary); (ai.suggestions||[]).forEach(s=>P.push('- '+s)); }
     P.push(''); P.push('ACKNOWLEDGEMENT REQUIRED WITHIN 48 HOURS');
