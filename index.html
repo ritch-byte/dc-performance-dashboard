@@ -5844,7 +5844,7 @@ Coaching this month: ${M.sessions} session(s)${M.topics.length?', topics: '+M.to
 Recent coaching notes (newest first):
 ${notes}
 
-Write a concise, honest review a supervisor can paste into a coaching email. If attendance issues (absences, lates, undertime) are material, name them plainly. Be specific and encouraging, not generic. Do NOT use em dashes. Return ONLY valid JSON: {"summary":"2 to 3 sentences overall read", "suggestions":["specific action","specific action","specific action"]}`;
+Write a concise, honest review a supervisor can paste into a coaching email, in a natural human voice (not robotic, no meta-commentary about being an AI). If attendance issues (absences, lates, undertime) are material, name them plainly. Be specific and encouraging, not generic. IMPORTANT: always call them "DCs" or "Discovery Calls", never "calls" (e.g. "40 DC target", not "40-call target"). Do NOT use em dashes. Return ONLY valid JSON: {"summary":"2 to 3 sentences overall read", "suggestions":["specific action","specific action","specific action"]}`;
     try {
       const res=await fetch(AI_COACH_URL,{ method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify({ model:'claude-haiku-4-5-20251001', max_tokens:700, messages:[{role:'user',content:prompt}] }) });
       const data=await res.json();
@@ -5918,7 +5918,7 @@ Write a concise, honest review a supervisor can paste into a coaching email. If 
     if (M.attPct!=null){ const ab=M.attBreak; const abTxt = ab ? ` (${ab.present} present, ${ab.late} late, ${ab.absent} absent${ab.undertime?', '+ab.undertime+' undertime':''} of ${ab.scheduled} logged days)` : ''; cards.push(card('Attendance', `<b>Attendance MTD:</b> ${Math.round(M.attPct)}%${abTxt}.`)); }
 
     const ai = _scAI[M.id+'|'+M.ym];
-    const aiHtml = ai ? `<div style="padding:14px 26px 4px"><div style="border-top:1px solid ${LINE};padding-top:12px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:${B.mag}">AI performance review</div><div style="font-size:13px;line-height:1.6;color:${INK};margin-top:4px">${esc(ai.summary)}</div>${ai.suggestions&&ai.suggestions.length?`<ul style="margin:8px 0 0;padding-left:18px">${ai.suggestions.map(s=>`<li style="font-size:13px;line-height:1.55;color:${INK};margin-bottom:4px">${esc(s)}</li>`).join('')}</ul>`:''}</div></div>` : '';
+    const aiHtml = ai ? `<div style="padding:14px 26px 4px"><div style="border-top:1px solid ${LINE};padding-top:12px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:${B.mag}">Performance review</div><div style="font-size:13px;line-height:1.6;color:${INK};margin-top:4px">${esc(ai.summary)}</div>${ai.suggestions&&ai.suggestions.length?`<ul style="margin:8px 0 0;padding-left:18px">${ai.suggestions.map(s=>`<li style="font-size:13px;line-height:1.55;color:${INK};margin-bottom:4px">${esc(s)}</li>`).join('')}</ul>`:''}</div></div>` : '';
     const html=clDeDash(`<div style="font-family:${SC_FONT};background:#fff;max-width:640px;margin:0 auto;border:1px solid ${LINE};border-radius:10px;overflow:hidden">
       <div style="background:${B.navy};padding:20px 26px">
         <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;color:#9FB0FF;text-transform:uppercase">Outsource Accelerator · SD Outbound</div>
@@ -5951,7 +5951,7 @@ Write a concise, honest review a supervisor can paste into a coaching email. If 
     if (M.scheduled>0){ let l=`SHOW-UP: ${Math.round(M.suRateRaw*100)}% (${M.showed} showed).`; if (M.nc>0 && M.suRateAdj!=null) l+=` Adjusted ${Math.round(M.suRateAdj*100)}% excluding ${M.nc} SP-side cancellation(s)${M.ncReason?' ('+M.ncReason+')':''}.`; P.push(''); P.push(l); }
     if (M.attPct!=null){ const ab=M.attBreak; P.push(''); P.push(`ATTENDANCE MTD: ${Math.round(M.attPct)}%${ab?` (${ab.present} present, ${ab.late} late, ${ab.absent} absent${ab.undertime?', '+ab.undertime+' undertime':''} of ${ab.scheduled} logged days)`:''}.`); }
     P.push(''); P.push('NEXT STEP'); P.push(nextStep);
-    if (ai){ P.push(''); P.push('AI PERFORMANCE REVIEW'); P.push(ai.summary); (ai.suggestions||[]).forEach(s=>P.push('- '+s)); }
+    if (ai){ P.push(''); P.push('PERFORMANCE REVIEW'); P.push(ai.summary); (ai.suggestions||[]).forEach(s=>P.push('- '+s)); }
     P.push(''); P.push('ACKNOWLEDGEMENT REQUIRED WITHIN 48 HOURS');
     P.push(`Please reply with "Acknowledged" and today's date on or before ${deadlineLong}.`);
     P.push('If no reply is received by that time, this scorecard is recorded as received, read, and fully understood, and is logged as part of your performance record.');
