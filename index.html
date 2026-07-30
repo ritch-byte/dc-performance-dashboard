@@ -6071,39 +6071,51 @@ Write in a natural human voice (not robotic, no meta-commentary about being an A
   //  AI Performance Report — team + team-leader read across all metrics
   // ══════════════════════════════════════════════════════════════════
   function reportSnapshot(ym, teamFilter){
-    const capToday = ym===localIso(new Date()).slice(0,7);
+    const todayIso=localIso(new Date());
+    const capToday = ym===todayIso.slice(0,7);
     const mo=aggregateMonth(ym, capToday);
     const su=aggregateShowupForDates(mo.dates);
     const monthName=new Date(ym+'-01T00:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'});
+    const allWD=scWorkingDays(ym);
+    const [wy,wm]=ym.split('-').map(Number); const monthEnd=localIso(new Date(wy,wm,0));
+    const asOf = capToday ? todayIso : monthEnd;
+    const elapsed=Math.max(1, allWD.filter(d=>d<=asOf).length);
+    const totalWD=Math.max(1, allWD.length);
+    const perRepExpected=Math.round(MONTHLY_TARGET*elapsed/totalWD);
     const teams=[];
     for (const t of TEAMS){
       if (t.id==='poc') continue;
       if (teamFilter && t.id!==teamFilter) continue;
       const visible=t.members.filter(m=>!m.hidden);
       const staff=(typeof SC_TEAM_STAFF!=='undefined'?SC_TEAM_STAFF[t.id]:null)||{};
-      let tYes=0,tHap=0,tAtt=0,tSch=0,tDcs=0,tCoach=0;
+      let tYes=0,tHap=0,tAtt=0,tSch=0,tPres=0,tDcs=0,tCoach=0;
       const members=visible.map(m=>{
         const dcs=mo.counts[m.id]||0; tDcs+=dcs;
         const s=su[m.id]||{yes:0,happened:0}; tYes+=s.yes; tHap+=s.happened;
-        const a=_attLoaded?getAttendanceForDates(m.id,mo.dates):null; if (a){ tAtt+=a.attended; tSch+=a.scheduled; }
+        const a=_attLoaded?getAttendanceForDates(m.id,mo.dates):null; if (a){ tAtt+=a.attended; tSch+=a.scheduled; tPres+=a.present; }
         const cc=_coachLogs.filter(l=>(l.rep||'').trim().toLowerCase()===m.display.trim().toLowerCase() && (l.date||'').slice(0,7)===ym).length; tCoach+=cc;
-        return { name:m.display, dcs, suPct:s.happened>0?Math.round(s.yes/s.happened*100):null, showed:s.yes,
+        return { name:m.display, dcs, expected:perRepExpected, outlier: dcs < 0.5*perRepExpected,
+          proj: Math.round(dcs/elapsed*totalWD),
+          suPct:s.happened>0?Math.round(s.yes/s.happened*100):null, showed:s.yes,
           attPct:(a&&a.scheduled>0)?a.rate:null, onTime:(a&&a.scheduled>0)?Math.round(a.present/a.scheduled*100):null,
           late:a?a.late:0, absent:a?a.absent:0, coaching:cc };
       });
-      teams.push({ id:t.id, name:t.name, tl:staff.tl||'(unassigned)', sme:staff.sme||'',
-        members, totalDcs:tDcs, target:MONTHLY_TARGET*visible.length,
+      const target=MONTHLY_TARGET*visible.length;
+      teams.push({ id:t.id, name:t.name, color:t.color, tl:staff.tl||'(unassigned)', sme:staff.sme||'',
+        members, totalDcs:tDcs, target, projectedDcs:Math.round(tDcs/elapsed*totalWD),
+        dcPct: target>0?Math.round(tDcs/target*100):0,
         teamSu:tHap>0?Math.round(tYes/tHap*100):null, teamAtt:tSch>0?Math.round(tAtt/tSch*100):null,
+        teamOnTime:tSch>0?Math.round(tPres/tSch*100):null,
         coaching:tCoach, memberCount:visible.length });
     }
-    return { monthName, ym, teams };
+    return { monthName, ym, elapsed, totalWD, perRepExpected, teams };
   }
   function reportDataText(snap){
     let s=`Floor: SD Outbound. Period: ${snap.monthName} (month to date). Target is ${MONTHLY_TARGET} booked DCs per rep per month.\n\n`;
     snap.teams.forEach(t=>{
       s+=`TEAM ${t.name} | Leader: ${t.tl} | SME: ${t.sme} | ${t.memberCount} reps\n`;
-      s+=`  Team totals: ${t.totalDcs} booked DCs (team target ${t.target}), show-up ${t.teamSu==null?'n/a':t.teamSu+'%'}, attendance ${t.teamAtt==null?'n/a':t.teamAtt+'%'}, coaching sessions logged ${t.coaching}\n`;
-      t.members.forEach(m=>{ s+=`   - ${m.name}: ${m.dcs} DCs, show-up ${m.suPct==null?'n/a':m.suPct+'%'} (${m.showed} showed), attendance ${m.attPct==null?'n/a':m.attPct+'%'}${(m.onTime!=null&&m.late>0)?' (on-time '+m.onTime+'%, '+m.late+' late)':''}, coaching ${m.coaching}\n`; });
+      s+=`  Team totals: ${t.totalDcs} booked DCs (team target ${t.target}, ${t.dcPct}%), projected month-end ${t.projectedDcs}, show-up ${t.teamSu==null?'n/a':t.teamSu+'%'}, attendance ${t.teamAtt==null?'n/a':t.teamAtt+'%'}, on-time ${t.teamOnTime==null?'n/a':t.teamOnTime+'%'}, coaching sessions logged ${t.coaching}\n`;
+      t.members.forEach(m=>{ s+=`   - ${m.name}: ${m.dcs} DCs (expected ${m.expected}${m.outlier?', OUTLIER':''}), projected ${m.proj}, show-up ${m.suPct==null?'n/a':m.suPct+'%'} (${m.showed} showed), attendance ${m.attPct==null?'n/a':m.attPct+'%'}${(m.onTime!=null&&m.late>0)?' (on-time '+m.onTime+'%, '+m.late+' late)':''}, coaching ${m.coaching}\n`; });
       s+='\n';
     });
     return s;
@@ -6133,8 +6145,12 @@ Write in a natural human voice (not robotic, no meta-commentary about being an A
     if (!snap.teams.length){ $('repStatus').textContent='No teams in scope.'; return; }
     const btn=$('repGenBtn'), st=$('repStatus');
     if (btn){ btn.disabled=true; btn.textContent='Generating…'; }
-    if (st){ st.style.color='#5B6678'; st.textContent='Analyzing the floor with AI…'; }
-    if ($('repOutput')) $('repOutput').innerHTML='<div style="padding:40px;text-align:center;color:#5B6678;font-size:13px">Reading every team’s metrics and writing the report…</div>';
+    if (st){ st.style.color='#5B6678'; st.textContent='Charting the metrics and writing the analysis…'; }
+    // Deterministic charts + data first (instant), AI narrative appended below
+    if ($('repOutput')){
+      $('repOutput').innerHTML = reportDataHtml(snap) + '<div id="repNarrative" style="margin-top:16px"><div style="padding:20px;text-align:center;color:#5B6678;font-size:13px">Writing the written analysis with AI…</div></div>';
+      reportBuildCharts(snap);
+    }
     const prompt=`You are a sales operations analyst for Outsource Accelerator's SD Outbound floor. Below is month-to-date performance data. "DC" = Discovery Call.
 
 ${reportDataText(snap)}
@@ -6152,16 +6168,73 @@ Notes for your analysis: Booked DCs versus the per-rep target and show-up rate a
       if (!res.ok) throw new Error(data.error?.message||data.error||('API '+res.status));
       const txt=clAiText(data).trim(); const m=txt.match(/\{[\s\S]*\}/);
       const g=scSafeJson(m?m[0]:txt); if (!g) throw new Error('Could not parse AI response, try a single team.');
-      reportRender(g, snap);
+      reportRenderNarrative(g, snap);
       if (st){ st.style.color='#0A7A0A'; st.textContent='✓ Report generated for '+snap.monthName+(scope?' · '+(snap.teams[0]||{}).name:' · whole floor')+'.'; }
       if ($('repCopyBtn')) $('repCopyBtn').style.display='';
-    } catch (err){ if (st){ st.style.color='#C00'; st.textContent='AI error: '+err.message; } if ($('repOutput')) $('repOutput').innerHTML=''; }
+    } catch (err){ if (st){ st.style.color='#C00'; st.textContent='Charts ready. AI analysis failed: '+err.message; } const rn=$('repNarrative'); if (rn) rn.innerHTML='<div style="font-size:12px;color:#C0362C">The written analysis could not be generated, but the charts and data above are live.</div>'; }
     finally { if (btn){ btn.disabled=false; btn.textContent='Generate report ✨'; } }
   }
 
-  function reportRender(g, snap){
+  // Deterministic section: team-leader scorecards, charts, projections, outlier monitoring.
+  function reportDataHtml(snap){
+    const NAVY='#0D1A6E', SLATE='#5B6678', BORDER='var(--border)';
+    const col=(v,g,a)=>v==null?SLATE:v>=g?'#0E9F6E':v>=a?'#C97000':'#C0362C';
+    const teams=[...snap.teams].sort((a,b)=>b.dcPct-a.dcPct);
+    const stat=(val,c,lab)=>`<div><div style="font-size:17px;font-weight:800;color:${c};line-height:1.05">${val}</div><div style="font-size:8.5px;text-transform:uppercase;letter-spacing:.3px;color:${SLATE};margin-top:3px">${lab}</div></div>`;
+    const tlCards=teams.map(t=>{ const projPct=t.target>0?Math.round(t.projectedDcs/t.target*100):0; return `<div style="border:1px solid ${BORDER};border-radius:12px;padding:14px;background:#fff">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div><div style="font-size:14px;font-weight:800;color:${NAVY}">${esc(t.tl)}</div><div style="font-size:11px;color:${SLATE}">${esc(t.name)} · ${t.memberCount} reps</div></div>
+        <div style="width:10px;height:34px;border-radius:3px;background:${esc(t.color||NAVY)}"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px;text-align:center">
+        ${stat(t.totalDcs, col(t.dcPct,100,60), 'DCs · '+t.dcPct+'%')}
+        ${stat(t.projectedDcs, col(projPct,100,70), 'Projected')}
+        ${stat(t.coaching, NAVY, 'Coaching')}
+        ${stat(t.teamSu==null?'—':t.teamSu+'%', col(t.teamSu,80,60), 'Show-up')}
+        ${stat(t.teamOnTime==null?'—':t.teamOnTime+'%', col(t.teamOnTime,90,75), 'On-time')}
+        ${stat(t.teamAtt==null?'—':t.teamAtt+'%', col(t.teamAtt,95,85), 'Attendance')}
+      </div></div>`; }).join('');
+    const outliers=[];
+    snap.teams.forEach(t=>t.members.forEach(m=>{ if (m.outlier) outliers.push(Object.assign({team:t.name}, m)); }));
+    outliers.sort((a,b)=>a.dcs-b.dcs);
+    const oRows=outliers.length? outliers.map(o=>{ const mon=o.coaching>0; return `<tr style="border-bottom:1px solid #EEF2F7">
+      <td style="padding:7px 10px;font-size:12.5px;color:${NAVY};font-weight:600">${esc(o.name)}</td>
+      <td style="padding:7px 10px;font-size:12px;color:${SLATE}">${esc(o.team)}</td>
+      <td style="padding:7px 10px;font-size:12px;color:${SLATE};text-align:center">${o.dcs} <span style="color:#C0362C">/ ${o.expected} exp</span></td>
+      <td style="padding:7px 10px;font-size:12px;text-align:center">${o.suPct==null?'—':o.suPct+'%'}</td>
+      <td style="padding:7px 10px;font-size:12px;text-align:center">${o.onTime!=null?o.onTime+'% on-time':(o.attPct==null?'—':o.attPct+'%')}</td>
+      <td style="padding:7px 10px;text-align:center"><span style="background:${mon?'#E7F6EF':'#FCEBEC'};color:${mon?'#0A7A4A':'#B3261E'};font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px">${mon?o.coaching+' coaching':'not coached'}</span></td>
+    </tr>`; }).join('') : `<tr><td colspan="6" style="padding:16px;text-align:center;color:${SLATE};font-size:12px">No reps below half of the expected pace. </td></tr>`;
+    return `
+     <div style="margin-top:12px;display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px">${tlCards}</div>
+     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px">
+       <div style="background:#fff;border:1px solid ${BORDER};border-radius:12px;padding:14px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:${NAVY};margin-bottom:8px">Booked DCs: current · projected · target</div><canvas id="repChartDcs" height="150"></canvas></div>
+       <div style="background:#fff;border:1px solid ${BORDER};border-radius:12px;padding:14px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:${NAVY};margin-bottom:8px">Show-up · On-time · Attendance (%)</div><canvas id="repChartRates" height="150"></canvas></div>
+     </div>
+     <div style="background:#fff;border:1px solid ${BORDER};border-radius:12px;overflow:hidden;margin-top:14px">
+       <div style="padding:10px 14px;font-size:12px;font-weight:800;color:${NAVY};background:#F4F6FB">Outlier monitoring — reps below half the expected pace, and whether they are being coached</div>
+       <div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;min-width:560px"><thead><tr style="color:${SLATE}"><th style="text-align:left;padding:7px 10px;font-size:10px;text-transform:uppercase">Rep</th><th style="text-align:left;padding:7px 10px;font-size:10px;text-transform:uppercase">Team</th><th style="padding:7px 10px;font-size:10px;text-transform:uppercase">DCs</th><th style="padding:7px 10px;font-size:10px;text-transform:uppercase">Show-up</th><th style="padding:7px 10px;font-size:10px;text-transform:uppercase">Punctuality</th><th style="padding:7px 10px;font-size:10px;text-transform:uppercase">Monitoring</th></tr></thead><tbody>${oRows}</tbody></table></div>
+     </div>`;
+  }
+  function reportBuildCharts(snap){
+    if (typeof Chart==='undefined') return;
+    (window._repCharts||[]).forEach(c=>{ try{ c.destroy(); }catch(e){} }); window._repCharts=[];
+    const labels=snap.teams.map(t=>t.name);
+    const opt=max=>({ responsive:true, maintainAspectRatio:false, plugins:{legend:{labels:{boxWidth:12,font:{size:10}}}}, scales:{y:{beginAtZero:true,max:max}} });
+    const c1=document.getElementById('repChartDcs');
+    if (c1) window._repCharts.push(new Chart(c1,{ type:'bar', data:{ labels, datasets:[
+      {label:'Current', data:snap.teams.map(t=>t.totalDcs), backgroundColor:'#1A2DB5'},
+      {label:'Projected', data:snap.teams.map(t=>t.projectedDcs), backgroundColor:'#8FA0E8'},
+      {label:'Target', data:snap.teams.map(t=>t.target), backgroundColor:'#DCE1F0'} ] }, options:opt(undefined) }));
+    const c2=document.getElementById('repChartRates');
+    if (c2) window._repCharts.push(new Chart(c2,{ type:'bar', data:{ labels, datasets:[
+      {label:'Show-up', data:snap.teams.map(t=>t.teamSu||0), backgroundColor:'#0E9F6E'},
+      {label:'On-time', data:snap.teams.map(t=>t.teamOnTime||0), backgroundColor:'#C97000'},
+      {label:'Attendance', data:snap.teams.map(t=>t.teamAtt||0), backgroundColor:'#0D1A6E'} ] }, options:opt(100) }));
+  }
+  function reportRenderNarrative(g, snap){
     const NAVY='#0D1A6E', INK='#1F2733', SLATE='#5B6678', BORDER='var(--border)';
-    const list=(arr,col)=> (arr&&arr.length)?'<ul style="margin:4px 0 0;padding-left:18px">'+arr.map(x=>`<li style="font-size:13px;color:${col||INK};line-height:1.5;margin-bottom:3px">${esc(x)}</li>`).join('')+'</ul>':'<div style="font-size:12px;color:'+SLATE+'">None.</div>';
+    const list=(arr,c)=> (arr&&arr.length)?'<ul style="margin:4px 0 0;padding-left:18px">'+arr.map(x=>`<li style="font-size:13px;color:${c||INK};line-height:1.5;margin-bottom:3px">${esc(x)}</li>`).join('')+'</ul>':'<div style="font-size:12px;color:'+SLATE+'">None.</div>';
     const teamCards=(g.teams||[]).map(t=>`<div style="border:1px solid ${BORDER};border-radius:10px;padding:14px;margin-bottom:10px">
       <div style="font-size:13px;font-weight:800;color:${NAVY}">${esc(t.team||'')} <span style="color:${SLATE};font-weight:600">· Leader: ${esc(t.leader||'')}</span></div>
       <div style="font-size:13px;color:${INK};line-height:1.6;margin-top:4px">${esc(t.read||'')}</div>
@@ -6169,16 +6242,17 @@ Notes for your analysis: Booked DCs versus the per-rep target and show-up rate a
       ${t.concerns&&t.concerns.length?`<div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#C0362C;margin-top:8px">Concerns</div>${list(t.concerns,INK)}`:''}
     </div>`).join('');
     const section=(title,color,inner)=>`<div style="margin-top:14px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:${color}">${title}</div>${inner}</div>`;
-    $('repOutput').innerHTML=`<div style="margin-top:10px">
+    const el=$('repNarrative'); if (el) el.innerHTML=`
+      <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:${NAVY};margin-bottom:8px">Written analysis</div>
       <div style="background:#F4F6FB;border-left:4px solid ${NAVY};border-radius:0 8px 8px 0;padding:12px 16px;font-size:13.5px;color:${INK};line-height:1.6">${esc(g.floorSummary||'')}</div>
       <div style="margin-top:14px">${teamCards}</div>
       ${section('Top performers','#0E9F6E',list(g.topPerformers,INK))}
       ${section('Watchlist','#C97000',list(g.watchlist,INK))}
       ${section('Recommendations','#1A2DB5',list(g.recommendations,INK))}
-      <div style="font-size:10.5px;color:${SLATE};margin-top:12px">AI synthesis of ${snap.monthName} data from the DC Dashboard, Attendance sheet and Coaching Tracker. Verify before acting.</div>
-    </div>`;
-    // plain text for copy
-    const P=[`SD OUTBOUND PERFORMANCE REPORT — ${snap.monthName}`,'',g.floorSummary||'',''];
+      <div style="font-size:10.5px;color:${SLATE};margin-top:12px">AI synthesis of ${snap.monthName} data from the DC Dashboard, Attendance sheet and Coaching Tracker. Verify before acting.</div>`;
+    const P=[`SD OUTBOUND PERFORMANCE REPORT - ${snap.monthName}`,''];
+    snap.teams.forEach(t=>P.push(`${t.name} (Leader ${t.tl}): ${t.totalDcs}/${t.target} DCs (${t.dcPct}%), projected ${t.projectedDcs}, show-up ${t.teamSu==null?'n/a':t.teamSu+'%'}, on-time ${t.teamOnTime==null?'n/a':t.teamOnTime+'%'}, attendance ${t.teamAtt==null?'n/a':t.teamAtt+'%'}, coaching ${t.coaching}`));
+    P.push('', g.floorSummary||'', '');
     (g.teams||[]).forEach(t=>{ P.push(`${(t.team||'').toUpperCase()} (Leader: ${t.leader||''})`); P.push(t.read||''); (t.standouts||[]).forEach(s=>P.push('  + '+s)); (t.concerns||[]).forEach(s=>P.push('  - '+s)); P.push(''); });
     P.push('TOP PERFORMERS'); (g.topPerformers||[]).forEach(x=>P.push('- '+x)); P.push('');
     P.push('WATCHLIST'); (g.watchlist||[]).forEach(x=>P.push('- '+x)); P.push('');
