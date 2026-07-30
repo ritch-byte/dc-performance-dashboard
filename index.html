@@ -1476,8 +1476,13 @@
     if (LN_MAP[targetLn] && !LN_MAP[alias]) LN_MAP[alias] = LN_MAP[targetLn];
   }
 
+  const _NAME_SUFFIX = { 'jr':1,'jr.':1,'sr':1,'sr.':1,'ii':1,'iii':1,'iv':1,'v':1 };
   function resolveAgent(rawName) {
-    const parts = rawName.trim().toLowerCase().split(/\s+/);
+    // Strip a trailing " - nickname" (e.g. "Glen Jerick San Jose - Glen") and drop
+    // generational suffixes (Jr./Sr./III) so the real surname is the last token.
+    const clean = String(rawName || '').trim().toLowerCase().replace(/\s+-\s+.*$/, '');
+    const parts = clean.split(/\s+/).filter(Boolean);
+    while (parts.length > 1 && _NAME_SUFFIX[parts[parts.length-1]]) parts.pop();
     if (!parts.length) return null;
     if (parts.length >= 3) {
       const tw = parts[parts.length-2] + ' ' + parts[parts.length-1];
