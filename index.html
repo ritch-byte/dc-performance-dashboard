@@ -5734,11 +5734,12 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
     return { label:'Formal Concern', color:'#8A1414' };
   }
   function scBandNextStep(label, M){
+    const isTL = ['Angelica Tanate','Jonathan Jabonete','Jumar Vere'].includes(M.sender);
     if (label==='On Track') return 'Keep your current cadence. If you want a stretch goal, aim to finish the month a few DCs above target.';
     if (label==='Ramping')  return 'You are still ramping, so your target is scaled for tenure. Focus on building consistent daily booked DCs and executing the reminder cadence.';
     if (label==='Watch'){ const f = (M.suRateRaw!=null && M.suRateRaw<0.8) ? 'tightening your post-booking reminders so more booked DCs actually show' : (M.paceGap<0 ? 'lifting daily booked DCs to close the pace gap' : 'holding your attendance and consistency'); return 'One focus for the coming week: ' + f + '.'; }
-    if (label==='Behind'){ const f=[]; if (M.paceGap<0) f.push('raise daily booked DCs to get back on pace'); if (M.suRateRaw!=null && M.suRateRaw<0.8) f.push('execute the full reminder cadence so more DCs show'); if (!f.length && M.attPct!=null && M.attPct<95) f.push('protect your attendance'); return 'Two focus areas: ' + (f.slice(0,2).join(', and ') || 'rebuild booked DC volume and show-up') + '. A coaching session with your TL or SME will be scheduled this week.'; }
-    return 'A structured coaching session will be set with your TL and SME to rebuild your numbers. Please note that a sustained shortfall may progress to formal performance management.';
+    if (label==='Behind'){ const f=[]; if (M.paceGap<0) f.push('raise daily booked DCs to get back on pace'); if (M.suRateRaw!=null && M.suRateRaw<0.8) f.push('execute the full reminder cadence so more DCs show'); if (!f.length && M.attPct!=null && M.attPct<95) f.push('protect your attendance'); const areas='Two focus areas: ' + (f.slice(0,2).join(', and ') || 'rebuild booked DC volume and show-up') + '. '; return areas + (isTL ? 'I will set up a coaching session with you this week.' : 'A coaching session with your TL or SME will be scheduled this week.'); }
+    return (isTL ? 'I will set a structured coaching session with you, together with your SME, to rebuild your numbers.' : 'A structured coaching session will be set with your TL and SME to rebuild your numbers.') + ' Please note that a sustained shortfall may progress to formal performance management.';
   }
   function scStrength(M){
     const p=M.prior;
