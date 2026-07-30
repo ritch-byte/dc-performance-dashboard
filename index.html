@@ -1311,8 +1311,7 @@
         </div>
         <div style="display:grid;grid-template-columns:minmax(300px,380px) 1fr;gap:20px;align-items:start">
           <div>
-            <button id="scGenBtn" onclick="scGenerate()" style="width:100%;background:#1A2DB5;color:#fff;border:none;border-radius:8px;padding:12px 20px;font-size:14px;font-weight:700;cursor:pointer;letter-spacing:.3px;margin-bottom:8px">Generate &amp; log snapshot</button>
-            <button id="scAiBtn" onclick="scAnalyze()" style="width:100%;background:#fff;color:#1A2DB5;border:1px solid #1A2DB5;border-radius:8px;padding:10px 20px;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:8px">Analyze with AI ✨</button>
+            <button id="scGenBtn" onclick="scGenerate()" style="width:100%;background:#1A2DB5;color:#fff;border:none;border-radius:8px;padding:12px 20px;font-size:14px;font-weight:700;cursor:pointer;letter-spacing:.3px;margin-bottom:8px">Generate scorecard ✨</button>
             <div id="scStatus" style="font-size:11px;min-height:14px;color:var(--slate);margin-bottom:12px"></div>
             <div id="scCard"></div>
             <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px;margin-top:16px">
@@ -1325,7 +1324,7 @@
             <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap">
               <div id="scSubject" style="font-size:12px;color:var(--slate);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0"></div>
               <div style="display:flex;gap:6px;flex-shrink:0">
-                <button onclick="scCopySubject()" class="cl-chip">Copy subject</button>
+                <button id="scCopySubjBtn" onclick="scCopySubject()" class="cl-chip">Copy subject</button>
                 <button id="scCopyBtn" onclick="scCopyEmail()" style="background:#1A2DB5;color:#fff;border:none;border-radius:7px;padding:7px 16px;font-size:12px;font-weight:700;cursor:pointer">Copy email</button>
               </div>
             </div>
@@ -5660,7 +5659,7 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
   // write scorecard events into the coaching Logs sheet before the Apps Script is updated.
   function scPostAck(rec){ if (!SC_ACK_POST_URL || !SC_ACK_CSV_URL) return; try { fetch(SC_ACK_POST_URL, { method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify(rec) }); } catch (e) {} }
 
-  let _scModel = null, _scAI = {}, _scMembers = [], _scSelId = '';
+  let _scModel = null, _scAI = {}, _scMembers = [], _scSelId = '', _scGenKey = '';
   const SC_TL_OPTS = [{v:'',t:'All teams'},{v:'groupa',t:'Ritch Joy Manipol — RV'},{v:'groupb',t:'Jonathan Jabonete — Diathan'},{v:'groupc',t:'Angelica Tanate — MeloAce'},{v:'groupd',t:'Jumar Vere — JumHon'}];
 
   function scLoad(k){ try { return JSON.parse(localStorage.getItem(k) || '[]'); } catch (e) { return []; } }
@@ -5831,21 +5830,43 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
     scPreview();
   }
 
-  function scRender(M, logged){
+  function scSetCopyEnabled(on){
+    ['scCopyBtn','scCopySubjBtn'].forEach(function(id){ const b=$(id); if (b){ b.disabled=!on; b.style.opacity=on?'1':'.45'; b.style.pointerEvents=on?'auto':'none'; } });
+  }
+  function scRender(M, generated){
     _scModel=M;
     scRenderCard(M);
     const built=scBuildEmail(M);
-    window._scEmailHtml=built.html; window._scEmailPlain=built.plain; window._scEmailSubject=built.subject;
     if ($('scSubject')) $('scSubject').textContent=built.subject;
     if ($('scCcLine')) $('scCcLine').innerHTML=built.ccLine;
-    if ($('scEmail')) $('scEmail').innerHTML=built.html;
+    const el=$('scEmail'); if (!el) return;
+    if (generated){
+      window._scEmailHtml=built.html; window._scEmailPlain=built.plain; window._scEmailSubject=built.subject;
+      el.innerHTML=built.html;
+      scSetCopyEnabled(true);
+    } else {
+      // Gated: blur the draft and require a click so the AI-reviewed version is always the one sent.
+      window._scEmailHtml=''; window._scEmailPlain=''; window._scEmailSubject='';
+      el.innerHTML=`<div style="position:relative">
+        <div style="filter:blur(6px);pointer-events:none;user-select:none;max-height:72vh;overflow:hidden">${built.html}</div>
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:20px">
+          <div style="text-align:center;background:#fff;border:1px solid var(--border);border-radius:14px;padding:28px 30px;box-shadow:0 8px 34px rgba(16,31,66,.18);max-width:320px">
+            <div style="font-size:15px;font-weight:800;color:#0D1A6E;margin-bottom:6px">Review not generated yet</div>
+            <div style="font-size:12.5px;color:#5B6678;line-height:1.5;margin-bottom:16px">Click below to write the AI review and reveal the email. This also logs the snapshot.</div>
+            <button onclick="scGenerate()" style="background:#1A2DB5;color:#fff;border:none;border-radius:9px;padding:12px 26px;font-size:14px;font-weight:700;cursor:pointer">Generate scorecard ✨</button>
+          </div>
+        </div>
+      </div>`;
+      scSetCopyEnabled(false);
+    }
   }
   function scPreview(){
     const id=_scSelId, ym=scYM();
     if (!id||!ym) return;
     const M=scCompute(id,ym,scOpts()); if (!M) return;
     const sent=new Date(); M.sent=sent; M.deadline=scDeadline(sent);
-    scRender(M,false);
+    const generated = _scGenKey===(id+'|'+ym) && !!_scAI[id+'|'+ym];
+    scRender(M, generated);
   }
   async function scGenerate(){
     const id=_scSelId, ym=scYM();
@@ -5857,8 +5878,10 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
     const btn=$('scGenBtn'), st=$('scStatus');
     if (btn){ btn.disabled=true; btn.textContent='Generating…'; }
     if (st){ st.style.color='#5B6678'; st.textContent='Writing the review with AI…'; }
-    const ok=await scFetchAI(id, ym, M);   // auto-run AI so the review is baked into the email, no separate click
-    if (btn){ btn.disabled=false; btn.textContent='Generate & log snapshot'; }
+    if ($('scEmail')) $('scEmail').innerHTML='<div style="padding:70px 20px;text-align:center;color:#5B6678;font-size:13px">Writing the AI review and building the email…</div>';
+    const ok=await scFetchAI(id, ym, M);   // auto-run AI so the review is baked into the email
+    _scGenKey = id+'|'+ym;
+    if (btn){ btn.disabled=false; btn.textContent='Generate scorecard ✨'; }
     const snapDate=M.asOf, today=localIso(sent);
     scPersistSnapshot({ sdr_id:id, snapshot_date:snapDate, iso_week:scIsoWeek(snapDate), booked_dcs:M.booked, dcs_scheduled:M.scheduled, dcs_showed:M.showed, attendance_pct:M.attPct, coaching_sessions:M.sessions, composite_score:M.composite });
     scPersistAck({ sdr_id:id, sdr_name:M.name, team:M.team, teamId:M.teamId, month:ym, sent_day:today, sent_at:sent.toISOString(), deadline_at:M.deadline.adj.toISOString(), acknowledged_at:null, ack_method:null, deemed_understood:false });
