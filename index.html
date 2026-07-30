@@ -745,7 +745,7 @@
     <!-- ── Reports Section ── -->
     <div id="reportsSection" style="display:none;">
       <div class="content-header">
-        <div class="page-title">Individual Reports — Weekly Breakdown</div>
+        <div class="page-title">Performance Reports</div>
         <div class="ch-right">
           <select id="reportMonthSelect" class="week-select" onchange="renderReports()"></select>
           <button class="btn-export" onclick="downloadShowupCSV()">
@@ -2105,64 +2105,7 @@
     if (!_coachLogsLoaded) loadCoachingLogs(false);
     const rs = $('repScope');
     if (rs && !rs.options.length) rs.innerHTML = '<option value="">All teams (whole floor)</option>' + TEAMS.filter(t=>t.id!=='poc').map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('');
-
-    if (!weeks.length) {
-      body.innerHTML = '<p style="padding:20px;color:var(--gray)">No data for this period.</p>';
-      return;
-    }
-
-    for (const team of TEAMS) {
-      // Pre-compute all week counts per member (visible only)
-      const visible = team.members.filter(m => !m.hidden);
-      const weekData = {};
-      for (const m of visible)
-        weekData[m.id] = weeks.map(mon => getWeekCount(m.id, mon));
-
-      const sorted = [...visible].sort((a,b) =>
-        weekData[b.id].reduce((s,n)=>s+n,0) - weekData[a.id].reduce((s,n)=>s+n,0)
-      );
-
-      const headerCols = weeks.map((mon, i) =>
-        `<th>WK ${i+1}<br><span style="font-size:9px;font-weight:400;opacity:0.75;text-transform:none;letter-spacing:0">${getWeekDateRange(mon)}</span></th>`
-      ).join('');
-
-      let rows = '';
-      for (const m of sorted) {
-        const cnts = weekData[m.id];
-        const total = cnts.reduce((s,n)=>s+n,0);
-        const trend = getTrend(cnts);
-        const cells = cnts.map(n => {
-          const cls = n >= WEEKLY_TARGET ? 'cell-green' : n >= 5 ? 'cell-orange' : n > 0 ? 'cell-red' : 'cell-zero';
-          return `<td class="${cls}">${n > 0 ? n : '–'}</td>`;
-        }).join('');
-        rows += `<tr>
-          <td class="col-name">${esc(m.display)}</td>
-          ${cells}
-          <td style="font-weight:800;color:var(--navy);font-size:15px">${total}</td>
-          <td class="trend-${trend.dir}">${trend.icon}</td>
-        </tr>`;
-      }
-
-      const sec = document.createElement('div');
-      sec.className = 'team-section';
-      sec.innerHTML = `
-        <div class="team-header">
-          <div class="team-label">
-            <div class="team-accent" style="background:${esc(team.color)}"></div>
-            <div class="team-name">${esc(team.name)}</div>
-          </div>
-        </div>
-        <div class="reports-wrap">
-          <table class="reports-table">
-            <thead><tr>
-              <th class="col-name">Member</th>${headerCols}
-              <th>Total</th><th>Trend</th>
-            </tr></thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>`;
-      body.appendChild(sec);
-    }
+    // Weekly breakdown tables removed — the AI Performance Report above is the Reports view now.
   }
 
   let _teamView = 'monthly', _teamDate = '';
@@ -6166,6 +6109,23 @@ Write in a natural human voice (not robotic, no meta-commentary about being an A
     return s;
   }
 
+  // Tolerant JSON parse — repairs a response truncated by the token limit by
+  // closing any open string/brackets so a near-complete report still renders.
+  function scSafeJson(s){
+    try { return JSON.parse(s); } catch (e) {}
+    const i=s.indexOf('{'); if (i>0) s=s.slice(i);
+    let inStr=false, esc=false; const stack=[];
+    for (let k=0;k<s.length;k++){ const c=s[k];
+      if (inStr){ if (esc) esc=false; else if (c==='\\') esc=true; else if (c==='"') inStr=false; continue; }
+      if (c==='"') inStr=true; else if (c==='{') stack.push('}'); else if (c==='[') stack.push(']'); else if (c==='}'||c===']') stack.pop();
+    }
+    let fixed = s + (inStr?'"':'');
+    fixed = fixed.replace(/,\s*$/,'');
+    while (stack.length) fixed += stack.pop();
+    try { return JSON.parse(fixed); } catch (e) {}
+    return null;
+  }
+
   async function generateAiReport(){
     const ym=$('reportMonthSelect').value||localIso(new Date()).slice(0,7);
     const scope=$('repScope')?$('repScope').value:'';
@@ -6178,7 +6138,7 @@ Write in a natural human voice (not robotic, no meta-commentary about being an A
     const prompt=`You are a sales operations analyst for Outsource Accelerator's SD Outbound floor. Below is month-to-date performance data. "DC" = Discovery Call.
 
 ${reportDataText(snap)}
-Notes for your analysis: Booked DCs versus the per-rep target and show-up rate are the primary performance signals. Attendance percent counts late arrivals as present, so judge punctuality by the on-time figure. Coaching sessions logged reflect how engaged each team leader is with their reps. Be candid and specific, name reps and leaders. Do NOT use em dashes. Return ONLY valid JSON:
+Notes for your analysis: Booked DCs versus the per-rep target and show-up rate are the primary performance signals. Attendance percent counts late arrivals as present, so judge punctuality by the on-time figure. Coaching sessions logged reflect how engaged each team leader is with their reps. Be candid and specific, name reps and leaders. Keep it concise: at most 2 standouts and 2 concerns per team, and at most 5 items each in topPerformers, watchlist and recommendations. Do NOT use em dashes. Return ONLY valid JSON (no trailing commas):
 {
  "floorSummary":"3 to 5 sentences: overall floor read, which team is leading, where the biggest gaps are",
  "teams":[{"team":"team name","leader":"leader name","read":"2 to 3 sentences on the team AND how its leader is performing (results plus coaching engagement)","standouts":["Rep: one line reason"],"concerns":["Rep: one line reason"]}],
@@ -6187,11 +6147,11 @@ Notes for your analysis: Booked DCs versus the per-rep target and show-up rate a
  "recommendations":["specific action for leaders or ops"]
 }`;
     try {
-      const res=await fetch(AI_COACH_URL,{ method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify({ model:'claude-haiku-4-5-20251001', max_tokens:2200, messages:[{role:'user',content:prompt}] }) });
+      const res=await fetch(AI_COACH_URL,{ method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify({ model:'claude-haiku-4-5-20251001', max_tokens:4096, messages:[{role:'user',content:prompt}] }) });
       const data=await res.json();
       if (!res.ok) throw new Error(data.error?.message||data.error||('API '+res.status));
-      const m=clAiText(data).trim().match(/\{[\s\S]*\}/); if (!m) throw new Error('Could not parse AI response.');
-      const g=JSON.parse(m[0]);
+      const txt=clAiText(data).trim(); const m=txt.match(/\{[\s\S]*\}/);
+      const g=scSafeJson(m?m[0]:txt); if (!g) throw new Error('Could not parse AI response, try a single team.');
       reportRender(g, snap);
       if (st){ st.style.color='#0A7A0A'; st.textContent='✓ Report generated for '+snap.monthName+(scope?' · '+(snap.teams[0]||{}).name:' · whole floor')+'.'; }
       if ($('repCopyBtn')) $('repCopyBtn').style.display='';
