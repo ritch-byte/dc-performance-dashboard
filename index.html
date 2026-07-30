@@ -5670,6 +5670,7 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
     return out;
   }
   function scIsoWeek(iso){ const [y,m,d]=iso.split('-').map(Number); const dt=new Date(Date.UTC(y,m-1,d)); const day=(dt.getUTCDay()+6)%7; dt.setUTCDate(dt.getUTCDate()-day+3); const f=new Date(Date.UTC(dt.getUTCFullYear(),0,4)); const wk=1+Math.round(((dt-f)/86400000 - 3 + ((f.getUTCDay()+6)%7))/7); return dt.getUTCFullYear()+'-W'+String(wk).padStart(2,'0'); }
+  function scWeekOfMonth(iso){ if(!iso) return 'W01'; const [y,m,d]=iso.split('-').map(Number); const dt=new Date(y,m-1,d); const dow=new Date(y,m-1,1).getDay(); const daysToMon = dow===0?1:dow===1?0:8-dow; const firstMon=new Date(y,m-1,1+daysToMon); if(dt<firstMon) return 'W01'; return 'W'+String(Math.floor((dt-firstMon)/86400000/7)+1).padStart(2,'0'); }
   function scFindMember(id){ for (const t of TEAMS){ const m=t.members.find(x=>x.id===id && !x.hidden); if (m) return {m,team:t}; } return null; }
   function scRepLogs(display){ const nm=(display||'').trim().toLowerCase(); return _coachLogs.filter(l=>(l.rep||'').trim().toLowerCase()===nm).sort((a,b)=>(b.timestamp||b.date||'').localeCompare(a.timestamp||a.date||'')); }
 
@@ -5895,7 +5896,7 @@ Write a concise, honest review a supervisor can paste into a coaching email, in 
     const ccNames=[staff.tl,staff.sme].filter(Boolean).filter(n=>n!==M.sender);
     const senderTitle = ['Angelica Tanate','Jonathan Jabonete','Jumar Vere'].includes(M.sender) ? 'Team Leader, SD Outbound' : 'Operations Supervisor, SD Outbound';
     const ccLine=`<b>To:</b> ${esc(M.name)} &nbsp;&nbsp; <b>Cc:</b> ${ccNames.map(esc).join(', ')||'—'}`;
-    const subject=`[SDR SCORECARD] ${monthLbl} · ${M.name} · ${M.composite}/100 ${band.label}`;
+    const subject=`[SDR SCORECARD] ${monthLbl} · ${scWeekOfMonth(M.asOf)} · ${M.name} · ${M.composite}/100 ${band.label}`;
     const nowStamp=M.sent.toLocaleString('en-PH',{month:'long',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',timeZone:'Asia/Manila'})+' PHT';
     const deadlineLong=scFmtPHT(M.deadline.adj);
     const rampLine=M.ramping?`<div style="font-size:12.5px;color:${SLATE};margin-top:6px">Your target has been adjusted for tenure${M.tenure?' ('+esc(M.tenure)+' weeks)':''}, so this reflects a scaled goal of ${M.target} DCs.</div>`:'';
