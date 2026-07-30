@@ -5872,13 +5872,13 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
 NAME: ${M.name} (team ${M.team}), verdict ${scBand(M.composite,M.ramping).label}
 Booked DCs: ${M.booked} of ${M.target} (steady pace by now is ${M.expectedMtd}, so ${M.paceGap>=0?'ahead by '+M.paceGap:'behind by '+Math.abs(M.paceGap)}), ${M.remaining} working days left.
 Show-up: ${M.scheduled>0?Math.round(M.suRateRaw*100)+'% ('+M.showed+' of '+M.scheduled+' scheduled showed)':'no scheduled DCs yet'}.
-Attendance MTD: ${M.attPct!=null?Math.round(M.attPct)+'%':'not available'}${ab?`, made up of ${ab.present} present, ${ab.late} late, ${ab.absent} absent, ${ab.undertime} undertime across ${ab.scheduled} logged days`:''}.
+Attendance MTD: ${M.attPct!=null?Math.round(M.attPct)+'%':'not available'}${ab?`, made up of ${ab.present} present, ${ab.late} late, ${ab.absent} absent, ${ab.undertime} undertime across ${ab.scheduled} logged days. On-time (present only, not late): ${Math.round(ab.present/ab.scheduled*100)}%`:''}.
 Trajectory: ${wowTxt}.
 Coaching this month: ${M.sessions} session(s)${M.topics.length?', topics: '+M.topics.join(', '):''}.
 Recent coaching notes (newest first):
 ${notes}
 
-Write in a natural human voice (not robotic, no meta-commentary about being an AI). Attendance is a baseline expectation, NOT an achievement, so do not lead with it or praise it as a win. Always call them "DCs" or "Discovery Calls", never "calls". Do NOT use em dashes. Return ONLY valid JSON with three fields:
+Write in a natural human voice (not robotic, no meta-commentary about being an AI). Attendance is a baseline expectation, NOT an achievement, so do not lead with it or praise it as a win. CRITICAL: the attendance percent counts late arrivals as present, so it overstates reliability. Use the on-time (present only) figure to judge punctuality. If late days are 25% or more of logged days, or lates are as many as or more than the present days, then the rep is NOT showing up consistently, do NOT say they are, and call out punctuality (lateness) as a concern instead. Always call them "DCs" or "Discovery Calls", never "calls". Do NOT use em dashes. Return ONLY valid JSON with three fields:
 {"headline":"2 to 3 sentences that OPEN the email: state the verdict and where they stand as of ${asOfLong}, lead with the booked DC pace (the real headline), note the week-over-week direction, and name one genuine bright spot and the one main thing to fix", "summary":"2 to 3 sentence deeper read", "suggestions":["specific action","specific action","specific action"]}`;
     try {
       const res=await fetch(AI_COACH_URL,{ method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify({ model:'claude-haiku-4-5-20251001', max_tokens:700, messages:[{role:'user',content:prompt}] }) });
@@ -5952,7 +5952,7 @@ Write in a natural human voice (not robotic, no meta-commentary about being an A
       if (M.nc>0 && M.suRateAdj!=null) line+=` <b>Adjusted:</b> ${Math.round(M.suRateAdj*100)}% excluding ${M.nc} SP-side cancellation${M.nc===1?'':'s'}${M.ncReason?' ('+esc(M.ncReason)+')':''}.`;
       cards.push(card('Show-up', line));
     }
-    if (M.attPct!=null){ const ab=M.attBreak; const abTxt = ab ? ` (${ab.present} present, ${ab.late} late, ${ab.absent} absent${ab.undertime?', '+ab.undertime+' undertime':''} of ${ab.scheduled} logged days)` : ''; cards.push(card('Attendance', `<b>Attendance MTD:</b> ${Math.round(M.attPct)}%${abTxt}.`)); }
+    if (M.attPct!=null){ const ab=M.attBreak; const abTxt = ab ? ` (${ab.present} present, ${ab.late} late, ${ab.absent} absent${ab.undertime?', '+ab.undertime+' undertime':''} of ${ab.scheduled} logged days)` : ''; const onTime = (ab && ab.late>0) ? ` <b>On-time (not late): ${Math.round(ab.present/ab.scheduled*100)}%</b>.` : ''; cards.push(card('Attendance', `<b>Attendance MTD:</b> ${Math.round(M.attPct)}%${abTxt}.${onTime}`)); }
 
     const aiHtml = ai ? `<div style="padding:14px 26px 4px"><div style="border-top:1px solid ${LINE};padding-top:12px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:${B.mag}">Performance review</div><div style="font-size:13px;line-height:1.6;color:${INK};margin-top:4px">${esc(ai.summary)}</div>${ai.suggestions&&ai.suggestions.length?`<ul style="margin:8px 0 0;padding-left:18px">${ai.suggestions.map(s=>`<li style="font-size:13px;line-height:1.55;color:${INK};margin-bottom:4px">${esc(s)}</li>`).join('')}</ul>`:''}</div></div>` : '';
     const html=clDeDash(`<div style="font-family:${SC_FONT};background:#fff;max-width:640px;margin:0 auto;border:1px solid ${LINE};border-radius:10px;overflow:hidden">
@@ -5986,7 +5986,7 @@ Write in a natural human voice (not robotic, no meta-commentary about being an A
     P.push(`Booked: ${M.booked} of ${M.target}. At ${DAILY_TARGET} DCs/day you would be around ${M.expectedMtd} by now, so you are ${M.paceGap>=0?'ahead of that by '+M.paceGap:Math.abs(M.paceGap)+' below that'}.`);
     if (M.perDayNeeded!=null) P.push(M.stretch ? `Reaching the full ${M.target} would need about ${M.perDayNeeded}/day over the ${M.remaining} day(s) left, a stretch this late. Finish as strong as you can; pace resets next month.` : `To finish at target, aim for ${M.perDayNeeded} booked DC(s) per working day over the ${M.remaining} day(s) left.`);
     if (M.scheduled>0){ let l=`SHOW-UP: ${Math.round(M.suRateRaw*100)}% (${M.showed} showed).`; if (M.nc>0 && M.suRateAdj!=null) l+=` Adjusted ${Math.round(M.suRateAdj*100)}% excluding ${M.nc} SP-side cancellation(s)${M.ncReason?' ('+M.ncReason+')':''}.`; P.push(''); P.push(l); }
-    if (M.attPct!=null){ const ab=M.attBreak; P.push(''); P.push(`ATTENDANCE MTD: ${Math.round(M.attPct)}%${ab?` (${ab.present} present, ${ab.late} late, ${ab.absent} absent${ab.undertime?', '+ab.undertime+' undertime':''} of ${ab.scheduled} logged days)`:''}.`); }
+    if (M.attPct!=null){ const ab=M.attBreak; P.push(''); P.push(`ATTENDANCE MTD: ${Math.round(M.attPct)}%${ab?` (${ab.present} present, ${ab.late} late, ${ab.absent} absent${ab.undertime?', '+ab.undertime+' undertime':''} of ${ab.scheduled} logged days)`:''}.${(ab&&ab.late>0)?` On-time (not late): ${Math.round(ab.present/ab.scheduled*100)}%.`:''}`); }
     P.push(''); P.push('NEXT STEP'); P.push(nextStep);
     if (ai){ P.push(''); P.push('PERFORMANCE REVIEW'); P.push(ai.summary); (ai.suggestions||[]).forEach(s=>P.push('- '+s)); }
     P.push(''); P.push('ACKNOWLEDGEMENT REQUIRED WITHIN 48 HOURS');
