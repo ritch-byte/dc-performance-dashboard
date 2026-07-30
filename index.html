@@ -5650,7 +5650,7 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
   // Writes go to the same Apps Script as the Coaching Tracker (it routes record:'scorecard' to a
   // "Scorecards" tab). Reads come from that tab published as CSV (paste the link into SC_ACK_CSV_URL).
   const SC_ACK_POST_URL = (typeof COACH_LOG_POST_URL !== 'undefined') ? COACH_LOG_POST_URL : '';
-  const SC_ACK_CSV_URL  = '';   // <- published-to-web CSV of the "Scorecards" tab
+  const SC_ACK_CSV_URL  = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSr9FXCEpsr01V3nxJhB4UZIH2AJqteMzsJ3YoNQO_r33FzI8XE53Xs0D1k21RI2AAfci5y79H89HBv/pub?gid=1091801271&single=true&output=csv';   // published-to-web CSV of the "Scorecards" tab
   // Only posts once the shared Scorecards sheet is connected (SC_ACK_CSV_URL set), so we never
   // write scorecard events into the coaching Logs sheet before the Apps Script is updated.
   function scPostAck(rec){ if (!SC_ACK_POST_URL || !SC_ACK_CSV_URL) return; try { fetch(SC_ACK_POST_URL, { method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify(rec) }); } catch (e) {} }
