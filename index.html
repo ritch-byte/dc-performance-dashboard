@@ -3338,7 +3338,7 @@
   }
 
   // ── ATTENDANCE ──
-  const ATTENDANCE_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTuEQK7B71W5APS55L64RZE1OmtTkItTY1suAOqAoAcUOnWF1WjOc3IT6W0PHsT7ekKD0-RMgHN9RAu/pub?gid=0&single=true&output=csv';
+  const ATTENDANCE_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS7dxiU_QuiUUcseHRZR9gVIFE55TnroOfzq7TfzxYbFN3J1pi6SaOPFlyRQayTuERcoBW0ZcGH6aiV/pub?output=csv';
   let rawAttRows = [], attView = 'daily', _attLoaded = false, _attLoading = false;
 
   function parseAttendanceCSV(text) {
@@ -3350,13 +3350,13 @@
       return i >= 0 ? i : null;
     };
     const dIdx = col('date') ?? 2;
-    const nIdx = col('sdr name','agent name','name') ?? 4;
+    const nIdx = col('sdr name','agent name','sdr','name') ?? 4;
     const sIdx = col('attendance status','status') ?? 6;
-    const cIdx = col('attendance commitment','commitment') ?? 7;
+    const cIdx = col('attendance commitment','commitment');
     const moIdx  = col('month') ?? 0;
-    const wkIdx  = col('week') ?? 1;
+    const wkIdx  = col('week');                    // may be absent (newer sheet has no Week column)
     const tmIdx  = col('team','squad') ?? 3;
-    const schIdx = col('schedule','shift') ?? 5;
+    const schIdx = col('schedule','shift');        // may be absent (newer sheet has no Schedule column)
     return lines.slice(1).map(line => {
       const c = splitLine(line);
       return {
@@ -5513,18 +5513,27 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
       if (!_attLoading) loadAttendanceData();
       return;
     }
+    // Per-row Month/Week. If the sheet has no Week column, derive the week from the date.
+    const fmtMon = mon => { const [y,m,d] = mon.split('-').map(Number); return new Date(y,m-1,d).toLocaleDateString('en-US',{month:'short',day:'numeric'}); };
+    const rowMeta = r => {
+      const iso = normalizeDate(r.rawDate);
+      let month = r.month || (iso ? new Date(iso+'T00:00:00').toLocaleDateString('en-US',{month:'long'}) : '');
+      let week = r.week;
+      if (!week && iso) { try { week = 'Week of ' + fmtMon(getMondayIso(iso)); } catch (e) { week = ''; } }
+      return { key: month + ' · ' + (week || ''), month, week: week || '' };
+    };
     // Ordered Month/Week combos (first-seen = chronological order in the sheet)
     const weeks = [], seen = new Set();
     for (const r of rawAttRows) {
-      const key = (r.month||'') + ' · ' + (r.week||'');
-      if (r.week && !seen.has(key)) { seen.add(key); weeks.push({ key, month:r.month, week:r.week }); }
+      const meta = rowMeta(r);
+      if (meta.week && !seen.has(meta.key)) { seen.add(meta.key); weeks.push(meta); }
     }
     if (!weeks.length) { $('scheduleBody').innerHTML = `<div style="padding:40px;text-align:center;color:${SLATE}">No schedule data in the sheet yet.</div>`; return; }
     if (!_schedWeekKey || !weeks.some(w => w.key === _schedWeekKey)) _schedWeekKey = weeks[weeks.length-1].key;
     const cur = weeks.find(w => w.key === _schedWeekKey);
-    $('schedWeekLabel').textContent = cur.month + ' · ' + cur.week;
+    $('schedWeekLabel').textContent = cur.key;
 
-    const wkRows = rawAttRows.filter(r => (r.month||'') + ' · ' + (r.week||'') === _schedWeekKey);
+    const wkRows = rawAttRows.filter(r => rowMeta(r).key === _schedWeekKey);
     const dateMap = {};
     wkRows.forEach(r => { if (r.rawDate) dateMap[r.rawDate] = normalizeDate(r.rawDate) || r.rawDate; });
     const dates = Object.keys(dateMap).sort((a,b) => dateMap[a] < dateMap[b] ? -1 : dateMap[a] > dateMap[b] ? 1 : 0);
@@ -5554,13 +5563,12 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
     const cell = (info) => {
       if (!info) return `<td style="padding:6px 8px;border:1px solid ${BORDER};text-align:center;color:#C7D0DD">·</td>`;
       const sh = info.schedule || '', st = (info.status||'').toLowerCase(), style = schedStatusStyle(info.status);
-      let label = sh;
-      if (sh.toUpperCase()==='RD' || st.includes('rest')) label = 'RD';
-      else if (!sh && st.includes('off')) label = 'OFF';
-      else if (!sh) label = '—';
+      let label, sub = '';
+      if (sh) { label = (sh.toUpperCase()==='RD' || st.includes('rest')) ? 'RD' : sh; sub = info.status || ''; }
+      else    { label = info.status || '—'; }   // no Schedule column -> show the attendance status
       return `<td style="padding:6px 8px;border:1px solid ${BORDER};text-align:center;background:${style.bg}">
         <div style="font-size:11px;font-weight:600;color:${style.fg};white-space:nowrap">${esc(label)}</div>
-        ${info.status ? `<div style="font-size:9.5px;color:${style.fg};opacity:.85;margin-top:1px">${esc(info.status)}</div>` : ''}
+        ${sub ? `<div style="font-size:9.5px;color:${style.fg};opacity:.85;margin-top:1px">${esc(sub)}</div>` : ''}
       </td>`;
     };
 
