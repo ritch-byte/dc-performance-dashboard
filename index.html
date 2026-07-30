@@ -5651,7 +5651,9 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
   // "Scorecards" tab). Reads come from that tab published as CSV (paste the link into SC_ACK_CSV_URL).
   const SC_ACK_POST_URL = (typeof COACH_LOG_POST_URL !== 'undefined') ? COACH_LOG_POST_URL : '';
   const SC_ACK_CSV_URL  = '';   // <- published-to-web CSV of the "Scorecards" tab
-  function scPostAck(rec){ if (!SC_ACK_POST_URL) return; try { fetch(SC_ACK_POST_URL, { method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify(rec) }); } catch (e) {} }
+  // Only posts once the shared Scorecards sheet is connected (SC_ACK_CSV_URL set), so we never
+  // write scorecard events into the coaching Logs sheet before the Apps Script is updated.
+  function scPostAck(rec){ if (!SC_ACK_POST_URL || !SC_ACK_CSV_URL) return; try { fetch(SC_ACK_POST_URL, { method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify(rec) }); } catch (e) {} }
 
   let _scModel = null, _scAI = {}, _scMembers = [], _scSelId = '';
   const SC_TL_OPTS = [{v:'',t:'All teams'},{v:'groupa',t:'Ritch Joy Manipol — RV'},{v:'groupb',t:'Jonathan Jabonete — Diathan'},{v:'groupc',t:'Angelica Tanate — MeloAce'},{v:'groupd',t:'Jumar Vere — JumHon'}];
