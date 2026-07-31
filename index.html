@@ -6208,8 +6208,8 @@ Notes for your analysis: Booked DCs versus the per-rep target and show-up rate a
     return `
      <div style="margin-top:12px;display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px">${tlCards}</div>
      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px">
-       <div style="background:#fff;border:1px solid ${BORDER};border-radius:12px;padding:14px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:${NAVY};margin-bottom:8px">Booked DCs: current · projected · target</div><canvas id="repChartDcs" height="150"></canvas></div>
-       <div style="background:#fff;border:1px solid ${BORDER};border-radius:12px;padding:14px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:${NAVY};margin-bottom:8px">Show-up · On-time · Attendance (%)</div><canvas id="repChartRates" height="150"></canvas></div>
+       <div style="background:#fff;border:1px solid ${BORDER};border-radius:12px;padding:14px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:${NAVY};margin-bottom:8px">Booked DCs: current · projected · target</div><div style="height:220px;position:relative"><canvas id="repChartDcs"></canvas></div></div>
+       <div style="background:#fff;border:1px solid ${BORDER};border-radius:12px;padding:14px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:${NAVY};margin-bottom:8px">Show-up · On-time · Attendance (%)</div><div style="height:220px;position:relative"><canvas id="repChartRates"></canvas></div></div>
      </div>
      <div style="background:#fff;border:1px solid ${BORDER};border-radius:12px;overflow:hidden;margin-top:14px">
        <div style="padding:10px 14px;font-size:12px;font-weight:800;color:${NAVY};background:#F4F6FB">Outlier monitoring — reps below half the expected pace, and whether they are being coached</div>
