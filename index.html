@@ -3898,6 +3898,54 @@
   // AI proxy for coaching generation/insights. Routed through the SAME Google Apps Script
   // endpoint as the tracker (no Netlify) — the script relays any payload with `messages` to Claude.
   const AI_COACH_URL = COACH_LOG_POST_URL;
+
+  // Single entry point for every AI call. The /exec endpoint redirects to
+  // script.googleusercontent.com, which intermittently answers 404 with an HTML error page
+  // instead of the relay's JSON (measured at roughly 3 calls in 10, independent of payload
+  // size, and occasionally it just hangs). Calling res.json() on that HTML throws
+  // "Unexpected token '<'" and throws away whatever the user typed, so transient failures are
+  // retried here and only a genuine outage is surfaced.
+  async function clAiRelay(payload, maxTries) {
+    const tries = maxTries || 4;
+    let lastReal = null;
+    for (let attempt = 1; attempt <= tries; attempt++) {
+      let transient = false;
+      try {
+        const ctl = new AbortController();
+        const timer = setTimeout(() => ctl.abort(), 60000);
+        let res, text;
+        try {
+          res = await fetch(AI_COACH_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(payload),
+            signal: ctl.signal
+          });
+          text = await res.text();
+        } finally { clearTimeout(timer); }
+        // An HTML body (or an empty one) is the Apps Script redirect failing, never a real answer.
+        if (!text || /^\s*</.test(text)) { transient = true; throw new Error('relay returned a non-JSON page'); }
+        let data;
+        try { data = JSON.parse(text); }
+        catch (e) { transient = true; throw new Error('relay returned malformed JSON'); }
+        if (!res.ok) {
+          const msg = (data.error && (data.error.message || data.error)) || ('API ' + res.status);
+          if (res.status === 429 || res.status >= 500) { transient = true; throw new Error(msg); }
+          throw new Error(msg);   // a real API error (bad request, auth) — do not retry
+        }
+        return data;
+      } catch (err) {
+        // fetch() rejects with TypeError on network failure and AbortError on our timeout.
+        if (err.name === 'AbortError' || err.name === 'TypeError') transient = true;
+        if (!transient) throw err;
+        lastReal = err;
+        if (attempt === tries) break;
+        await new Promise(r => setTimeout(r, 700 * attempt));
+      }
+    }
+    throw new Error('The AI service did not respond after ' + tries + ' attempts (' + ((lastReal && lastReal.message) || 'unknown') + '). Your input is still here, click Generate to try again.');
+  }
+
   let _coachLogs = [], _coachLogsLoaded = false, _trackCellMap = {};
   const _loggedThisSession = new Set();
 
@@ -4024,12 +4072,7 @@ Base it strictly on the notes. If there's little data, say so plainly rather tha
 COACHING NOTES (oldest to newest):
 ${notes}`;
     try {
-      const res = await fetch(AI_COACH_URL, {
-        method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 700, messages: [{ role: 'user', content: prompt }] })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error?.message || data.error || ('API ' + res.status));
+      const data = await clAiRelay({ model: 'claude-haiku-4-5-20251001', max_tokens: 700, messages: [{ role: 'user', content: prompt }] });
       const m = clAiText(data).trim().match(/\{[\s\S]*\}/);
       if (!m) throw new Error('Could not parse insights — try again.');
       const g = JSON.parse(m[0]);
@@ -4753,19 +4796,11 @@ Return ONLY valid JSON with this exact structure (no markdown, no explanation):
 Generate 2-4 rating rows from the observation. Wins should reflect positives from Reality or rep strengths. Keep each field concise and impactful.`;
 
     try {
-      const res = await fetch(AI_COACH_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 1200,
-          messages: [{ role: 'user', content: userPrompt }]
-        })
+      const data = await clAiRelay({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1200,
+        messages: [{ role: 'user', content: userPrompt }]
       });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error?.message || data.error || `API error ${res.status}`);
-      }
       const text = clAiText(data).trim();
       const m = text.match(/\{[\s\S]*\}/);
       if (!m) throw new Error('Could not parse AI response — try again.');
@@ -4845,17 +4880,11 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
 }`;
 
     try {
-      const res = await fetch(AI_COACH_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 1100,
-          messages: [{ role: 'user', content: userPrompt }]
-        })
+      const data = await clAiRelay({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1100,
+        messages: [{ role: 'user', content: userPrompt }]
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error?.message || data.error || `API error ${res.status}`);
       const text = clAiText(data).trim();
       const m = text.match(/\{[\s\S]*\}/);
       if (!m) throw new Error('Could not parse AI response — try again.');
@@ -5868,9 +5897,7 @@ ${notes}
 Write in a natural human voice (not robotic, no meta-commentary about being an AI). Attendance is a baseline expectation, NOT an achievement, so do not lead with it or praise it as a win. CRITICAL: the attendance percent counts late arrivals as present, so it overstates reliability. Use the on-time (present only) figure to judge punctuality. If late days are 25% or more of logged days, or lates are as many as or more than the present days, then the rep is NOT showing up consistently, do NOT say they are, and call out punctuality (lateness) as a concern instead. Always call them "DCs" or "Discovery Calls", never "calls". Do NOT use em dashes. Return ONLY valid JSON with three fields:
 {"headline":"2 to 3 sentences that OPEN the email: state the verdict and where they stand as of ${asOfLong}, lead with the booked DC pace (the real headline), note the week-over-week direction, and name one genuine bright spot and the one main thing to fix", "summary":"2 to 3 sentence deeper read", "suggestions":["specific action","specific action","specific action"]}`;
     try {
-      const res=await fetch(AI_COACH_URL,{ method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify({ model:'claude-haiku-4-5-20251001', max_tokens:700, messages:[{role:'user',content:prompt}] }) });
-      const data=await res.json();
-      if (!res.ok) throw new Error(data.error?.message||data.error||('API '+res.status));
+      const data=await clAiRelay({ model:'claude-haiku-4-5-20251001', max_tokens:700, messages:[{role:'user',content:prompt}] });
       const m=clAiText(data).trim().match(/\{[\s\S]*\}/); if (!m) throw new Error('Could not parse AI response.');
       const g=JSON.parse(m[0]);
       _scAI[id+'|'+ym]={ headline:clDeDash(g.headline||''), summary:clDeDash(g.summary||''), suggestions:(g.suggestions||[]).map(s=>clDeDash(String(s))).filter(Boolean) };
@@ -6156,9 +6183,7 @@ Notes for your analysis: Booked DCs versus the per-rep target and show-up rate a
  "recommendations":["specific action for leaders or ops"]
 }`;
     try {
-      const res=await fetch(AI_COACH_URL,{ method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify({ model:'claude-haiku-4-5-20251001', max_tokens:4096, messages:[{role:'user',content:prompt}] }) });
-      const data=await res.json();
-      if (!res.ok) throw new Error(data.error?.message||data.error||('API '+res.status));
+      const data=await clAiRelay({ model:'claude-haiku-4-5-20251001', max_tokens:4096, messages:[{role:'user',content:prompt}] });
       const txt=clAiText(data).trim(); const m=txt.match(/\{[\s\S]*\}/);
       const g=scSafeJson(m?m[0]:txt); if (!g) throw new Error('Could not parse AI response, try a single team.');
       reportRenderNarrative(g, snap);
