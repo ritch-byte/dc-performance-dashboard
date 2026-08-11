@@ -5648,6 +5648,8 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
 
   let _scModel = null, _scAI = {}, _scMembers = [], _scSelId = '', _scGenKey = '';
   const SC_TL_OPTS = [{v:'',t:'All teams'},{v:'groupa',t:'Ritch Joy Manipol — RV'},{v:'groupb',t:'Jonathan Jabonete — Diathan'},{v:'groupc',t:'Angelica Tanate — MeloAce'},{v:'groupd',t:'Jumar Vere — JumHon'}];
+  // Team leader who actually line-manages a given team, derived from the picker above.
+  function scTLName(teamId){ const o=SC_TL_OPTS.find(x=>x.v===teamId && x.v); return o ? o.t.split('—')[0].trim() : ''; }
 
   function scLoad(k){ try { return JSON.parse(localStorage.getItem(k) || '[]'); } catch (e) { return []; } }
   function scSave(k,v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
@@ -5884,7 +5886,15 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
     const asOfLong=new Date(M.asOf+'T00:00:00').toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
     const wowTxt = M.prior ? (M.composite>M.prior.composite_score?'improving vs last week':M.composite<M.prior.composite_score?'sliding vs last week':'flat vs last week') : 'no prior week to compare';
     const notes=M.logs.slice(0,15).map(l=>`- [${(l.date||'').slice(0,10)} · ${l.topic||clCoachType(l).label||''}] ${l.summary||'(no summary)'}`).join('\n') || '(no coaching notes on file)';
+    // Who is writing vs who actually line-manages this rep. The sender is often the Senior Sales
+    // Supervisor, who sits above the team leaders and does NOT run this rep's 1-on-1s, so the AI
+    // must route coaching to the team leader by name instead of writing "schedule a call with me".
+    const tlName=scTLName(M.teamId), senderIsTL = !!tlName && M.sender===tlName;
+    const voice = senderIsTL
+      ? `You are writing as ${M.sender}, ${M.name}'s direct team leader. First person is correct here: "book time with me", "we will review", "I will sit in" are all fine.`
+      : `You are writing as ${M.sender}, Senior Sales Supervisor. You are NOT ${M.name}'s direct team leader${tlName?` — that is ${tlName}, who runs their 1-on-1s, coaching sessions and call reviews`:''}. CRITICAL: never tell ${M.name} to schedule a call, 1-on-1, coaching session or call review "with me", and never say "we will review" their calls or clock-ins. Route every coaching or day-to-day follow-up action to ${tlName||'their team leader'} by name${tlName?` (for example "book your 1-on-1 with ${tlName.split(' ')[0]} this week")`:''}. You may still state the standard you expect and what will be tracked at the supervisor level.`;
     const prompt=`You are a sales performance coach at Outsource Accelerator (offshore staffing). Review this BDR for ${new Date(M.ym+'-01T00:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'})} (month to date). "DC" = Discovery Call. Data is through ${asOfLong}.
+${voice}
 NAME: ${M.name} (team ${M.team}), verdict ${scBand(M.composite,M.ramping).label}
 Booked DCs: ${M.booked} of ${M.target} (steady pace by now is ${M.expectedMtd}, so ${M.paceGap>=0?'ahead by '+M.paceGap:'behind by '+Math.abs(M.paceGap)}), ${M.remaining} working days left.
 Show-up: ${M.scheduled>0?Math.round(M.suRateRaw*100)+'% ('+M.showed+' of '+M.scheduled+' scheduled showed)':'no scheduled DCs yet'}.
