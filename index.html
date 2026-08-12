@@ -501,6 +501,8 @@
       display: flex; align-items: center; gap: 6px;
     }
     .btn-export:hover { background: var(--navy); }
+    .btn-export.alt { background: transparent; color: var(--blue); border: 1.5px solid var(--blue); padding: 5.5px 14px; }
+    .btn-export.alt:hover { background: var(--blue); color: #fff; }
 
     /* ── ATTENDANCE ── */
     .att-status-chip {
@@ -792,6 +794,11 @@
           <button class="btn-export" onclick="downloadSheetCSV()">
             <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 2v8M4 7l4 4 4-4"/><path d="M2 13h12"/></svg>
             Export CSV
+          </button>
+          <button class="btn-export alt" id="sheetBtnYtd" onclick="downloadYtdCSV()"
+                  title="Export every business day from Jan 1 to today, summarised by month">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 2v8M4 7l4 4 4-4"/><path d="M2 13h12"/></svg>
+            Export YTD
           </button>
         </div>
       </div>
@@ -3260,6 +3267,126 @@
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = `DC-Sheet-${$('sheetHeading').textContent.replace(/[^a-z0-9]+/gi,'-')}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  // Year-to-date export: one column per month (Jan → current), plus period totals.
+  // Day-level columns would run to 150+ so the months are the grain here.
+  function downloadYtdCSV() {
+    if (!rawRows || !rawRows.length) { alert('Data is still loading — try again in a moment.'); return; }
+
+    const now = new Date();
+    const year = now.getFullYear(), thisMonth = now.getMonth() + 1;
+
+    // Business days per month, capped at today
+    const months = [];
+    for (let m = 1; m <= thisMonth; m++) {
+      const ym = `${year}-${String(m).padStart(2,'0')}`;
+      const dates = aggregateMonth(ym, true).dates;
+      if (!dates.length) continue;
+      months.push({ ym, label: new Date(year, m-1, 1).toLocaleDateString('en-US',{month:'short'}), dates });
+    }
+    if (!months.length) { alert('No year-to-date data available yet.'); return; }
+
+    const allDates = months.flatMap(mo => mo.dates);
+
+    // Per-agent per-date DCs and leads (aggregate* are memoised internally)
+    const dcByDate = {}, leadsByDate = {};
+    for (const d of allDates) {
+      dcByDate[d]    = aggregateForDate(d);
+      leadsByDate[d] = aggregateLeadsForDate(d);
+    }
+    const dcFor    = (id, dates) => dates.reduce((s,d) => s + (dcByDate[d]?.[id]    || 0), 0);
+    const leadsFor = (id, dates) => dates.reduce((s,d) => s + (leadsByDate[d]?.[id] || 0), 0);
+
+    const ytdShowup = aggregateShowupForDates(allDates);
+    const periodLabel = `Jan 1 – ${now.toLocaleDateString('en-US',{month:'short',day:'numeric'})}, ${year}`;
+
+    const rows = [];
+    rows.push([`DC Performance — Year to Date`, periodLabel, `${allDates.length} business days`,
+               `Generated ${now.toLocaleString('en-US')}`]);
+    rows.push([]);
+    rows.push(['Team','Agent', ...months.map(mo => mo.label),
+               'Total DCs','Leads','Avg DCs/Day','Avg L/Day','Show-up Rate','Att %',
+               'Present','Late','Undertime','Absent','Scheduled','Days Worked']);
+
+    const grand = { dc: 0, leads: 0, yes: 0, hap: 0, att: 0, sch: 0 };
+    const monthGrand = {};
+
+    for (const team of TEAMS) {
+      const visible = team.members.filter(m => !m.hidden);
+      if (!visible.length) continue;
+      const sorted = [...visible].sort((a,b) => dcFor(b.id, allDates) - dcFor(a.id, allDates));
+
+      for (const m of sorted) {
+        const tot   = dcFor(m.id, allDates);
+        const leads = leadsFor(m.id, allDates);
+        const su    = ytdShowup[m.id] || { yes: 0, happened: 0 };
+        const att   = getAttendanceForDates(m.id, allDates);
+        const perMonth = months.map(mo => dcFor(m.id, mo.dates));
+        months.forEach((mo,i) => { monthGrand[mo.ym] = (monthGrand[mo.ym]||0) + perMonth[i]; });
+
+        rows.push([
+          team.name, m.display, ...perMonth,
+          tot, leads,
+          allDates.length ? (tot   / allDates.length).toFixed(2) : '—',
+          allDates.length ? (leads / allDates.length).toFixed(2) : '—',
+          su.happened > 0 ? `${su.yes}/${su.happened} (${Math.round(su.yes/su.happened*100)}%)` : '—',
+          att.rate !== null ? att.rate + '%' : '—',
+          att.present, att.late, att.undertime, att.absent, att.scheduled, att.attended,
+        ]);
+      }
+
+      // Team total
+      const tDc    = visible.reduce((s,m) => s + dcFor(m.id, allDates), 0);
+      const tLeads = visible.reduce((s,m) => s + leadsFor(m.id, allDates), 0);
+      const tYes   = visible.reduce((s,m) => s + (ytdShowup[m.id]?.yes      || 0), 0);
+      const tHap   = visible.reduce((s,m) => s + (ytdShowup[m.id]?.happened || 0), 0);
+      const tAtt   = visible.reduce((acc,m) => {
+        const a = getAttendanceForDates(m.id, allDates);
+        acc.present += a.present; acc.late += a.late; acc.undertime += a.undertime;
+        acc.absent += a.absent; acc.scheduled += a.scheduled; acc.attended += a.attended;
+        return acc;
+      }, { present:0, late:0, undertime:0, absent:0, scheduled:0, attended:0 });
+      const agentDays = Math.max(visible.length * allDates.length, 1);
+
+      rows.push([
+        team.name, 'TEAM TOTAL',
+        ...months.map(mo => visible.reduce((s,m) => s + dcFor(m.id, mo.dates), 0)),
+        tDc, tLeads,
+        (tDc / agentDays).toFixed(2), (tLeads / agentDays).toFixed(2),
+        tHap > 0 ? `${tYes}/${tHap} (${Math.round(tYes/tHap*100)}%)` : '—',
+        tAtt.scheduled > 0 ? Math.round(tAtt.attended/tAtt.scheduled*100) + '%' : '—',
+        tAtt.present, tAtt.late, tAtt.undertime, tAtt.absent, tAtt.scheduled, tAtt.attended,
+      ]);
+      rows.push([]);
+
+      grand.dc += tDc; grand.leads += tLeads; grand.yes += tYes; grand.hap += tHap;
+      grand.att += tAtt.attended; grand.sch += tAtt.scheduled;
+    }
+
+    // All-teams footer
+    const allVis = TEAMS.reduce((s,t) => s + t.members.filter(m => !m.hidden).length, 0);
+    const allAgentDays = Math.max(allVis * allDates.length, 1);
+    rows.push(['ALL TEAMS','GRAND TOTAL',
+      ...months.map(mo => monthGrand[mo.ym] || 0),
+      grand.dc, grand.leads,
+      (grand.dc / allAgentDays).toFixed(2), (grand.leads / allAgentDays).toFixed(2),
+      grand.hap > 0 ? `${grand.yes}/${grand.hap} (${Math.round(grand.yes/grand.hap*100)}%)` : '—',
+      grand.sch > 0 ? Math.round(grand.att/grand.sch*100) + '%' : '—',
+      '','','','', grand.sch, grand.att,
+    ]);
+    rows.push([]);
+    rows.push(['Note','Month columns are booked DCs. One DC = each filled SP column, so a lead can be 1 or 2 DCs.']);
+    rows.push(['','Averages are per agent-day across ' + allDates.length + ' business days (weekends excluded).']);
+
+    const csv  = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\r\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url  = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `DC-Sheet-YTD-${year}-through-${months[months.length-1].label}.csv`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
   }
