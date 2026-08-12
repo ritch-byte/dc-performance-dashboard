@@ -1643,15 +1643,30 @@
     const exact = name => { const i = hdrs.indexOf(name); return i >= 0 ? i : null; };
     const sp1sIdx = exact('sp 1 status') ?? exact('sp1 status');
     const sp2sIdx = exact('sp 2 status') ?? exact('sp2 status');
+    const statusIdx = exact('status');   // present only in the newer sheet layout
+
+    // The sheet gained VOUCHER EMAIL + STATUS columns (Aug 2026). The partner names
+    // shifted into the columns still *headed* "SP n Status", and show-up moved to a
+    // single row-level STATUS. Detect that layout instead of trusting fixed positions:
+    // a bare "status" header means partner names sit under the "SP n Status" headers.
+    const rowStatusLayout = statusIdx !== null;
+    const sp1Idx = rowStatusLayout ? sp1sIdx : (exact('sp1') ?? exact('sp 1') ?? 2);
+    const sp2Idx = rowStatusLayout ? sp2sIdx : (exact('sp2') ?? exact('sp 2') ?? 3);
+    const cell = (c, i) => (i === null || i === undefined ? '' : (c[i] || '').trim());
+
     return lines.slice(1).map(line => {
       const c = splitLine(line);
+      const sp1 = cell(c, sp1Idx), sp2 = cell(c, sp2Idx);
+      // One status per row now, so it applies to each partner meeting that exists.
+      // Gate on the SP being filled, or a blank SP would inherit a status and be
+      // counted as a discovery call that happened.
+      const rowStatus = rowStatusLayout ? cell(c, statusIdx).toLowerCase() : null;
       return {
-        rawDate:   (c[0]||'').trim(),
-        agent:     (c[1]||'').trim(),
-        sp1:       (c[2]||'').trim(),
-        sp2:       (c[3]||'').trim(),
-        sp1status: sp1sIdx !== null ? (c[sp1sIdx]||'').trim().toLowerCase() : '',
-        sp2status: sp2sIdx !== null ? (c[sp2sIdx]||'').trim().toLowerCase() : '',
+        rawDate:   cell(c, 0),
+        agent:     cell(c, 1),
+        sp1, sp2,
+        sp1status: rowStatusLayout ? (sp1 ? rowStatus : '') : cell(c, sp1sIdx).toLowerCase(),
+        sp2status: rowStatusLayout ? (sp2 ? rowStatus : '') : cell(c, sp2sIdx).toLowerCase(),
       };
     }).filter(r => r.rawDate && r.agent);
   }
@@ -3273,8 +3288,11 @@
 
   // Year-to-date export: one column per month (Jan → current), plus period totals.
   // Day-level columns would run to 150+ so the months are the grain here.
-  function downloadYtdCSV() {
+  async function downloadYtdCSV() {
     if (!rawRows || !rawRows.length) { alert('Data is still loading — try again in a moment.'); return; }
+    // Attendance is lazy-loaded when its own page is opened, so a straight-to-export
+    // run would otherwise report every attendance column as zero.
+    if (!_attLoaded) { try { await loadAttendanceData(); } catch (e) {} }
 
     const now = new Date();
     const year = now.getFullYear(), thisMonth = now.getMonth() + 1;
@@ -3312,9 +3330,9 @@
                'Showed Up','No-show / Cancelled','Pending (not yet held)','Show-up %',
                'Att %','Present','Late','Undertime','Absent','Scheduled','Days Worked']);
 
-    const grand = { dc: 0, leads: 0, yes: 0, hap: 0, att: 0, sch: 0,
-                    present: 0, late: 0, undertime: 0, absent: 0 };
-    const monthGrand = {};
+    // Grand totals come from the de-duplicated roster, not from summing the team rows:
+    // agents who sit on both a production team and POC TEAM would otherwise count twice.
+    const uniqMembers = allVisibleMembers();
 
     for (const team of TEAMS) {
       const visible = team.members.filter(m => !m.hidden);
@@ -3327,7 +3345,6 @@
         const su    = ytdShowup[m.id] || { yes: 0, happened: 0 };
         const att   = getAttendanceForDates(m.id, allDates);
         const perMonth = months.map(mo => dcFor(m.id, mo.dates));
-        months.forEach((mo,i) => { monthGrand[mo.ym] = (monthGrand[mo.ym]||0) + perMonth[i]; });
 
         rows.push([
           team.name, m.display, ...perMonth,
@@ -3365,24 +3382,29 @@
         tAtt.present, tAtt.late, tAtt.undertime, tAtt.absent, tAtt.scheduled, tAtt.attended,
       ]);
       rows.push([]);
-
-      grand.dc += tDc; grand.leads += tLeads; grand.yes += tYes; grand.hap += tHap;
-      grand.att += tAtt.attended; grand.sch += tAtt.scheduled;
-      grand.present += tAtt.present; grand.late += tAtt.late;
-      grand.undertime += tAtt.undertime; grand.absent += tAtt.absent;
     }
 
-    // All-teams footer
-    const allVis = TEAMS.reduce((s,t) => s + t.members.filter(m => !m.hidden).length, 0);
-    const allAgentDays = Math.max(allVis * allDates.length, 1);
+    // All-teams footer, each agent counted once
+    const gDc    = uniqMembers.reduce((s,m) => s + dcFor(m.id, allDates), 0);
+    const gLeads = uniqMembers.reduce((s,m) => s + leadsFor(m.id, allDates), 0);
+    const gYes   = uniqMembers.reduce((s,m) => s + (ytdShowup[m.id]?.yes      || 0), 0);
+    const gHap   = uniqMembers.reduce((s,m) => s + (ytdShowup[m.id]?.happened || 0), 0);
+    const gAtt   = uniqMembers.reduce((acc,m) => {
+      const a = getAttendanceForDates(m.id, allDates);
+      acc.present += a.present; acc.late += a.late; acc.undertime += a.undertime;
+      acc.absent += a.absent; acc.scheduled += a.scheduled; acc.attended += a.attended;
+      return acc;
+    }, { present:0, late:0, undertime:0, absent:0, scheduled:0, attended:0 });
+    const allAgentDays = Math.max(uniqMembers.length * allDates.length, 1);
+
     rows.push(['ALL TEAMS','GRAND TOTAL',
-      ...months.map(mo => monthGrand[mo.ym] || 0),
-      grand.dc, grand.leads,
-      (grand.dc / allAgentDays).toFixed(2), (grand.leads / allAgentDays).toFixed(2),
-      grand.yes, grand.hap - grand.yes, Math.max(grand.dc - grand.hap, 0),
-      grand.hap > 0 ? Math.round(grand.yes / grand.hap * 100) : '',
-      grand.sch > 0 ? Math.round(grand.att/grand.sch*100) : '',
-      grand.present, grand.late, grand.undertime, grand.absent, grand.sch, grand.att,
+      ...months.map(mo => uniqMembers.reduce((s,m) => s + dcFor(m.id, mo.dates), 0)),
+      gDc, gLeads,
+      (gDc / allAgentDays).toFixed(2), (gLeads / allAgentDays).toFixed(2),
+      gYes, gHap - gYes, Math.max(gDc - gHap, 0),
+      gHap > 0 ? Math.round(gYes / gHap * 100) : '',
+      gAtt.scheduled > 0 ? Math.round(gAtt.attended/gAtt.scheduled*100) : '',
+      gAtt.present, gAtt.late, gAtt.undertime, gAtt.absent, gAtt.scheduled, gAtt.attended,
     ]);
     rows.push([]);
     rows.push(['Note','Month columns are booked DCs. One DC = each filled SP column, so a lead can be 1 or 2 DCs.']);
@@ -3390,6 +3412,8 @@
     rows.push(['','Show-up % = Showed Up ÷ (Showed Up + No-show/Cancelled). Pending DCs are excluded — they have not happened yet, so counting them would understate the rate.']);
     rows.push(['','Show-up % and Att % are plain numbers, not text, so they can be sorted, averaged and conditionally formatted.']);
     rows.push(['','Averages are per agent-day across ' + allDates.length + ' business days (weekends excluded).']);
+    rows.push(['','GRAND TOTAL counts each agent once. Agents listed on both a production team and POC TEAM appear in two team rows, so the team rows add up higher than the grand total.']);
+    rows.push(['','Only agents on the current roster are included, so DCs booked by agents who have since left are not counted.']);
 
     const csv  = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\r\n');
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
