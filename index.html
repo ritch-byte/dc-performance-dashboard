@@ -1637,7 +1637,7 @@
   function scheduleRefresh() { clearTimeout(refreshTimer); refreshTimer = setTimeout(loadData, REFRESH_MS); }
 
   function parseCSV(text) {
-    const lines = text.trim().split('\n');
+    const lines = splitCsvRows(text.trim());
     if (lines.length < 2) return [];
     const hdrs = splitLine(lines[0]).map(h => h.trim().toLowerCase());
     const exact = name => { const i = hdrs.indexOf(name); return i >= 0 ? i : null; };
@@ -2017,6 +2017,25 @@
       else cur+=ch;
     }
     cols.push(cur.trim()); return cols;
+  }
+  // Split a CSV into records, honouring newlines inside quoted fields. Splitting on \n alone
+  // truncates any row whose VOUCHER EMAIL cell carries a trailing blank line (the sheet has
+  // ~118 of them), which silently blanks every column after the email: the row survives with
+  // its date and BDR name but loses both partners and the status, so it counts as zero DCs
+  // and never appears in show-up.
+  function splitCsvRows(text) {
+    const rows = []; let cur = '', inQ = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (ch === '"') {
+        if (inQ && text[i+1] === '"') { cur += '""'; i++; continue; }   // escaped quote
+        inQ = !inQ; cur += ch; continue;
+      }
+      if (ch === '\n' && !inQ) { rows.push(cur.replace(/\r$/, '')); cur = ''; continue; }
+      cur += ch;
+    }
+    rows.push(cur.replace(/\r$/, ''));
+    return rows.filter(r => r.trim() !== '');
   }
   function setDot(s) { $('liveDot').className = 'live-dot' + (s!=='live' ? ' '+s : ''); }
   function showError(msg) { const e=$('errorBanner'); e.textContent='⚠ '+msg; e.classList.add('show'); }
@@ -3492,7 +3511,7 @@
   let rawAttRows = [], attView = 'daily', _attLoaded = false, _attLoading = false;
 
   function parseAttendanceCSV(text) {
-    const lines = text.trim().split('\n');
+    const lines = splitCsvRows(text.trim());
     if (lines.length < 2) return [];
     const headers = splitLine(lines[0]).map(h => h.trim().toLowerCase().replace(/\s+/g,' '));
     const col = (...needles) => {
