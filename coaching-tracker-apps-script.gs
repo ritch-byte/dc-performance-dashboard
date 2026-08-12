@@ -20,6 +20,24 @@
 const SHEET_NAME = 'Logs';
 const HEADERS = ['timestamp', 'date', 'weekof', 'squad', 'rep', 'level', 'topic', 'coach', 'summary', 'type'];
 
+// ── Spend guard on the AI relay ──────────────────────────────────────────
+//
+// This endpoint is deployed "Anyone" and its URL ships inside the Spiel Builder's
+// JavaScript bundle on a public GitHub Pages site, so the URL is readable by anyone
+// who views source, and the body arriving here is untrusted.
+//
+// Until now it forwarded data.model and data.max_tokens straight through. One request
+// naming the most expensive model at 64k output costs about $1.60 against the org
+// credits, and a loop empties the balance in minutes. These two constants bound what a
+// single call can cost; they cannot stop someone calling it.
+//
+// The only real fix for a public static caller is to rotate the deployment URL, which
+// kills whatever is using the current one. Deploy → New deployment (not Manage/Edit) to
+// get a fresh /exec, then update AI_RELAY_URL in call-script-v2/src/lib/ai.ts.
+const ALLOWED_MODELS = ['claude-haiku-4-5-20251001', 'claude-sonnet-4-6'];
+const DEFAULT_MODEL = 'claude-haiku-4-5-20251001';
+const MAX_TOKENS_CEILING = 4000;
+
 function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
@@ -32,13 +50,26 @@ function doPost(e) {
     if (data && data.messages) {
       const key = PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY');
       if (!key) return json_({ error: 'ANTHROPIC_API_KEY script property is not set' });
+      // Clamp before spending. An unrecognised model falls back to the cheap one rather
+      // than erroring, so a legitimate caller never breaks; the ceiling is what stops one
+      // request costing dollars. `tools` is dropped because nothing here uses server-side
+      // search and it bills separately per request.
+      var model = ALLOWED_MODELS.indexOf(data.model) !== -1 ? data.model : DEFAULT_MODEL;
+      var maxTokens = Math.min(Number(data.max_tokens) || 1024, MAX_TOKENS_CEILING);
+      if (data.model && model !== data.model) {
+        console.warn('clamped model: ' + data.model);
+      }
+      if (Number(data.max_tokens) > MAX_TOKENS_CEILING) {
+        console.warn('clamped max_tokens: ' + data.max_tokens);
+      }
+
       const resp = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
         method: 'post',
         contentType: 'application/json',
         headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' },
         payload: JSON.stringify({
-          model: data.model || 'claude-haiku-4-5-20251001',
-          max_tokens: data.max_tokens || 1024,
+          model: model,
+          max_tokens: maxTokens,
           messages: data.messages,
         }),
         muteHttpExceptions: true,
