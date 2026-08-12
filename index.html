@@ -3308,10 +3308,12 @@
                `Generated ${now.toLocaleString('en-US')}`]);
     rows.push([]);
     rows.push(['Team','Agent', ...months.map(mo => mo.label),
-               'Total DCs','Leads','Avg DCs/Day','Avg L/Day','Show-up Rate','Att %',
-               'Present','Late','Undertime','Absent','Scheduled','Days Worked']);
+               'Total DCs','Leads','Avg DCs/Day','Avg L/Day',
+               'Showed Up','No-show / Cancelled','Pending (not yet held)','Show-up %',
+               'Att %','Present','Late','Undertime','Absent','Scheduled','Days Worked']);
 
-    const grand = { dc: 0, leads: 0, yes: 0, hap: 0, att: 0, sch: 0 };
+    const grand = { dc: 0, leads: 0, yes: 0, hap: 0, att: 0, sch: 0,
+                    present: 0, late: 0, undertime: 0, absent: 0 };
     const monthGrand = {};
 
     for (const team of TEAMS) {
@@ -3330,10 +3332,11 @@
         rows.push([
           team.name, m.display, ...perMonth,
           tot, leads,
-          allDates.length ? (tot   / allDates.length).toFixed(2) : '—',
-          allDates.length ? (leads / allDates.length).toFixed(2) : '—',
-          su.happened > 0 ? `${su.yes}/${su.happened} (${Math.round(su.yes/su.happened*100)}%)` : '—',
-          att.rate !== null ? att.rate + '%' : '—',
+          allDates.length ? (tot   / allDates.length).toFixed(2) : '',
+          allDates.length ? (leads / allDates.length).toFixed(2) : '',
+          su.yes, su.happened - su.yes, Math.max(tot - su.happened, 0),
+          su.happened > 0 ? Math.round(su.yes / su.happened * 100) : '',
+          att.rate !== null ? att.rate : '',
           att.present, att.late, att.undertime, att.absent, att.scheduled, att.attended,
         ]);
       }
@@ -3356,14 +3359,17 @@
         ...months.map(mo => visible.reduce((s,m) => s + dcFor(m.id, mo.dates), 0)),
         tDc, tLeads,
         (tDc / agentDays).toFixed(2), (tLeads / agentDays).toFixed(2),
-        tHap > 0 ? `${tYes}/${tHap} (${Math.round(tYes/tHap*100)}%)` : '—',
-        tAtt.scheduled > 0 ? Math.round(tAtt.attended/tAtt.scheduled*100) + '%' : '—',
+        tYes, tHap - tYes, Math.max(tDc - tHap, 0),
+        tHap > 0 ? Math.round(tYes / tHap * 100) : '',
+        tAtt.scheduled > 0 ? Math.round(tAtt.attended/tAtt.scheduled*100) : '',
         tAtt.present, tAtt.late, tAtt.undertime, tAtt.absent, tAtt.scheduled, tAtt.attended,
       ]);
       rows.push([]);
 
       grand.dc += tDc; grand.leads += tLeads; grand.yes += tYes; grand.hap += tHap;
       grand.att += tAtt.attended; grand.sch += tAtt.scheduled;
+      grand.present += tAtt.present; grand.late += tAtt.late;
+      grand.undertime += tAtt.undertime; grand.absent += tAtt.absent;
     }
 
     // All-teams footer
@@ -3373,12 +3379,16 @@
       ...months.map(mo => monthGrand[mo.ym] || 0),
       grand.dc, grand.leads,
       (grand.dc / allAgentDays).toFixed(2), (grand.leads / allAgentDays).toFixed(2),
-      grand.hap > 0 ? `${grand.yes}/${grand.hap} (${Math.round(grand.yes/grand.hap*100)}%)` : '—',
-      grand.sch > 0 ? Math.round(grand.att/grand.sch*100) + '%' : '—',
-      '','','','', grand.sch, grand.att,
+      grand.yes, grand.hap - grand.yes, Math.max(grand.dc - grand.hap, 0),
+      grand.hap > 0 ? Math.round(grand.yes / grand.hap * 100) : '',
+      grand.sch > 0 ? Math.round(grand.att/grand.sch*100) : '',
+      grand.present, grand.late, grand.undertime, grand.absent, grand.sch, grand.att,
     ]);
     rows.push([]);
     rows.push(['Note','Month columns are booked DCs. One DC = each filled SP column, so a lead can be 1 or 2 DCs.']);
+    rows.push(['','Showed Up + No-show/Cancelled + Pending = Total DCs.']);
+    rows.push(['','Show-up % = Showed Up ÷ (Showed Up + No-show/Cancelled). Pending DCs are excluded — they have not happened yet, so counting them would understate the rate.']);
+    rows.push(['','Show-up % and Att % are plain numbers, not text, so they can be sorted, averaged and conditionally formatted.']);
     rows.push(['','Averages are per agent-day across ' + allDates.length + ' business days (weekends excluded).']);
 
     const csv  = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\r\n');
