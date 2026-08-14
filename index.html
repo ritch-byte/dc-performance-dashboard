@@ -6069,6 +6069,22 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
     // Who is writing vs who actually line-manages this rep. The sender is often the Senior Sales
     // Supervisor, who sits above the team leaders and does NOT run this rep's 1-on-1s, so the AI
     // must route coaching to the team leader by name instead of writing "schedule a call with me".
+    // Reliability is decided here, not left to the model. The old guard only covered LATENESS,
+    // so a rep with 0 late and 7 absent of 8 logged days sailed through it and got praised for
+    // "showing up to work". Absence breaks reliability at least as hard as lateness does.
+    let attRule = '';
+    if (ab && ab.scheduled > 0) {
+      const onTime = Math.round(ab.present / ab.scheduled * 100);
+      const missed = ab.absent + ab.late;
+      const unreliable = ab.absent >= 2 || missed * 4 >= ab.scheduled;   // 2+ absences, or a quarter of days missed/late
+      const parts = [ab.present + ' present', ab.late + ' late', ab.absent + ' absent'].join(', ');
+      const concerns = [];
+      if (ab.absent) concerns.push(`${ab.absent} absence${ab.absent===1?'':'s'}`);
+      if (ab.late)   concerns.push(`${ab.late} late day${ab.late===1?'':'s'}`);
+      attRule = unreliable
+        ? `ATTENDANCE IS A PROBLEM HERE, NOT A BRIGHT SPOT: ${parts} across ${ab.scheduled} logged days (on-time ${onTime}%). Do NOT say this rep is showing up, is showing up consistently, or that attendance is the good news. Name the ${concerns.join(' and ')} as a concern in its own right.`
+        : `Attendance is at the expected baseline (${parts} of ${ab.scheduled} logged days, on-time ${onTime}%). It is an expectation, not an achievement, so do not lead with it or praise it as a win.`;
+    }
     const tlName=scTLName(M.teamId), senderIsTL = !!tlName && M.sender===tlName;
     const voice = senderIsTL
       ? `You are writing as ${M.sender}, ${M.name}'s direct team leader. First person is correct here: "book time with me", "we will review", "I will sit in" are all fine.`
@@ -6084,8 +6100,8 @@ Coaching this month: ${M.sessions} session(s)${M.topics.length?', topics: '+M.to
 Recent coaching notes (newest first):
 ${notes}
 
-Write in a natural human voice (not robotic, no meta-commentary about being an AI). Attendance is a baseline expectation, NOT an achievement, so do not lead with it or praise it as a win. CRITICAL: the attendance percent counts late arrivals as present, so it overstates reliability. Use the on-time (present only) figure to judge punctuality. If late days are 25% or more of logged days, or lates are as many as or more than the present days, then the rep is NOT showing up consistently, do NOT say they are, and call out punctuality (lateness) as a concern instead. Always call them "DCs" or "Discovery Calls", never "calls". Do NOT use em dashes. Return ONLY valid JSON with three fields:
-{"headline":"2 to 3 sentences that OPEN the email: state the verdict and where they stand as of ${asOfLong}, lead with the booked DC pace (the real headline), note the week-over-week direction, and name one genuine bright spot and the one main thing to fix", "summary":"2 to 3 sentence deeper read", "suggestions":["specific action","specific action","specific action"]}`;
+Write in a natural human voice (not robotic, no meta-commentary about being an AI). ${attRule} The attendance percent counts late arrivals as present, so judge reliability from the present/late/absent breakdown above, never from the percent alone. Use ONLY the figures given above: do not mention dials, calls made, talk time, connect rates, emails, or any other metric that is not listed here, and do not invent numbers. Always call them "DCs" or "Discovery Calls", never "calls". Do NOT use em dashes. Return ONLY valid JSON with three fields:
+{"headline":"2 to 3 sentences that OPEN the email: state the verdict and where they stand as of ${asOfLong}, lead with the booked DC pace (the real headline), note the week-over-week direction, and name the one main thing to fix. Name a bright spot ONLY if the figures above genuinely support one; if every metric is below standard, say that plainly rather than manufacturing a positive", "summary":"2 to 3 sentence deeper read", "suggestions":["specific action","specific action","specific action"]}`;
     try {
       const data=await clAiRelay({ model:'claude-haiku-4-5-20251001', max_tokens:700, messages:[{role:'user',content:prompt}] });
       const m=clAiText(data).trim().match(/\{[\s\S]*\}/); if (!m) throw new Error('Could not parse AI response.');
