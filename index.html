@@ -990,7 +990,7 @@
             <div class="cl-field">
               <label class="cl-label">Squad</label>
               <select id="clSquad" class="cl-input" onchange="clSetSquad()">
-                <option>RV</option><option>Diathan</option><option>MeloAce</option><option>JumHon</option><option>POC TEAM</option><option>Other</option>
+                <option>DiJumHon</option><option>MeloAce</option><option>EV</option><option>Bridge</option><option>POC TEAM</option><option>Other</option>
               </select>
             </div>
             <div class="cl-field">
@@ -1388,81 +1388,71 @@
 
   const TEAMS = [
     {
-      id: 'groupa', name: 'RV', color: '#1A2DB5',  // Group A · TL Ritch · SME Vince
+      id: 'dijumhon', name: 'DiJumHon', color: '#1A2DB5',  // 9PM-8AM (4x11) · TL Jumar · SMEs Diana, Alvin B
       members: [
-        { id: 'silva',         display: 'Godwin Silva',          ln: 'silva' },
-        { id: 'sarmiento_j',   display: 'Julius Sarmiento',      ln: 'sarmiento', fn: 'julius' },
-        { id: 'ruiz',          display: 'Renz Ruiz',             ln: 'ruiz' },
-        { id: 'baliuag',       display: 'Charlon Baliuag',       ln: 'baliuag' },
-        { id: 'susana',        display: 'John Christian Susana', ln: 'susana' },
+        { id: 'anos',          display: 'Marc Anos',             ln: 'anos' },
         { id: 'demayo',        display: 'Devi Demayo',           ln: 'demayo' },
-        { id: 'lavares',       display: 'Gian Lavares',          ln: 'lavares' },
+        { id: 'saminado',      display: 'Jervin Saminado',       ln: 'saminado' },
+        { id: 'verastigue',    display: 'Bedier Verastigue',     ln: 'verastigue' },
+        { id: 'velasco',       display: 'Edward Velasco',        ln: 'velasco' },
         { id: 'petras',        display: 'Art Joseph Petras',     ln: 'petras' },
-        { id: 'silang',        display: 'Gian Carlo Silang',     ln: 'silang' },
-        { id: 'catolico',      display: 'Pedro Catolico',        ln: 'catolico' },
-        { id: 'arespacochaga', display: 'Mervin Arespacochaga',  ln: 'arespacochaga' },
-        { id: 'villaruel',     display: 'Lance Villaruel',       ln: 'villaruel' },
-        { id: 'bautista',      display: 'Samara Bautista',       ln: 'bautista' },
         { id: 'fortez',        display: 'Charlie Fortez',        ln: 'fortez' },
+        { id: 'ramirez',       display: 'Mark Lauren Ramirez',   ln: 'ramirez' },
+        { id: 'sarmiento_j',   display: 'Julius Sarmiento',      ln: 'sarmiento', fn: 'julius' },
+        { id: 'arespacochaga', display: 'Mervin Arespacochaga',  ln: 'arespacochaga' },
+        { id: 'aurelio',       display: 'Raymond Aurelio',       ln: 'aurelio' },
+        { id: 'ronquillo',     display: 'Joremie Ronquillo',     ln: 'ronquillo' },
+        { id: 'cajayon',       display: 'Bryan Cajayon',         ln: 'cajayon' },
+        { id: 'sanchez',       display: 'Maria Angelica Sanchez',ln: 'sanchez' },
+        { id: 'caro',          display: 'Armi Caro',             ln: 'caro' },
+        { id: 'elago',         display: 'Ednyl Chloe Elago',     ln: 'elago' },
+        { id: 'arana',         display: 'Marvin Arana',          ln: 'arana' },
+        { id: 'diaz',          display: 'Sheilla Diaz',          ln: 'diaz' },
       ]
     },
     {
-      id: 'groupb', name: 'Diathan', color: '#d97706',  // Group B · TL Jonathan · SME Diana
+      id: 'meloace', name: 'MeloAce', color: '#059669',  // 10PM-9AM (4x11) · TL Angelica · SME Alvin Melo
       members: [
-        { id: 'bangalan',    display: 'Roderico Bangalan',     ln: 'bangalan' },
-        { id: 'ramirez',     display: 'Mark Lauren Ramirez',   ln: 'ramirez' },
-        { id: 'vosotros',    display: 'Diana Vosotros',        ln: 'vosotros' },
-        { id: 'velasco',     display: 'Edward Velasco',        ln: 'velasco' },
-        { id: 'galoso',      display: 'Lawrence Galoso',       ln: 'galoso' },
-        { id: 'benjamin',    display: 'Russell Benjamin',      ln: 'benjamin' },
-        { id: 'escabillas',  display: 'Kenneth Escabillas',    ln: 'escabillas' },
-        { id: 'malavega',    display: 'Jose Carlos Malavega',  ln: 'malavega' },
-        { id: 'lentija',     display: 'Jefferson Lentija',     ln: 'lentija' },
-        { id: 'anos',        display: 'Marc Anos',             ln: 'anos' },
-        { id: 'sarmiento_c', display: 'Charles Sarmiento',     ln: 'sarmiento', fn: 'charles' },
-        { id: 'tupaz',       display: 'Rommel Tupaz',          ln: 'tupaz' },
-        { id: 'saminado',    display: 'Jervin Saminado',       ln: 'saminado' },
-        { id: 'arcena',      display: 'Charlito Arcena',       ln: 'arcena' },
-        { id: 'verastigue',  display: 'Bedier Verastigue',     ln: 'verastigue' },
-      ]
-    },
-    {
-      id: 'groupc', name: 'MeloAce', color: '#059669',  // Group C · TL AC · SME Vin
-      members: [
+        { id: 'silang',     display: 'Gian Carlo Silang',     ln: 'silang' },
+        { id: 'galoso',     display: 'Lawrence Galoso',       ln: 'galoso' },
+        { id: 'silva',      display: 'Godwin Silva',          ln: 'silva' },
+        { id: 'bautista',   display: 'Samara Bautista',       ln: 'bautista' },
+        { id: 'baliuag',    display: 'Charlon Baliuag',       ln: 'baliuag' },
+        { id: 'malavega',   display: 'Jose Carlos Malavega',  ln: 'malavega' },
+        { id: 'villaruel',  display: 'Lance Villaruel',       ln: 'villaruel' },
         { id: 'cubol',      display: 'Jesley Cubol',          ln: 'cubol' },
+        { id: 'monticarlo', display: 'John Vic Monticarlo',   ln: 'monticarlo' },
+        { id: 'aridi',      display: 'Hadi Aridi',            ln: 'aridi' },
+        { id: 'ramos_j',    display: 'Jennifer Ramos',        ln: 'ramos',   fn: 'jennifer' },
+        { id: 'cardell',    display: 'Donald Cardell',        ln: 'cardell' },
+        { id: 'tormon',     display: 'Michael Anthony Tormon',ln: 'tormon' },
+        { id: 'jerusalem',  display: 'Danilo Jerusalem',      ln: 'jerusalem' },
+      ]
+    },
+    {
+      id: 'ev', name: 'EV', color: '#d97706',  // 11PM-10AM (4x11) · TL Jonathan · SME Vincent
+      members: [
+        { id: 'catolico',   display: 'Pedro Catolico',        ln: 'catolico' },
+        { id: 'tupaz',      display: 'Rommel Tupaz',          ln: 'tupaz' },
+        { id: 'lavares',    display: 'Gian Lavares',          ln: 'lavares' },
+        { id: 'arcena',     display: 'Charlito Arcena',       ln: 'arcena' },
+        { id: 'benjamin',   display: 'Russell Benjamin',      ln: 'benjamin' },
+        { id: 'susana',     display: 'John Christian Susana', ln: 'susana' },
+        { id: 'tungol',     display: 'Lorenzo Luiz Tungol',   ln: 'tungol' },
         { id: 'magtalas',   display: 'Ayesha Magtalas',       ln: 'magtalas' },
         { id: 'balbido',    display: 'Justine Balbido',       ln: 'balbido' },
-        { id: 'cardell',    display: 'Donald Cardell',        ln: 'cardell' },
-        { id: 'melo',       display: 'Alvin Melo',            ln: 'melo' },
-        { id: 'ramos_i',    display: 'Ma. Isabel Ramos',      ln: 'ramos',   fn: 'isabel' },
-        { id: 'ramos_j',    display: 'Jennifer Ramos',        ln: 'ramos',   fn: 'jennifer' },
-        { id: 'aurelio',    display: 'Raymond Aurelio',       ln: 'aurelio' },
-        { id: 'tamayo',     display: 'Melisse Tamayo',        ln: 'tamayo' },
-        { id: 'ronquillo',  display: 'Joremie Ronquillo',     ln: 'ronquillo' },
         { id: 'decastro',   display: 'Catherine de Castro',   ln: 'castro',  ln2: 'de castro' },
-        { id: 'arana',      display: 'Marvin Arana',          ln: 'arana' },
-        { id: 'diaz',       display: 'Sheilla Diaz',          ln: 'diaz' },
-        { id: 'aridi',      display: 'Hadi Aridi',            ln: 'aridi' },
-        { id: 'bascos',     display: 'Jessica Bascos',        ln: 'bascos' },
-        { id: 'sindac',     display: 'Renz Sindac',           ln: 'sindac' },
-        { id: 'cajayon',    display: 'Bryan Cajayon',         ln: 'cajayon' },
-        { id: 'rampas',     display: 'Desiree Rampas',        ln: 'rampas' },
+        { id: 'caguimbal',  display: 'Divinamor Caguimbal',   ln: 'caguimbal' },
+        { id: 'ramos_i',    display: 'Ma. Isabel Ramos',      ln: 'ramos',   fn: 'isabel' },
+        { id: 'tiu',        display: 'Regine Theresa Tiu',    ln: 'tiu' },
       ]
     },
     {
-      id: 'groupd', name: 'JumHon', color: '#0891b2',  // Group D · TL Jumar · SME Ali
+      id: 'bridge', name: 'Bridge', color: '#0891b2',  // 10AM-9PM daytime coverage · TL Angelica
       members: [
-        { id: 'caro',       display: 'Armi Caro',             ln: 'caro' },
-        { id: 'tiu',        display: 'Regine Theresa Tiu',    ln: 'tiu' },
-        { id: 'tungol',     display: 'Lorenzo Luiz Tungol',   ln: 'tungol' },
-        { id: 'sanjose',    display: 'Glen Jerick San Jose',  ln: 'jose',    ln2: 'san jose' },
-        { id: 'jerusalem',  display: 'Danilo Jerusalem',      ln: 'jerusalem' },
+        { id: 'rampas',     display: 'Desiree Rampas',        ln: 'rampas' },
+        { id: 'bascos',     display: 'Jessica Bascos',        ln: 'bascos' },
         { id: 'jaraula',    display: 'Jezza Jezreel Jaraula', ln: 'jaraula' },
-        { id: 'monticarlo', display: 'Apol Monticarlo',       ln: 'monticarlo' },
-        { id: 'sanchez',    display: 'Maria Angelica Sanchez',ln: 'sanchez' },
-        { id: 'elago',      display: 'Ednyl Chloe Elago',     ln: 'elago' },
-        { id: 'tormon',     display: 'Michael Anthony Tormon',ln: 'tormon' },
-        { id: 'caguimbal',  display: 'Divinamor Caguimbal',   ln: 'caguimbal' },
       ]
     },
     {
@@ -1508,8 +1498,12 @@
     const hits = LN_MAP[ln] || [];
     if (!hits.length) return null;
     if (hits.length === 1) return hits[0].m.id;
-    const fn = parts[0];
-    const exact = hits.find(c => c.m.fn && c.m.fn === fn);
+    // Match the disambiguating first name against ANY given-name token, not just the first one:
+    // the sheet writes "Ma Isabel Ramos" and "Ma. Isabel Casino Ramos", where the distinguishing
+    // name is the second token. Comparing only parts[0] fell through to whichever member happened
+    // to come first in TEAMS, which silently credited her rows to the other Ramos.
+    const given = parts.slice(0, -1);
+    const exact = hits.find(c => c.m.fn && given.includes(c.m.fn));
     return exact ? exact.m.id : hits[0].m.id;
   }
 
@@ -2252,9 +2246,10 @@
 
   // ── Team Leader accountability scorecards ──
   const TEAM_LEADERS = [
-    { name:'Angelica Tanate',   role:'Team Leader', teamId:'groupc' },
-    { name:'Jonathan Jabonete', role:'Team Leader', teamId:'groupb' },
-    { name:'Jumar Vere',        role:'Team Leader', teamId:'groupd' },
+    { name:'Jumar Vere',        role:'Team Leader', teamId:'dijumhon' },
+    { name:'Angelica Tanate',   role:'Team Leader', teamId:'meloace' },
+    { name:'Jonathan Jabonete', role:'Team Leader', teamId:'ev' },
+    { name:'Angelica Tanate',   role:'Team Leader', teamId:'bridge' },   // AC covers MeloAce & Bridge
   ];
   let _tlView = 'monthly', _tlDate = '';
   function setTlView(v) {
@@ -3963,22 +3958,19 @@
   }
 
   // ── COACHING LOG ──────────────────────────────────────────────────────────
-  // Synced to the June Week 4 schedule (matches the dashboard TEAMS rosters)
+  // Synced to the August 17-31 floor schedule (matches the dashboard TEAMS rosters)
   const CL_ROSTER = {
-    'RV': ['Godwin Silva','Julius Sarmiento','Renz Ruiz','Charlon Baliuag','John Christian Susana',
-                'Devi Demayo','Gian Lavares','Art Joseph Petras','Gian Carlo Silang','Pedro Catolico',
-                'Mervin Arespacochaga','Lance Villaruel','Samara Bautista','Charlie Fortez'],
-    'Diathan': ['Roderico Bangalan','Mark Lauren Ramirez','Diana Vosotros','Edward Velasco',
-                'Lawrence Galoso','Russell Benjamin','Kenneth Escabillas','Jose Carlos Malavega','Jefferson Lentija',
-                'Marc Anos','Charles Sarmiento','Rommel Tupaz','Jervin Saminado','Charlito Arcena','Bedier Verastigue'],
-    'MeloAce': ['Jesley Cubol','Ayesha Magtalas','Justine Balbido','Donald Cardell','Alvin Melo',
-                'Ma. Isabel Ramos','Jennifer Ramos','Raymond Aurelio','Melisse Tamayo','Joremie Ronquillo',
-                'Catherine de Castro','Marvin Arana','Sheilla Diaz','Hadi Aridi','Jessica Bascos','Renz Sindac',
-                'Bryan Cajayon','Desiree Rampas'],
-    'JumHon': ['Armi Caro','Regine Theresa Tiu','Lorenzo Luiz Tungol',
-                'Glen Jerick San Jose','Danilo Jerusalem','Jezza Jezreel Jaraula','Apol Monticarlo',
-                'Maria Angelica Sanchez',
-                'Ednyl Chloe Elago','Michael Anthony Tormon','Divinamor Caguimbal'],
+    'DiJumHon': ['Marc Anos','Devi Demayo','Jervin Saminado','Bedier Verastigue','Edward Velasco',
+                'Art Joseph Petras','Charlie Fortez','Mark Lauren Ramirez','Julius Sarmiento',
+                'Mervin Arespacochaga','Raymond Aurelio','Joremie Ronquillo','Bryan Cajayon',
+                'Maria Angelica Sanchez','Armi Caro','Ednyl Chloe Elago','Marvin Arana','Sheilla Diaz'],
+    'MeloAce': ['Gian Carlo Silang','Lawrence Galoso','Godwin Silva','Samara Bautista','Charlon Baliuag',
+                'Jose Carlos Malavega','Lance Villaruel','Jesley Cubol','John Vic Monticarlo','Hadi Aridi',
+                'Jennifer Ramos','Donald Cardell','Michael Anthony Tormon','Danilo Jerusalem'],
+    'EV': ['Pedro Catolico','Rommel Tupaz','Gian Lavares','Charlito Arcena','Russell Benjamin',
+                'John Christian Susana','Lorenzo Luiz Tungol','Ayesha Magtalas','Justine Balbido',
+                'Catherine de Castro','Divinamor Caguimbal','Ma. Isabel Ramos','Regine Theresa Tiu'],
+    'Bridge': ['Desiree Rampas','Jessica Bascos','Jezza Jezreel Jaraula'],
     'POC TEAM': ['Angelica Tanate','Vincent Gadier','Alvin Bayhon','Jumar Vere','Diana Vosotros','Alvin Melo'],
   };
   const CL_ALL_TMS = Object.entries(CL_ROSTER).flatMap(([squad,names]) => names.map(name => ({name,squad})));
@@ -4063,7 +4055,7 @@
 
   let _clInited = false;
   let _clState = {
-    tmName:'', squad:'RV', leadName:'', hubspot:'', convoDate:'', behaviorDate:'',
+    tmName:'', squad:'DiJumHon', leadName:'', hubspot:'', convoDate:'', behaviorDate:'',
     missed:[], general:true, behaviorEdited:'', useEdited:false, level:'verbal',
     impact:CL_IMPACT_DEFAULT, expectations:CL_EXPECT_DEFAULT, support:CL_SUPPORT_DEFAULT,
     prior:'', followUp:'', mode:'weekly',
@@ -4528,7 +4520,7 @@ ${notes}`;
       html += `<th style="padding:8px 10px;background:${NAVY};color:#fff;white-space:nowrap;text-align:center">Week ${i+1}<br><span style="font-weight:400;color:#9FB4DA;font-size:10px">${getWeekDateRange(mon)}</span></th>`;
     });
     html += `<th style="padding:8px 10px;background:${NAVY};color:#fff;text-align:center">Done</th></tr></thead><tbody>`;
-    ['RV','Diathan','MeloAce','JumHon'].forEach(sq => {
+    ['DiJumHon','MeloAce','EV','Bridge'].forEach(sq => {
       const reps = CL_ROSTER[sq] || [];
       html += `<tr><td colspan="${weeks.length+2}" style="background:#EEF3FB;color:${NAVY};font-weight:800;padding:6px 10px;font-size:11px;letter-spacing:.5px">${sq}</td></tr>`;
       reps.forEach(rep => {
@@ -5747,10 +5739,14 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
       cellData[r.team+'|'+r.name+'|'+r.rawDate] = { schedule:r.schedule, status:r.status };
     });
     // Map the sheet's team names to the dashboard Group labels, and order A -> D.
-    const SCHED_TEAM_MAP = { rv:'RV', diathan:'Diathan', meloace:'MeloAce', acevin:'MeloAce', ace:'MeloAce', jumhon:'JumHon' };
+    // Current structure first; the legacy labels below still appear in the attendance sheet
+    // until whoever maintains it switches over, so keep tidying those too rather than dropping them.
+    const SCHED_TEAM_MAP = { dijumhon:'DiJumHon', dijumhom:'DiJumHon', meloace:'MeloAce', acevin:'MeloAce', ace:'MeloAce',
+                             ev:'EV', bridge:'Bridge',
+                             rv:'RV', diathan:'Diathan', jumhon:'JumHon' };
     const teamKey   = t => (t||'').toLowerCase().replace(/[^a-z0-9]/g,'');
     const teamLabel = t => SCHED_TEAM_MAP[teamKey(t)] || t;
-    const SCHED_ORDER = ['RV','Diathan','MeloAce','JumHon'];
+    const SCHED_ORDER = ['DiJumHon','MeloAce','EV','Bridge','RV','Diathan','JumHon'];
     const teamOrder = t => { const i = SCHED_ORDER.indexOf(teamLabel(t)); return i < 0 ? 99 : i; };
     teams.sort((a,b) => teamOrder(a) - teamOrder(b));
 
@@ -5812,10 +5808,10 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
   const SC_PH_HOLIDAYS = ['2026-01-01','2026-02-17','2026-04-02','2026-04-03','2026-04-09','2026-05-01','2026-06-12','2026-08-21','2026-08-31','2026-11-30','2026-12-08','2026-12-25','2026-12-30','2026-12-31'];
   // Team -> TL and SME to CC (coaching ownership visible)
   const SC_TEAM_STAFF = {
-    groupa: { tl:'Ritch Joy Manipol', sme:'Vincent Gadier' },
-    groupb: { tl:'Jonathan Jabonete',  sme:'Diana Vosotros' },
-    groupc: { tl:'Angelica Tanate',    sme:'Alvin Melo' },
-    groupd: { tl:'Jumar Vere',         sme:'Ali' },
+    dijumhon: { tl:'Jumar Vere',        sme:['Diana Vosotros','Alvin Bayhon'] },
+    meloace:  { tl:'Angelica Tanate',   sme:'Alvin Melo' },
+    ev:       { tl:'Jonathan Jabonete', sme:'Vincent Gadier' },
+    bridge:   { tl:'Angelica Tanate',   sme:'Alvin Melo' },
   };
   // Shared logging so the Acknowledgements page is visible to everyone, not just this browser.
   // Writes go to the same Apps Script as the Coaching Tracker (it routes record:'scorecard' to a
@@ -5827,7 +5823,7 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
   function scPostAck(rec){ if (!SC_ACK_POST_URL || !SC_ACK_CSV_URL) return; try { fetch(SC_ACK_POST_URL, { method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify(rec) }); } catch (e) {} }
 
   let _scModel = null, _scAI = {}, _scMembers = [], _scSelId = '', _scGenKey = '';
-  const SC_TL_OPTS = [{v:'',t:'All teams'},{v:'groupa',t:'Ritch Joy Manipol — RV'},{v:'groupb',t:'Jonathan Jabonete — Diathan'},{v:'groupc',t:'Angelica Tanate — MeloAce'},{v:'groupd',t:'Jumar Vere — JumHon'}];
+  const SC_TL_OPTS = [{v:'',t:'All teams'},{v:'dijumhon',t:'Jumar Vere — DiJumHon'},{v:'meloace',t:'Angelica Tanate — MeloAce'},{v:'ev',t:'Jonathan Jabonete — EV'},{v:'bridge',t:'Angelica Tanate — Bridge'}];
   // Team leader who actually line-manages a given team, derived from the picker above.
   function scTLName(teamId){ const o=SC_TL_OPTS.find(x=>x.v===teamId && x.v); return o ? o.t.split('—')[0].trim() : ''; }
 
@@ -6159,7 +6155,7 @@ Write in a natural human voice (not robotic, no meta-commentary about being an A
     const first=esc((M.name||'').split(' ')[0])||'there';
     const monthLbl=new Date(M.ym+'-01T00:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'});
     const staff=SC_TEAM_STAFF[M.teamId]||{};
-    const ccNames=[staff.tl,staff.sme].filter(Boolean).filter(n=>n!==M.sender);
+    const ccNames=[staff.tl].concat(staff.sme||[]).filter(Boolean).filter(n=>n!==M.sender);
     const senderTitle = ['Angelica Tanate','Jonathan Jabonete','Jumar Vere'].includes(M.sender) ? 'Sales Supervisor, SD Outbound' : 'Senior Sales Supervisor, SD Outbound';
     const senderFirst = (M.sender||'').split(' ')[0];
     const ccLine=`<b>To:</b> ${esc(M.name)} &nbsp;&nbsp; <b>Cc:</b> ${ccNames.map(esc).join(', ')||'—'}`;
