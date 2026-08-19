@@ -2280,7 +2280,14 @@
   // coached afterwards. IMPORTANT: correlational, not causal. A rep's DCs move for
   // many reasons (pipeline, partner mix, leave, seasonality), so read the lift figures
   // as "what happened around this coaching", never as "what this coaching caused".
-  const LI_WINDOW = 5;   // business days compared either side of a coaching session
+  const LI_WINDOW = 5;   // business days compared either side of a coaching session for booked DCs
+  // Show-up needs a longer window and a floor on the sample. A rep books only a handful of
+  // DCs in five days and only the resolved ones (showed / no-show / cancelled) count, so a
+  // per-rep five-day rate is mostly noise: in August the median rep had ZERO resolved DCs in
+  // the after-window, which is how you get a meaningless "0% -> 100%". So show-up is pooled
+  // across all of a leader's reps over a longer window, and suppressed below a usable count.
+  const LI_SU_WINDOW = 10;  // business days either side for show-up
+  const LI_SU_MIN    = 10;  // minimum resolved DCs on each side before a rate is shown
 
   // The coach column is free text and has been written several ways ("Ritch", "Jumar").
   const LEADER_ALIASES = {
@@ -2359,17 +2366,28 @@
     _coachLogs.filter(l => inMonth((l.date||'').slice(0,10)))
       .slice().sort((a,b) => (a.date||'').localeCompare(b.date||''))
       .forEach(l => { const k = (l.rep||'').trim().toLowerCase(); if (k && !allFirst.has(k)) allFirst.set(k, (l.date||'').slice(0,10)); });
-    let fSum = 0, fN = 0;
+    let fSum = 0, fN = 0, fsbY = 0, fsbH = 0, fsaY = 0, fsaH = 0;
     allFirst.forEach((date, nm) => {
       const ent = memberByName.get(nm); if (!ent || !date) return;
       const pre  = liBizWindow(date, LI_WINDOW, -1, null);
       const post = liBizWindow(date, LI_WINDOW,  1, through);
-      if (pre.length < LI_WINDOW || post.length < LI_WINDOW) return;
-      const sum = ds => ds.reduce((s,d) => s + (aggregateForDate(d)[ent.m.id] || 0), 0);
-      fSum += sum(post) - sum(pre); fN++;
+      if (pre.length >= LI_WINDOW && post.length >= LI_WINDOW){
+        const sum = ds => ds.reduce((s,d) => s + (aggregateForDate(d)[ent.m.id] || 0), 0);
+        fSum += sum(post) - sum(pre); fN++;
+      }
+      const sPre  = liBizWindow(date, LI_SU_WINDOW, -1, null);
+      const sPost = liBizWindow(date, LI_SU_WINDOW,  1, through);
+      if (sPre.length >= LI_SU_WINDOW && sPost.length >= LI_SU_WINDOW){
+        const sb = aggregateShowupForDates(sPre)[ent.m.id]  || {yes:0,happened:0};
+        const sa = aggregateShowupForDates(sPost)[ent.m.id] || {yes:0,happened:0};
+        fsbY += sb.yes; fsbH += sb.happened; fsaY += sa.yes; fsaH += sa.happened;
+      }
     });
     const floorAvg = fN ? Math.round(fSum/fN*100)/100 : null;
     const floorN = fN;
+    const floorSuBefore = fsbH >= LI_SU_MIN ? Math.round(fsbY/fsbH*100) : null;
+    const floorSuAfter  = fsaH >= LI_SU_MIN ? Math.round(fsaY/fsaH*100) : null;
+    const floorSuLift   = (floorSuBefore == null || floorSuAfter == null) ? null : floorSuAfter - floorSuBefore;
 
     return LEADERS.map(L => {
       const logs = _coachLogs.filter(l => liCanon(l.coach) === L.name && inMonth((l.date||'').slice(0,10)));
@@ -2390,7 +2408,6 @@
           .forEach(l => { const k = (l.rep||'').trim().toLowerCase(); if (k && !first.has(k)) first.set(k, (l.date||'').slice(0,10)); });
 
       let netLift = 0, improved = 0, declined = 0, beforeTot = 0, afterTot = 0, pending = 0;
-      let sbY = 0, sbH = 0, saY = 0, saH = 0;
       const perRep = [];
       first.forEach((date, nm) => {
         const ent = memberByName.get(nm); if (!ent || !date) return;
@@ -2403,13 +2420,25 @@
         const b = sum(pre), a = sum(post), delta = a - b;
         netLift += delta; beforeTot += b; afterTot += a;
         if (delta > 0) improved++; else if (delta < 0) declined++;
-        const sb = aggregateShowupForDates(pre)[ent.m.id]  || {yes:0,happened:0};
-        const sa = aggregateShowupForDates(post)[ent.m.id] || {yes:0,happened:0};
-        sbY += sb.yes; sbH += sb.happened; saY += sa.yes; saH += sa.happened;
         perRep.push({ name: ent.m.display, team: ent.t.name, date: date, before: b, after: a,
                       delta: delta, sessions: repNames.filter(x => x === nm).length });
       });
       perRep.sort((x,y) => y.delta - x.delta);
+
+      // Separate pass: show-up runs on its own longer window and is pooled, not per rep.
+      let sbY = 0, sbH = 0, saY = 0, saH = 0, suReps = 0;
+      first.forEach((date, nm) => {
+        const ent = memberByName.get(nm); if (!ent || !date) return;
+        const pre  = liBizWindow(date, LI_SU_WINDOW, -1, null);
+        const post = liBizWindow(date, LI_SU_WINDOW,  1, through);
+        if (pre.length < LI_SU_WINDOW || post.length < LI_SU_WINDOW) return;
+        const sb = aggregateShowupForDates(pre)[ent.m.id]  || {yes:0,happened:0};
+        const sa = aggregateShowupForDates(post)[ent.m.id] || {yes:0,happened:0};
+        sbY += sb.yes; sbH += sb.happened; saY += sa.yes; saH += sa.happened; suReps++;
+      });
+      const suBefore = sbH >= LI_SU_MIN ? Math.round(sbY/sbH*100) : null;
+      const suAfter  = saH >= LI_SU_MIN ? Math.round(saY/saH*100) : null;
+
       const measured = perRep.length;
       const days = measured * LI_WINDOW;
       const avgLift = measured ? Math.round(netLift/measured*100)/100 : null;
@@ -2420,13 +2449,13 @@
         inScope: inScope.length, offRoster: offRoster.length, coverage: coverage, activeWeeks: weeks.size,
         measured: measured, pending: pending, improved: improved, declined: declined,
         netLift: netLift,
-        avgLift: avgLift, floorAvg: floorAvg, floorN: floorN,
+        avgLift: avgLift, floorAvg: floorAvg, floorN: floorN, floorSuLift: floorSuLift,
         vsFloor: (avgLift == null || floorAvg == null) ? null : Math.round((avgLift - floorAvg)*100)/100,
         beforeRate: days ? Math.round(beforeTot/days*100)/100 : null,
         afterRate:  days ? Math.round(afterTot/days*100)/100  : null,
         improvedPct: measured ? Math.round(improved/measured*100) : null,
-        suBefore: sbH ? Math.round(sbY/sbH*100) : null,
-        suAfter:  saH ? Math.round(saY/saH*100) : null,
+        suBefore: suBefore, suAfter: suAfter, suBeforeN: sbH, suAfterN: saH, suReps: suReps,
+        suLift: (suBefore == null || suAfter == null) ? null : suAfter - suBefore,
         perRep: perRep
       };
     });
@@ -2476,6 +2505,7 @@
     const topEffect   = most(active.filter(r => r.measured >= 3), r => r.vsFloor);
     const topImpact   = most(active.filter(r => r.measured >= 3), r => r.netLift);
     const topCoverage = most(active.filter(r => r.coverage != null), r => r.coverage);
+    const topShowup   = most(active.filter(r => r.suLift != null && r.floorSuLift != null), r => r.suLift - r.floorSuLift);
 
     const call = (label, r, val, note) => '<div style="background:#fff;border:1px solid ' + BORDER + ';border-radius:12px;padding:14px 16px;flex:1;min-width:190px">'
       + '<div style="font-size:9.5px;letter-spacing:.5px;text-transform:uppercase;color:' + SLATE + '">' + label + '</div>'
@@ -2489,6 +2519,7 @@
       + call('Most effective', topEffect, topEffect ? (topEffect.vsFloor > 0 ? '+' : '') + topEffect.vsFloor + ' DCs per rep vs floor' : '', topEffect ? topEffect.improvedPct + '% of ' + topEffect.measured + ' measured reps improved' : '')
       + call('Most impact', topImpact, topImpact ? (topImpact.netLift > 0 ? '+' : '') + topImpact.netLift + ' net DCs' : '', topImpact ? 'over ' + topImpact.measured + ' measured reps' : '')
       + call('Widest coverage', topCoverage, topCoverage ? topCoverage.coverage + '% of their reps' : '', topCoverage ? topCoverage.inScope + '/' + topCoverage.scopeSize + ' coached' : '')
+      + call('Best show-up movement', topShowup, topShowup ? ((topShowup.suLift - topShowup.floorSuLift) > 0 ? '+' : '') + (topShowup.suLift - topShowup.floorSuLift) + ' pts vs floor' : '', topShowup ? topShowup.suBefore + '% to ' + topShowup.suAfter + '% on ' + topShowup.suAfterN + ' resolved DCs' : '')
       + '</div>';
 
     const th = t => '<th style="padding:8px 9px;background:' + NAVY + ';color:#fff;font-size:10px;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;text-align:left">' + t + '</th>';
@@ -2496,7 +2527,7 @@
     const table = '<div style="overflow-x:auto;background:#fff;border:1px solid ' + BORDER + ';border-radius:12px">'
       + '<table style="width:100%;border-collapse:collapse;min-width:880px"><thead><tr>'
       + th('Leader') + th('Role') + th('Scope') + th('Sessions') + th('Reps') + th('Coverage') + th('Wks')
-      + th('DC/day before') + th('DC/day after') + th('Avg lift / rep') + th('vs floor') + th('Improved') + th('Net DCs')
+      + th('DC/day before') + th('DC/day after') + th('Avg lift / rep') + th('vs floor') + th('Improved') + th('Net DCs') + th('Show-up before') + th('Show-up after') + th('Show-up vs floor')
       + '</tr></thead><tbody>'
       + ranked.map(function(r,i){ return '<tr style="background:' + (i%2?'#F8FAFD':'#fff') + ';border-top:1px solid ' + BORDER + '">'
           + '<td style="padding:7px 9px;font-size:13px;font-weight:700;color:' + NAVY + ';white-space:nowrap"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:' + r.color + ';margin-right:7px"></span>' + esc(r.name) + '</td>'
@@ -2512,6 +2543,9 @@
           + num(r.vsFloor == null ? '—' : (r.vsFloor > 0 ? '+' : '') + r.vsFloor, r.vsFloor == null ? SLATE : r.vsFloor > 0 ? GOOD : r.vsFloor < 0 ? BAD : SLATE)
           + num(r.measured ? r.improved + '/' + r.measured : '—', r.improvedPct == null ? SLATE : r.improvedPct >= 50 ? GOOD : WARN)
           + num(r.netLift == null ? '—' : (r.netLift > 0 ? '+' : '') + r.netLift, r.netLift > 0 ? GOOD : r.netLift < 0 ? BAD : SLATE)
+          + num(r.suBefore == null ? '—' : r.suBefore + '%', SLATE)
+          + num(r.suAfter == null ? '—' : r.suAfter + '%', SLATE)
+          + num(r.suLift == null || r.floorSuLift == null ? '—' : ((r.suLift - r.floorSuLift) > 0 ? '+' : '') + (r.suLift - r.floorSuLift) + 'pts', r.suLift == null || r.floorSuLift == null ? SLATE : (r.suLift - r.floorSuLift) > 0 ? GOOD : (r.suLift - r.floorSuLift) < 0 ? BAD : SLATE)
           + '</tr>'; }).join('')
       + '</tbody></table></div>';
 
@@ -2537,7 +2571,7 @@
               + (bottom.length ? '<div style="border-top:1px dashed ' + BORDER + ';margin-top:6px;padding-top:5px">' + bottom.map(chip).join('') + '</div>' : '')
             : '<div style="font-size:11.5px;color:' + SLATE + '">No rep has a full ' + LI_WINDOW + '-day window either side of their first session yet.</div>')
         + (r.offRoster ? '<div style="font-size:10.5px;color:' + WARN + ';margin-top:8px">' + r.offRoster + ' coached rep' + (r.offRoster===1?'':'s') + ' no longer on the roster, excluded from the lift figures.</div>' : '')
-        + (r.suBefore != null && r.suAfter != null ? '<div style="font-size:10.5px;color:' + SLATE + ';margin-top:8px">Show-up ' + r.suBefore + '% &rarr; ' + r.suAfter + '% across the same windows.</div>' : '')
+        + (r.suBefore != null && r.suAfter != null ? '<div style="font-size:10.5px;color:' + SLATE + ';margin-top:8px">Show-up ' + r.suBefore + '% &rarr; ' + r.suAfter + '% over ' + LI_SU_WINDOW + ' days either side (' + r.suBeforeN + ' then ' + r.suAfterN + ' resolved DCs).</div>' : (r.suReps ? '<div style="font-size:10.5px;color:' + SLATE + ';margin-top:8px">Show-up not shown: fewer than ' + LI_SU_MIN + ' resolved DCs either side.</div>' : '')) 
         + '</div></div>';
     }).join('');
 
