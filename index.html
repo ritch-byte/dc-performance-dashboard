@@ -630,6 +630,13 @@
       </svg>
       Team Leaders
     </a>
+    <a class="nav-item" id="navImpact" href="#" onclick="showPage('impact');return false;">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M2 13V9M6 13V4M10 13V7M14 13V2"/>
+        <path d="M1 15h14"/>
+      </svg>
+      Leader Impact
+    </a>
     <a class="nav-item" id="navScorecard" href="#" onclick="showPage('scorecard');return false;">
       <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
         <rect x="2" y="1.5" width="12" height="13" rx="1.5"/>
@@ -1296,6 +1303,27 @@
       </div>
       <div style="padding:0 24px 32px">
         <div id="scheduleBody"></div>
+      </div>
+    </div>
+
+    <!-- ── Leader Impact (per-leader coaching effectiveness) ── -->
+    <div id="impactSection" style="display:none;">
+      <div class="content-header">
+        <div class="page-title">Leader Impact</div>
+        <div class="ch-right" style="display:flex;gap:8px;align-items:center">
+          <select id="liMonth" class="week-select" onchange="renderLeaderImpact()"></select>
+          <select id="liSort" class="week-select" onchange="renderLeaderImpact()">
+            <option value="impact">Rank by impact</option>
+            <option value="effect">Rank by effectiveness</option>
+            <option value="activity">Rank by activity</option>
+          </select>
+          <button class="cl-chip" onclick="liGenerateReport()" id="liReportBtn">Generate report &#10024;</button>
+        </div>
+      </div>
+      <div style="padding:0 24px 32px">
+        <div id="liStatus" style="font-size:11px;color:var(--slate);min-height:14px;margin-bottom:10px"></div>
+        <div id="impactBody"></div>
+        <div id="liReport" style="margin-top:20px"></div>
       </div>
     </div>
 
@@ -2055,6 +2083,7 @@
     $('dcmonSection').style.display        = page === 'dcmon'       ? '' : 'none';
     $('scheduleSection').style.display     = page === 'schedule'    ? '' : 'none';
     $('leadersSection').style.display      = page === 'leaders'     ? '' : 'none';
+    $('impactSection').style.display       = page === 'impact'      ? '' : 'none';
     $('scorecardSection').style.display    = page === 'scorecard'   ? '' : 'none';
     $('ackSection').style.display          = page === 'ack'         ? '' : 'none';
     $('navDashboard').classList.toggle('active',   page === 'dashboard');
@@ -2067,10 +2096,12 @@
     $('navDcmon').classList.toggle('active',        page === 'dcmon');
     $('navSchedule').classList.toggle('active',     page === 'schedule');
     $('navLeaders').classList.toggle('active',      page === 'leaders');
+    $('navImpact').classList.toggle('active',       page === 'impact');
     $('navScorecard').classList.toggle('active',    page === 'scorecard');
     $('navAck').classList.toggle('active',          page === 'ack');
     if (page === 'team')       renderTeamRoster();
     if (page === 'leaders')    renderTeamLeaders();
+    if (page === 'impact')     { liBuildMonths(); renderLeaderImpact(); }
     if (page === 'scorecard')  scInit();
     if (page === 'ack')        renderAckTracker();
     if (page === 'reports')    { buildReportMonthSelect(); renderReports(); }
@@ -2242,6 +2273,328 @@
     $('teamBody').innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(430px,1fr));gap:18px;padding:4px 4px 24px">${cards}</div>`;
 
     if (!_coachLogsLoaded) loadCoachingLogs(false).then(() => { if ($('teamSection').style.display !== 'none') renderTeamRoster(); });
+  }
+
+  // ── LEADER IMPACT ─────────────────────────────────────────────────────────
+  // Per-leader (TL, SME, QA) coaching activity and what happened to the reps they
+  // coached afterwards. IMPORTANT: correlational, not causal. A rep's DCs move for
+  // many reasons (pipeline, partner mix, leave, seasonality), so read the lift figures
+  // as "what happened around this coaching", never as "what this coaching caused".
+  const LI_WINDOW = 5;   // business days compared either side of a coaching session
+
+  // The coach column is free text and has been written several ways ("Ritch", "Jumar").
+  const LEADER_ALIASES = {
+    'ritch':'Ritch Joy Manipol', 'ritch joy manipol':'Ritch Joy Manipol', 'ritch manipol':'Ritch Joy Manipol',
+    'jumar':'Jumar Vere', 'jumar vere':'Jumar Vere',
+    'ac':'Angelica Tanate', 'angelica':'Angelica Tanate', 'angelica tanate':'Angelica Tanate',
+    'jonathan':'Jonathan Jabonete', 'jonathan jabonete':'Jonathan Jabonete',
+    'vince':'Vincent Gadier', 'vin':'Vincent Gadier', 'vincent':'Vincent Gadier', 'vincent gadier':'Vincent Gadier',
+    'diana':'Diana Vosotros', 'diana vosotros':'Diana Vosotros',
+    'alvin bayhon':'Alvin Bayhon', 'bayhon':'Alvin Bayhon',
+    'alvin melo':'Alvin Melo', 'melo':'Alvin Melo',
+    'ali':'Aly Limayo', 'aly':'Aly Limayo', 'aly limayo':'Aly Limayo'
+  };
+  const LEADERS = [
+    { name:'Jumar Vere',        role:'Team Leader',        scope:['dijumhon'],         color:'#1A2DB5' },
+    { name:'Angelica Tanate',   role:'Team Leader',        scope:['meloace','bridge'], color:'#059669' },
+    { name:'Jonathan Jabonete', role:'Team Leader',        scope:['ev'],               color:'#d97706' },
+    { name:'Diana Vosotros',    role:'SME',                scope:['dijumhon'],         color:'#1A2DB5' },
+    { name:'Alvin Bayhon',      role:'SME',                scope:['dijumhon'],         color:'#1A2DB5' },
+    { name:'Alvin Melo',        role:'SME',                scope:['meloace','bridge'], color:'#059669' },
+    { name:'Vincent Gadier',    role:'SME',                scope:['ev'],               color:'#d97706' },
+    { name:'Aly Limayo',        role:'QA and Trainer',     scope:'floor',              color:'#7c3aed' },
+    { name:'Ritch Joy Manipol', role:'Senior Team Leader', scope:'floor',              color:'#0891b2' }
+  ];
+  function liCanon(raw){
+    const s = String(raw||'').trim(); if (!s) return '';
+    const k = s.toLowerCase();
+    if (LEADER_ALIASES[k]) return LEADER_ALIASES[k];
+    const exact = LEADERS.find(l => l.name.toLowerCase() === k);
+    if (exact) return exact.name;
+    const ln = k.split(/\s+/).pop();
+    const byLn = LEADERS.filter(l => l.name.toLowerCase().split(/\s+/).pop() === ln);
+    return byLn.length === 1 ? byLn[0].name : s;
+  }
+  // The DC feed routinely lags the coaching log by days. Measuring into dates the feed
+  // has not reported yet reads as zero booked DCs and manufactures a decline that never
+  // happened, so every window is capped at the last day the feed actually covers.
+  function liDataThrough(){
+    const today = localIso(new Date());
+    let max = '';
+    for (let i = 0; i < rawRows.length; i++){
+      const d = normalizeDate(rawRows[i].rawDate);
+      if (d && d <= today && d > max) max = d;
+    }
+    return max;
+  }
+  // N business days strictly before (dir<0) or after (dir>0) an ISO date. For the after
+  // window, cap stops it at the last day the DC feed covers.
+  function liBizWindow(iso, n, dir, cap){
+    const p = iso.split('-').map(Number);
+    const dt = new Date(p[0], p[1]-1, p[2]), out = [];
+    let guard = 0;
+    while (out.length < n && guard++ < 60){
+      dt.setDate(dt.getDate() + (dir < 0 ? -1 : 1));
+      const dow = dt.getDay(); if (dow === 0 || dow === 6) continue;
+      const s = localIso(dt);
+      if (dir > 0 && cap && s > cap) break;
+      out.push(s);
+    }
+    return dir < 0 ? out.reverse() : out;
+  }
+
+  function liComputeAll(ym){
+    const through = liDataThrough();
+    const memberByName = new Map();
+    for (const t of TEAMS){ if (t.id === 'poc') continue;
+      for (const m of t.members){ if (!m.hidden) memberByName.set(m.display.trim().toLowerCase(), {m:m, t:t}); } }
+    const inMonth = d => !!d && d.slice(0,7) === ym;
+
+    // Floor baseline: the same before/after measurement across every rep coached by anyone
+    // this month, so a leader can be read against the floor's own trend instead of in a
+    // vacuum. Without it, a month where the whole floor dipped makes every leader look bad.
+    const allFirst = new Map();
+    _coachLogs.filter(l => inMonth((l.date||'').slice(0,10)))
+      .slice().sort((a,b) => (a.date||'').localeCompare(b.date||''))
+      .forEach(l => { const k = (l.rep||'').trim().toLowerCase(); if (k && !allFirst.has(k)) allFirst.set(k, (l.date||'').slice(0,10)); });
+    let fSum = 0, fN = 0;
+    allFirst.forEach((date, nm) => {
+      const ent = memberByName.get(nm); if (!ent || !date) return;
+      const pre  = liBizWindow(date, LI_WINDOW, -1, null);
+      const post = liBizWindow(date, LI_WINDOW,  1, through);
+      if (pre.length < LI_WINDOW || post.length < LI_WINDOW) return;
+      const sum = ds => ds.reduce((s,d) => s + (aggregateForDate(d)[ent.m.id] || 0), 0);
+      fSum += sum(post) - sum(pre); fN++;
+    });
+    const floorAvg = fN ? Math.round(fSum/fN*100)/100 : null;
+    const floorN = fN;
+
+    return LEADERS.map(L => {
+      const logs = _coachLogs.filter(l => liCanon(l.coach) === L.name && inMonth((l.date||'').slice(0,10)));
+      const repNames = logs.map(l => (l.rep||'').trim().toLowerCase()).filter(Boolean);
+      const uniqueReps = new Set(repNames);
+      const scopeTeams = L.scope === 'floor' ? TEAMS.filter(t => t.id !== 'poc') : TEAMS.filter(t => L.scope.indexOf(t.id) >= 0);
+      const scopeNames = new Set();
+      scopeTeams.forEach(t => t.members.forEach(m => { if (!m.hidden) scopeNames.add(m.display.trim().toLowerCase()); }));
+      const inScope   = Array.from(uniqueReps).filter(n => scopeNames.has(n));
+      const offRoster = Array.from(uniqueReps).filter(n => !memberByName.has(n));
+      const coverage  = scopeNames.size ? Math.round(inScope.length / scopeNames.size * 100) : null;
+      const weeks = new Set(logs.map(l => { try { return getMondayIso((l.date||'').slice(0,10)); } catch(e){ return ''; } }).filter(Boolean));
+
+      // Pivot on each rep's FIRST session with this leader that month, so a rep coached
+      // repeatedly is measured once rather than re-counted for every follow-up.
+      const first = new Map();
+      logs.slice().sort((a,b) => (a.date||'').localeCompare(b.date||''))
+          .forEach(l => { const k = (l.rep||'').trim().toLowerCase(); if (k && !first.has(k)) first.set(k, (l.date||'').slice(0,10)); });
+
+      let netLift = 0, improved = 0, declined = 0, beforeTot = 0, afterTot = 0, pending = 0;
+      let sbY = 0, sbH = 0, saY = 0, saH = 0;
+      const perRep = [];
+      first.forEach((date, nm) => {
+        const ent = memberByName.get(nm); if (!ent || !date) return;
+        const pre  = liBizWindow(date, LI_WINDOW, -1, null);
+        const post = liBizWindow(date, LI_WINDOW,  1, through);
+        // Both sides must be full so the comparison is like for like. A short after-window
+        // means the DC feed has not caught up yet, not that the rep stopped booking.
+        if (pre.length < LI_WINDOW || post.length < LI_WINDOW){ pending++; return; }
+        const sum = ds => ds.reduce((s,d) => s + (aggregateForDate(d)[ent.m.id] || 0), 0);
+        const b = sum(pre), a = sum(post), delta = a - b;
+        netLift += delta; beforeTot += b; afterTot += a;
+        if (delta > 0) improved++; else if (delta < 0) declined++;
+        const sb = aggregateShowupForDates(pre)[ent.m.id]  || {yes:0,happened:0};
+        const sa = aggregateShowupForDates(post)[ent.m.id] || {yes:0,happened:0};
+        sbY += sb.yes; sbH += sb.happened; saY += sa.yes; saH += sa.happened;
+        perRep.push({ name: ent.m.display, team: ent.t.name, date: date, before: b, after: a,
+                      delta: delta, sessions: repNames.filter(x => x === nm).length });
+      });
+      perRep.sort((x,y) => y.delta - x.delta);
+      const measured = perRep.length;
+      const days = measured * LI_WINDOW;
+      const avgLift = measured ? Math.round(netLift/measured*100)/100 : null;
+      return {
+        name: L.name, role: L.role, color: L.color, dataThrough: through,
+        scopeLabel: L.scope === 'floor' ? 'Floor-wide' : scopeTeams.map(t => t.name).join(' + '),
+        scopeSize: scopeNames.size, sessions: logs.length, uniqueReps: uniqueReps.size,
+        inScope: inScope.length, offRoster: offRoster.length, coverage: coverage, activeWeeks: weeks.size,
+        measured: measured, pending: pending, improved: improved, declined: declined,
+        netLift: netLift,
+        avgLift: avgLift, floorAvg: floorAvg, floorN: floorN,
+        vsFloor: (avgLift == null || floorAvg == null) ? null : Math.round((avgLift - floorAvg)*100)/100,
+        beforeRate: days ? Math.round(beforeTot/days*100)/100 : null,
+        afterRate:  days ? Math.round(afterTot/days*100)/100  : null,
+        improvedPct: measured ? Math.round(improved/measured*100) : null,
+        suBefore: sbH ? Math.round(sbY/sbH*100) : null,
+        suAfter:  saH ? Math.round(saY/saH*100) : null,
+        perRep: perRep
+      };
+    });
+  }
+  function liBuildMonths(){
+    const sel = $('liMonth'); if (!sel) return;
+    const set = new Set(_coachLogs.map(l => (l.date||'').slice(0,7)).filter(x => /^\d{4}-\d{2}$/.test(x)));
+    set.add(localIso(new Date()).slice(0,7));
+    const months = Array.from(set).sort().reverse();
+    const cur = sel.value;
+    sel.innerHTML = months.map(m => {
+      const q = m.split('-').map(Number);
+      return '<option value="' + m + '">' + new Date(q[0],q[1]-1,1).toLocaleDateString('en-US',{month:'long',year:'numeric'}) + '</option>';
+    }).join('');
+    if (cur && months.indexOf(cur) >= 0) sel.value = cur;
+  }
+
+  function renderLeaderImpact(){
+    const body = $('impactBody'); if (!body) return;
+    if (!_coachLogsLoaded){
+      body.innerHTML = '<div style="padding:40px;text-align:center;color:var(--slate);font-size:13px">Loading coaching logs…</div>';
+      loadCoachingLogs(false).then(function(){ if ($('impactSection').style.display !== 'none'){ liBuildMonths(); renderLeaderImpact(); } });
+      return;
+    }
+    if (!_attLoaded && !_attLoading) loadAttendanceData();
+    if (!$('liMonth').options.length) liBuildMonths();
+    const ym = $('liMonth').value || localIso(new Date()).slice(0,7);
+    const sortBy = $('liSort').value || 'impact';
+    const rows = liComputeAll(ym);
+    const active = rows.filter(r => r.sessions > 0);
+    const NAVY='#0C1F42', SLATE='#5B6678', BORDER='var(--border)';
+    const GOOD='#0E9F6E', WARN='#C97000', BAD='#C00000';
+
+    if (!active.length){
+      body.innerHTML = '<div style="background:#fff;border:1px solid ' + BORDER + ';border-radius:12px;padding:36px;text-align:center;color:' + SLATE + ';font-size:13px">No coaching logged for this month yet.</div>';
+      $('liStatus').textContent = '';
+      return;
+    }
+    const dataThrough = active.length ? active[0].dataThrough : '';
+    const floorAvg = active.length ? active[0].floorAvg : null;
+    const floorN = active.length ? active[0].floorN : 0;
+    const key = r => sortBy === 'activity' ? r.sessions : sortBy === 'effect' ? (r.vsFloor == null ? -999 : r.vsFloor) : r.netLift;
+    const ranked = active.slice().sort((a,b) => key(b) - key(a));
+
+    const most = (arr, f) => arr.filter(r => f(r) != null).sort((a,b) => f(b) - f(a))[0];
+    const topActivity = most(active, r => r.sessions);
+    const topEffect   = most(active.filter(r => r.measured >= 3), r => r.vsFloor);
+    const topImpact   = most(active.filter(r => r.measured >= 3), r => r.netLift);
+    const topCoverage = most(active.filter(r => r.coverage != null), r => r.coverage);
+
+    const call = (label, r, val, note) => '<div style="background:#fff;border:1px solid ' + BORDER + ';border-radius:12px;padding:14px 16px;flex:1;min-width:190px">'
+      + '<div style="font-size:9.5px;letter-spacing:.5px;text-transform:uppercase;color:' + SLATE + '">' + label + '</div>'
+      + '<div style="font-size:16px;font-weight:800;color:' + NAVY + ';margin-top:4px">' + (r ? esc(r.name) : '—') + '</div>'
+      + '<div style="font-size:12px;color:' + SLATE + ';margin-top:2px">' + (r ? val : 'not enough data') + '</div>'
+      + (r && note ? '<div style="font-size:10.5px;color:' + SLATE + ';margin-top:4px">' + note + '</div>' : '')
+      + '</div>';
+
+    const callouts = '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">'
+      + call('Doing it the most', topActivity, topActivity ? topActivity.sessions + ' sessions · ' + topActivity.uniqueReps + ' reps' : '', topActivity ? 'across ' + topActivity.activeWeeks + ' week' + (topActivity.activeWeeks===1?'':'s') : '')
+      + call('Most effective', topEffect, topEffect ? (topEffect.vsFloor > 0 ? '+' : '') + topEffect.vsFloor + ' DCs per rep vs floor' : '', topEffect ? topEffect.improvedPct + '% of ' + topEffect.measured + ' measured reps improved' : '')
+      + call('Most impact', topImpact, topImpact ? (topImpact.netLift > 0 ? '+' : '') + topImpact.netLift + ' net DCs' : '', topImpact ? 'over ' + topImpact.measured + ' measured reps' : '')
+      + call('Widest coverage', topCoverage, topCoverage ? topCoverage.coverage + '% of their reps' : '', topCoverage ? topCoverage.inScope + '/' + topCoverage.scopeSize + ' coached' : '')
+      + '</div>';
+
+    const th = t => '<th style="padding:8px 9px;background:' + NAVY + ';color:#fff;font-size:10px;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;text-align:left">' + t + '</th>';
+    const num = (v, c) => '<td style="padding:7px 9px;font-size:12.5px;text-align:right;color:' + (c||NAVY) + ';font-weight:700;white-space:nowrap">' + v + '</td>';
+    const table = '<div style="overflow-x:auto;background:#fff;border:1px solid ' + BORDER + ';border-radius:12px">'
+      + '<table style="width:100%;border-collapse:collapse;min-width:880px"><thead><tr>'
+      + th('Leader') + th('Role') + th('Scope') + th('Sessions') + th('Reps') + th('Coverage') + th('Wks')
+      + th('DC/day before') + th('DC/day after') + th('Avg lift / rep') + th('vs floor') + th('Improved') + th('Net DCs')
+      + '</tr></thead><tbody>'
+      + ranked.map(function(r,i){ return '<tr style="background:' + (i%2?'#F8FAFD':'#fff') + ';border-top:1px solid ' + BORDER + '">'
+          + '<td style="padding:7px 9px;font-size:13px;font-weight:700;color:' + NAVY + ';white-space:nowrap"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:' + r.color + ';margin-right:7px"></span>' + esc(r.name) + '</td>'
+          + '<td style="padding:7px 9px;font-size:11.5px;color:' + SLATE + ';white-space:nowrap">' + esc(r.role) + '</td>'
+          + '<td style="padding:7px 9px;font-size:11.5px;color:' + SLATE + ';white-space:nowrap">' + esc(r.scopeLabel) + '</td>'
+          + num(r.sessions)
+          + num(r.uniqueReps)
+          + num(r.coverage == null ? '—' : r.coverage + '%', r.coverage == null ? SLATE : r.coverage >= 80 ? GOOD : r.coverage >= 50 ? WARN : BAD)
+          + num(r.activeWeeks)
+          + num(r.beforeRate == null ? '—' : r.beforeRate, SLATE)
+          + num(r.afterRate == null ? '—' : r.afterRate, SLATE)
+          + num(r.avgLift == null ? '—' : (r.avgLift > 0 ? '+' : '') + r.avgLift, r.avgLift == null ? SLATE : r.avgLift > 0 ? GOOD : r.avgLift < 0 ? BAD : SLATE)
+          + num(r.vsFloor == null ? '—' : (r.vsFloor > 0 ? '+' : '') + r.vsFloor, r.vsFloor == null ? SLATE : r.vsFloor > 0 ? GOOD : r.vsFloor < 0 ? BAD : SLATE)
+          + num(r.measured ? r.improved + '/' + r.measured : '—', r.improvedPct == null ? SLATE : r.improvedPct >= 50 ? GOOD : WARN)
+          + num(r.netLift == null ? '—' : (r.netLift > 0 ? '+' : '') + r.netLift, r.netLift > 0 ? GOOD : r.netLift < 0 ? BAD : SLATE)
+          + '</tr>'; }).join('')
+      + '</tbody></table></div>';
+
+    const cards = ranked.map(function(r){
+      const top = r.perRep.slice(0,3);
+      const bottom = r.perRep.slice(-3).reverse().filter(x => top.indexOf(x) < 0);
+      const chip = x => '<div style="display:flex;justify-content:space-between;gap:10px;font-size:11.5px;padding:3px 0">'
+        + '<span style="color:' + NAVY + '">' + esc(x.name) + ' <span style="color:' + SLATE + ';font-size:10px">' + esc(x.team) + '</span></span>'
+        + '<span style="font-weight:700;color:' + (x.delta > 0 ? GOOD : x.delta < 0 ? BAD : SLATE) + ';white-space:nowrap">' + x.before + ' &rarr; ' + x.after + ' <span style="font-size:10px">(' + (x.delta > 0 ? '+' : '') + x.delta + ')</span></span></div>';
+      return '<div style="border:1px solid ' + BORDER + ';border-radius:14px;background:#fff;overflow:hidden">'
+        + '<div style="background:' + r.color + ';padding:13px 16px">'
+        + '<div style="color:#fff;font-weight:800;font-size:15px">' + esc(r.name) + '</div>'
+        + '<div style="color:rgba(255,255,255,.85);font-size:11.5px;margin-top:2px">' + esc(r.role) + ' · ' + esc(r.scopeLabel) + '</div></div>'
+        + '<div style="padding:14px 16px">'
+        + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;margin-bottom:12px">'
+        + '<div><div style="font-size:19px;font-weight:800;color:' + NAVY + '">' + r.sessions + '</div><div style="font-size:9px;text-transform:uppercase;letter-spacing:.3px;color:' + SLATE + ';margin-top:2px">Sessions</div></div>'
+        + '<div><div style="font-size:19px;font-weight:800;color:' + (r.coverage == null ? SLATE : r.coverage >= 80 ? GOOD : r.coverage >= 50 ? WARN : BAD) + '">' + (r.coverage == null ? '—' : r.coverage + '%') + '</div><div style="font-size:9px;text-transform:uppercase;letter-spacing:.3px;color:' + SLATE + ';margin-top:2px">Coverage</div></div>'
+        + '<div><div style="font-size:19px;font-weight:800;color:' + (r.netLift > 0 ? GOOD : r.netLift < 0 ? BAD : SLATE) + '">' + (r.netLift > 0 ? '+' : '') + r.netLift + '</div><div style="font-size:9px;text-transform:uppercase;letter-spacing:.3px;color:' + SLATE + ';margin-top:2px">Net DCs</div></div>'
+        + '</div>'
+        + (r.measured
+            ? '<div style="font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:' + SLATE + ';margin-bottom:3px">Biggest movers (' + LI_WINDOW + ' days either side)</div>'
+              + top.map(chip).join('')
+              + (bottom.length ? '<div style="border-top:1px dashed ' + BORDER + ';margin-top:6px;padding-top:5px">' + bottom.map(chip).join('') + '</div>' : '')
+            : '<div style="font-size:11.5px;color:' + SLATE + '">No rep has a full ' + LI_WINDOW + '-day window either side of their first session yet.</div>')
+        + (r.offRoster ? '<div style="font-size:10.5px;color:' + WARN + ';margin-top:8px">' + r.offRoster + ' coached rep' + (r.offRoster===1?'':'s') + ' no longer on the roster, excluded from the lift figures.</div>' : '')
+        + (r.suBefore != null && r.suAfter != null ? '<div style="font-size:10.5px;color:' + SLATE + ';margin-top:8px">Show-up ' + r.suBefore + '% &rarr; ' + r.suAfter + '% across the same windows.</div>' : '')
+        + '</div></div>';
+    }).join('');
+
+    body.innerHTML = callouts + table
+      + '<div style="font-size:11px;color:' + SLATE + ';margin:10px 0 18px;line-height:1.65;background:#fff;border:1px solid ' + BORDER + ';border-radius:10px;padding:12px 14px">'
+        + '<b style="color:' + NAVY + '">How to read this.</b> Lift compares a rep&rsquo;s booked DCs over the ' + LI_WINDOW + ' business days before their first session with this leader against the ' + LI_WINDOW + ' business days after. A rep coached more than once that month is measured from the first session only, and both windows must be complete, so recent sessions stay unmeasured until the DC feed catches up.'
+        + '<br><b style="color:' + NAVY + '">Three caveats that matter.</b> (1) Coaching is not randomly assigned: leaders coach the reps who are struggling, so a negative lift often reflects who was picked rather than how the coaching went. (2) When the whole floor moves, every leader moves with it, which is why the <b>vs floor</b> column is a fairer read of effectiveness than raw lift. (3) Coverage is measured against the <i>current</i> roster, so months before the 17 Aug restructure will understate it.'
+        + '<br><b style="color:' + NAVY + '">This is correlation, not cause.</b> Use it to start a conversation, not to settle one.'
+        + (dataThrough ? ' DC data runs through <b>' + dataThrough + '</b>.' : '')
+        + (floorAvg != null ? ' Floor baseline this month: <b>' + (floorAvg > 0 ? '+' : '') + floorAvg + '</b> DCs per coached rep across ' + floorN + ' measured.' : '')
+        + '</div>'
+      + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:16px">' + cards + '</div>';
+    $('liStatus').textContent = active.length + ' leader' + (active.length===1?'':'s') + ' logged coaching this month · ' + active.reduce(function(s,r){return s+r.sessions;},0) + ' sessions · ' + active.reduce(function(s,r){return s+r.measured;},0) + ' reps measured, ' + active.reduce(function(s,r){return s+r.pending;},0) + ' awaiting DC data';
+  }
+
+  async function liGenerateReport(){
+    const btn = $('liReportBtn'), out = $('liReport'), ym = $('liMonth').value;
+    if (!ym) return;
+    const rows = liComputeAll(ym).filter(r => r.sessions > 0);
+    if (!rows.length){ out.innerHTML = '<div style="font-size:12px;color:var(--slate)">Nothing to report — no coaching logged this month.</div>'; return; }
+    btn.disabled = true; btn.textContent = 'Writing…';
+    out.innerHTML = '<div style="padding:30px;text-align:center;color:var(--slate);font-size:13px">Writing the leader report…</div>';
+    const monthLbl = new Date(ym + '-01T00:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'});
+    let data = '';
+    rows.forEach(function(r){
+      data += '- ' + r.name + ' (' + r.role + ', ' + r.scopeLabel + ', ' + r.scopeSize + ' reps in scope): '
+        + r.sessions + ' sessions with ' + r.uniqueReps + ' reps across ' + r.activeWeeks + ' week(s), coverage '
+        + (r.coverage==null?'n/a':r.coverage+'%') + '. Measured ' + r.measured + ' rep(s): DCs/day '
+        + (r.beforeRate==null?'n/a':r.beforeRate) + ' before vs ' + (r.afterRate==null?'n/a':r.afterRate) + ' after, '
+        + r.improved + ' improved and ' + r.declined + ' declined, net ' + r.netLift + ' DCs, average '
+        + (r.avgLift==null?'n/a':r.avgLift) + ' per rep. Show-up ' + (r.suBefore==null?'n/a':r.suBefore+'%')
+        + ' to ' + (r.suAfter==null?'n/a':r.suAfter+'%') + '.\n';
+    });
+    const prompt = 'You are reporting to the Head of Sales Development at Outsource Accelerator (offshore staffing) on how the outbound team leaders and SMEs coached their BDRs in ' + monthLbl + '. "DC" = Discovery Call.\n\n'
+      + 'Each line below is one leader. "Lift" compares a rep\'s booked DCs over the ' + LI_WINDOW + ' business days before their first coaching session with that leader against the ' + LI_WINDOW + ' business days after.\n\n'
+      + data + '\n'
+      + 'CRITICAL: this data is correlational. Do NOT claim a leader caused a change in DCs. Say what the numbers show, and flag where the sample is too small to read anything into (fewer than 3 measured reps is too small). Use ONLY the figures above, do not invent metrics or numbers. Keep three things distinct: who coached the most (volume), who had the best average movement per rep (effectiveness), and who moved the most total DCs (impact) — a leader can lead one and trail another. Do NOT use em dashes.\n\n'
+      + 'Return ONLY valid JSON:\n'
+      + '{"headline":"2 to 3 sentences on the month overall","mostActive":"who coached the most and what that covered","mostEffective":"best average movement per rep, with the sample-size caveat if relevant","mostImpact":"largest total DC movement","gaps":["coverage or consistency gap","..."],"recommendations":["specific action for a named leader","..."]}';
+    try {
+      const d = await clAiRelay({ model:'claude-haiku-4-5-20251001', max_tokens:1400, messages:[{role:'user',content:prompt}] });
+      const m = clAiText(d).trim().match(/\{[\s\S]*\}/); if (!m) throw new Error('Could not parse the report.');
+      const g = JSON.parse(m[0]);
+      const NAVY='#0D1A6E', SLATE='#5B6678', BORDER='var(--border)';
+      const sec = (t,c,b) => '<div style="margin-top:14px"><div style="font-size:10px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:' + c + '">' + t + '</div><div style="font-size:13px;color:var(--ink);line-height:1.55;margin-top:3px">' + esc(b||'—') + '</div></div>';
+      const list = (t,c,a) => (a && a.length) ? '<div style="margin-top:14px"><div style="font-size:10px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:' + c + '">' + t + '</div><ul style="margin:4px 0 0;padding-left:18px">' + a.map(function(x){ return '<li style="font-size:13px;color:var(--ink);line-height:1.5;margin-bottom:3px">' + esc(x) + '</li>'; }).join('') + '</ul></div>' : '';
+      out.innerHTML = '<div style="background:#fff;border:1px solid ' + BORDER + ';border-radius:14px;padding:20px 22px">'
+        + '<div style="font-size:15px;font-weight:800;color:' + NAVY + '">Leader report · ' + esc(monthLbl) + '</div>'
+        + '<div style="font-size:13.5px;color:var(--ink);line-height:1.6;margin-top:8px">' + esc(g.headline||'') + '</div>'
+        + sec('Doing it the most','#1A2DB5',g.mostActive)
+        + sec('Most effective','#0E9F6E',g.mostEffective)
+        + sec('Most impact','#D6006D',g.mostImpact)
+        + list('Gaps','#C97000',g.gaps)
+        + list('Recommendations','#0D1A6E',g.recommendations)
+        + '<div style="font-size:10.5px;color:' + SLATE + ';margin-top:14px;border-top:1px solid ' + BORDER + ';padding-top:10px">Generated from the coaching log and booked-DC data. Correlational only, so verify before acting on it.</div>'
+        + '</div>';
+    } catch (err){
+      out.innerHTML = '<div style="background:#FFF4F4;border:1px solid #F3C2C2;border-radius:12px;padding:16px;color:#B3261E;font-size:12.5px">Could not generate the report: ' + esc(err.message) + '</div>';
+    } finally { btn.disabled = false; btn.innerHTML = 'Generate report &#10024;'; }
   }
 
   // ── Team Leader accountability scorecards ──
