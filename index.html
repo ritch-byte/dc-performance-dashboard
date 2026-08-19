@@ -2288,6 +2288,13 @@
   // across all of a leader's reps over a longer window, and suppressed below a usable count.
   const LI_SU_WINDOW = 10;  // business days either side for show-up
   const LI_SU_MIN    = 10;  // minimum resolved DCs on each side before a rate is shown
+  // A booked DC does not get its outcome straight away: measured against the feed, bookings
+  // are ~100% resolved after about two weeks, 80% after a week, but only 10% the day after
+  // (18 Aug was 10% resolved, 19 Aug 0%). Measuring show-up on a window whose bookings have
+  // not settled samples only the handful that resolved fastest, which is what produced a
+  // floor-wide +29pt "improvement" that never happened. So the show-up window must end at
+  // least this many business days before the feed's last day.
+  const LI_SU_SETTLE = 7;
 
   // The coach column is free text and has been written several ways ("Ritch", "Jumar").
   const LEADER_ALIASES = {
@@ -2354,6 +2361,9 @@
 
   function liComputeAll(ym){
     const through = liDataThrough();
+    // Last day whose bookings have had time to resolve; show-up is only measured up to here.
+    const settleBack = through ? liBizWindow(through, LI_SU_SETTLE, -1, null) : [];
+    const settled = settleBack.length ? settleBack[0] : '';
     const memberByName = new Map();
     for (const t of TEAMS){ if (t.id === 'poc') continue;
       for (const m of t.members){ if (!m.hidden) memberByName.set(m.display.trim().toLowerCase(), {m:m, t:t}); } }
@@ -2376,7 +2386,7 @@
         fSum += sum(post) - sum(pre); fN++;
       }
       const sPre  = liBizWindow(date, LI_SU_WINDOW, -1, null);
-      const sPost = liBizWindow(date, LI_SU_WINDOW,  1, through);
+      const sPost = liBizWindow(date, LI_SU_WINDOW,  1, settled);
       if (sPre.length >= LI_SU_WINDOW && sPost.length >= LI_SU_WINDOW){
         const sb = aggregateShowupForDates(sPre)[ent.m.id]  || {yes:0,happened:0};
         const sa = aggregateShowupForDates(sPost)[ent.m.id] || {yes:0,happened:0};
@@ -2430,7 +2440,7 @@
       first.forEach((date, nm) => {
         const ent = memberByName.get(nm); if (!ent || !date) return;
         const pre  = liBizWindow(date, LI_SU_WINDOW, -1, null);
-        const post = liBizWindow(date, LI_SU_WINDOW,  1, through);
+        const post = liBizWindow(date, LI_SU_WINDOW,  1, settled);
         if (pre.length < LI_SU_WINDOW || post.length < LI_SU_WINDOW) return;
         const sb = aggregateShowupForDates(pre)[ent.m.id]  || {yes:0,happened:0};
         const sa = aggregateShowupForDates(post)[ent.m.id] || {yes:0,happened:0};
@@ -2443,7 +2453,7 @@
       const days = measured * LI_WINDOW;
       const avgLift = measured ? Math.round(netLift/measured*100)/100 : null;
       return {
-        name: L.name, role: L.role, color: L.color, dataThrough: through,
+        name: L.name, role: L.role, color: L.color, dataThrough: through, settledThrough: settled,
         scopeLabel: L.scope === 'floor' ? 'Floor-wide' : scopeTeams.map(t => t.name).join(' + '),
         scopeSize: scopeNames.size, sessions: logs.length, uniqueReps: uniqueReps.size,
         inScope: inScope.length, offRoster: offRoster.length, coverage: coverage, activeWeeks: weeks.size,
@@ -2497,6 +2507,7 @@
     const dataThrough = active.length ? active[0].dataThrough : '';
     const floorAvg = active.length ? active[0].floorAvg : null;
     const floorN = active.length ? active[0].floorN : 0;
+    const settledThrough = active.length ? active[0].settledThrough : '';
     const key = r => sortBy === 'activity' ? r.sessions : sortBy === 'effect' ? (r.vsFloor == null ? -999 : r.vsFloor) : r.netLift;
     const ranked = active.slice().sort((a,b) => key(b) - key(a));
 
@@ -2580,7 +2591,7 @@
         + '<b style="color:' + NAVY + '">How to read this.</b> Lift compares a rep&rsquo;s booked DCs over the ' + LI_WINDOW + ' business days before their first session with this leader against the ' + LI_WINDOW + ' business days after. A rep coached more than once that month is measured from the first session only, and both windows must be complete, so recent sessions stay unmeasured until the DC feed catches up.'
         + '<br><b style="color:' + NAVY + '">Three caveats that matter.</b> (1) Coaching is not randomly assigned: leaders coach the reps who are struggling, so a negative lift often reflects who was picked rather than how the coaching went. (2) When the whole floor moves, every leader moves with it, which is why the <b>vs floor</b> column is a fairer read of effectiveness than raw lift. (3) Coverage is measured against the <i>current</i> roster, so months before the 17 Aug restructure will understate it.'
         + '<br><b style="color:' + NAVY + '">This is correlation, not cause.</b> Use it to start a conversation, not to settle one.'
-        + (dataThrough ? ' DC data runs through <b>' + dataThrough + '</b>.' : '')
+        + (dataThrough ? ' DC data runs through <b>' + dataThrough + '</b>, and show-up only through <b>' + settledThrough + '</b> because a booked DC needs about a week before its outcome is recorded.' : '')
         + (floorAvg != null ? ' Floor baseline this month: <b>' + (floorAvg > 0 ? '+' : '') + floorAvg + '</b> DCs per coached rep across ' + floorN + ' measured.' : '')
         + '</div>'
       + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:16px">' + cards + '</div>';
