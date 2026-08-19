@@ -2302,8 +2302,10 @@
     { name:'Alvin Bayhon',      role:'SME',                scope:['dijumhon'],         color:'#1A2DB5' },
     { name:'Alvin Melo',        role:'SME',                scope:['meloace','bridge'], color:'#059669' },
     { name:'Vincent Gadier',    role:'SME',                scope:['ev'],               color:'#d97706' },
-    { name:'Aly Limayo',        role:'QA and Trainer',     scope:'floor',              color:'#7c3aed' },
-    { name:'Ritch Joy Manipol', role:'Senior Team Leader', scope:'floor',              color:'#0891b2' }
+    { name:'Aly Limayo',        role:'QA and Trainer',     scope:'floor',              color:'#7c3aed' }
+    // Ritch (Senior Team Leader) is deliberately not listed: this report is his read on the
+    // leaders under him, not a scorecard he appears in. His sessions still count toward the
+    // floor baseline via the coaching log, they are just not ranked as a leader row.
   ];
   function liCanon(raw){
     const s = String(raw||'').trim(); if (!s) return '';
