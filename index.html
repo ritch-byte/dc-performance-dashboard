@@ -2654,31 +2654,126 @@
     pafRenderSummary();
   }
 
+  // Evidence pack for the narrative sections. The AI is not asked to find achievements in a
+  // pile of numbers, because it will invent them; the candidates are computed here from the
+  // data and the model may only write up what this hands it. There is normally no formal
+  // record of accomplishments for a BDR, so anything genuine has to come from performance.
+  function pafEvidence(M){
+    const perMonth = M.months.map(function(ym){
+      const mo = aggregateMonth(ym, true);
+      const dcs = mo.counts[M.id] || 0;
+      const su  = aggregateShowupForDates(mo.dates)[M.id] || { yes:0, happened:0 };
+      const a   = _attLoaded ? pafAttendance(M.id, [ym]) : null;
+      return { ym:ym, days: mo.dates.length,
+        label: new Date(ym + '-01T00:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'}),
+        dcs:dcs, target:MONTHLY_TARGET, pct: Math.round(dcs/MONTHLY_TARGET*100),
+        suYes:su.yes, suHappened:su.happened, suPct: su.happened ? Math.round(su.yes/su.happened*100) : null,
+        late: a ? a.late : null, absent: a ? a.absencesTotal : null, ncns: a ? a.ncns : null,
+        scheduled: a ? a.scheduled : null, present: a ? a.present : null };
+    });
+    // Rank inside the rep's own team over the same period.
+    const team = TEAMS.find(function(t){ return t.id === M.teamId; });
+    const peers = team ? team.members.filter(function(m){ return !m.hidden; }) : [];
+    let allDates = [];
+    M.months.forEach(function(ym){ allDates = allDates.concat(aggregateMonth(ym, true).dates); });
+    const suAll = aggregateShowupForDates(allDates);
+    const scored = peers.map(function(m){
+      let d = 0; M.months.forEach(function(ym){ d += (aggregateMonth(ym, true).counts[m.id] || 0); });
+      const s = suAll[m.id] || { yes:0, happened:0 };
+      return { id:m.id, dcs:d, suPct: s.happened ? Math.round(s.yes/s.happened*100) : null, happened:s.happened };
+    });
+    const byDc = scored.slice().sort(function(a,b){ return b.dcs - a.dcs; });
+    const rankDc = byDc.findIndex(function(x){ return x.id === M.id; }) + 1;
+    const suPeers = scored.filter(function(x){ return x.suPct != null && x.happened >= 5; }).sort(function(a,b){ return b.suPct - a.suPct; });
+    const rankSu = suPeers.findIndex(function(x){ return x.id === M.id; }) + 1;
+    const teamSuTotal = scored.reduce(function(acc,x){ return acc + (x.happened||0); }, 0);
+    const teamSuYes = peers.reduce(function(acc,m){ const s = suAll[m.id]||{yes:0}; return acc + s.yes; }, 0);
+    const teamSuPct = teamSuTotal ? Math.round(teamSuYes/teamSuTotal*100) : null;
+    const teamDcAvg = scored.length ? Math.round(scored.reduce(function(a,x){ return a+x.dcs; },0)/scored.length) : 0;
+
+    // Concrete, checkable wins. Empty is a valid and honest outcome.
+    const wins = [];
+    perMonth.forEach(function(m){
+      if (m.dcs >= m.target) wins.push('Hit the monthly booked-DC target in ' + m.label + ' (' + m.dcs + ' of ' + m.target + ')');
+      else if (m.pct >= 75) wins.push('Reached ' + m.pct + '% of the booked-DC target in ' + m.label + ' (' + m.dcs + ' of ' + m.target + ')');
+      if (m.scheduled && m.late === 0 && m.absent === 0) wins.push('Perfect attendance in ' + m.label + ': no late days and no absences across ' + m.scheduled + ' scheduled days');
+      if (m.suHappened >= 8 && m.suPct >= 70) wins.push('Show-up of ' + m.suPct + '% in ' + m.label + ' on ' + m.suHappened + ' resolved DCs');
+    });
+    if (rankDc === 1 && M.dcs > 0) wins.push('Highest booked DCs on ' + M.team + ' for the period (' + M.dcs + ', team average ' + teamDcAvg + ')');
+    else if (rankDc > 0 && rankDc <= 3 && M.dcs > 0) wins.push('Ranked ' + rankDc + ' of ' + peers.length + ' on ' + M.team + ' for booked DCs (' + M.dcs + ', team average ' + teamDcAvg + ')');
+    if (rankSu === 1 && M.suHappened >= 5) wins.push('Best show-up on ' + M.team + ' for the period at ' + M.suPct + '%');
+    else if (M.suPct != null && teamSuPct != null && M.suPct > teamSuPct && M.suHappened >= 5) wins.push('Show-up of ' + M.suPct + '% is above the ' + M.team + ' average of ' + teamSuPct + '%');
+    if (perMonth.length > 1){
+      const f = perMonth[0], l = perMonth[perMonth.length-1];
+      // The last month is normally still running, so compare per-business-day rates rather
+      // than raw totals, and only when both months have enough elapsed days to mean anything.
+      if (f.days >= 5 && l.days >= 5){
+        const fr = f.dcs / f.days, lr = l.dcs / l.days;
+        if (lr > fr * 1.1) wins.push('Booked DCs per working day rose from ' + fr.toFixed(1) + ' in ' + f.label + ' to ' + lr.toFixed(1) + ' in ' + l.label + (l.days < 18 ? ' (' + l.label + ' still in progress)' : ''));
+      }
+      // A jump to 100% on a handful of resolved DCs is noise, not an achievement.
+      if (f.suPct != null && l.suPct != null && f.suHappened >= 8 && l.suHappened >= 8 && l.suPct > f.suPct + 5)
+        wins.push('Show-up improved from ' + f.suPct + '% in ' + f.label + ' (' + f.suHappened + ' resolved) to ' + l.suPct + '% in ' + l.label + ' (' + l.suHappened + ' resolved)');
+    }
+    return { perMonth:perMonth, rankDc:rankDc, rankSu:rankSu, teamSize:peers.length,
+             teamDcAvg:teamDcAvg, teamSuPct:teamSuPct, wins:wins };
+  }
+
   async function pafDraft(){
     if (!_pafState){ return; }
     const btn = $('pafAiBtn'), M = _pafState.M, S = _pafState;
     btn.disabled = true; btn.textContent = 'Drafting…';
-    $('pafStatus').style.color = 'var(--slate)'; $('pafStatus').textContent = 'Drafting the narrative sections from the data and coaching notes…';
-    const att = M.att || {};
-    const notes = M.logs.slice(0,15).map(function(l){ return '- [' + (l.date||'').slice(0,10) + ' ' + (l.topic||'') + '] ' + (l.summary || '(no summary)'); }).join('\n') || '(no coaching notes on file)';
-    const prompt = 'You are helping a sales supervisor at Outsource Accelerator (offshore staffing) complete a Performance Appraisal Form for a BDR. "DC" = Discovery Call.\n\n'
-      + 'EMPLOYEE: ' + M.name + ' (' + M.team + '), period ' + pafPeriodLabel(M) + ' (' + M.monthCount + ' month(s))\n'
-      + 'Booked DCs: ' + M.dcs + ' against a target of ' + M.target + ' (' + M.prodPct + '%)\n'
-      + 'Show-up on their booked DCs: ' + (M.suPct == null ? 'no resolved DCs' : M.suPct + '% (' + M.suYes + ' of ' + M.suHappened + ')') + '\n'
-      + 'Attendance: ' + (att.scheduled ? att.present + ' present, ' + att.late + ' late, ' + att.absent + ' absent, ' + att.ncns + ' NCNS, ' + att.undertime + ' undertime across ' + att.scheduled + ' scheduled days' : 'not available') + '\n'
-      + 'Coaching sessions logged this period: ' + M.sessions + '\n'
-      + 'Coaching notes (newest first):\n' + notes + '\n\n'
-      + 'Write the narrative parts of the appraisal. Use ONLY the figures above and what the coaching notes actually say. Do not invent numbers, incidents, awards or metrics, and do not mention dials or talk time, which are not tracked. Where there is no evidence for something, say so plainly rather than filling space. Be specific and factual, the tone of a fair supervisor writing for the record. Do NOT use em dashes.\n\n'
-      + 'Return ONLY valid JSON with these fields, each a short paragraph unless noted:\n'
-      + '{"ex_quality":"evidence for quality of work","ex_productivity":"evidence for productivity","ex_tardiness":"evidence on punctuality","ex_absences":"evidence on absences","ex_team":"evidence on team orientation from the coaching notes, or say there is no logged evidence","ex_dependable":"evidence on dependability","ex_initiative":"evidence on initiative, or say there is no logged evidence","ex_discipline":"evidence on discipline","accomplishments":"genuine accomplishments in the period, or state plainly that none are on record","develop":"skills and knowledge to develop next","plans":"2 to 4 specific measurable targets for the next period, as one paragraph","comments":"closing comment for the record"}';
+    $('pafStatus').style.color = 'var(--slate)'; $('pafStatus').textContent = 'Drafting from the figures and the logged coaching notes…';
+    const att = M.att || {}, E = pafEvidence(M);
+    const months = E.perMonth.map(function(m){
+      return '  ' + m.label + ': ' + m.dcs + ' booked DCs of ' + m.target + ' (' + m.pct + '%), show-up '
+        + (m.suPct == null ? 'no resolved DCs' : m.suPct + '% on ' + m.suHappened + ' resolved')
+        + (m.scheduled ? ', attendance ' + m.present + ' present / ' + m.late + ' late / ' + m.absent + ' absent' + (m.ncns ? ' (incl ' + m.ncns + ' NCNS)' : '') + ' of ' + m.scheduled + ' scheduled days' : '');
+    }).join('\n');
+    const notes = M.logs.slice(0,15).map(function(l){
+      return '  - [' + (l.date||'').slice(0,10) + ' ' + (l.topic||'') + (l.level ? ' / ' + l.level : '') + '] ' + (l.summary || '(no summary recorded)');
+    }).join('\n') || '  (no coaching notes on file for this period)';
+    const wins = E.wins.length ? E.wins.map(function(w){ return '  - ' + w; }).join('\n') : '  (none: nothing in the data rises to an accomplishment)';
+
+    const prompt = 'You are helping a sales supervisor at Outsource Accelerator (offshore staffing) complete a Performance Appraisal Form for a BDR. "DC" = Discovery Call, a booked meeting between a lead and a client.\n\n'
+      + 'EMPLOYEE: ' + M.name + ', ' + M.team + ' team. Period: ' + pafPeriodLabel(M) + ' (' + M.monthCount + ' month(s)).\n\n'
+      + 'PERIOD TOTALS\n'
+      + '  Booked DCs: ' + M.dcs + ' against a target of ' + M.target + ' (' + M.prodPct + '%)\n'
+      + '  Show-up on their booked DCs: ' + (M.suPct == null ? 'no resolved DCs' : M.suPct + '% (' + M.suYes + ' of ' + M.suHappened + ' resolved)') + '\n'
+      + '  Attendance: ' + (att.scheduled ? att.present + ' present, ' + att.late + ' late, ' + att.absent + ' absent, ' + att.ncns + ' NCNS, ' + att.undertime + ' undertime across ' + att.scheduled + ' scheduled days' + (att.leave ? ', plus ' + att.leave + ' days of approved leave which must NOT be held against them' : '') : 'not available') + '\n'
+      + '  Standing on their team: ' + (E.rankDc ? 'ranked ' + E.rankDc + ' of ' + E.teamSize + ' for booked DCs (team average ' + E.teamDcAvg + ')' : 'not ranked')
+      + (E.teamSuPct != null ? ', team show-up average ' + E.teamSuPct + '%' : '') + '\n\n'
+      + 'MONTH BY MONTH\n' + months + '\n\n'
+      + 'COACHING LOGGED THIS PERIOD (' + M.sessions + ' session(s), newest first)\n' + notes + '\n\n'
+      + 'VERIFIED ACHIEVEMENTS, computed from the data\n' + wins + '\n\n'
+      + 'RULES\n'
+      + '1. Use ONLY the figures and coaching notes above. Never invent a number, an incident, a client name, an award, or a metric. The company does not track dials, talk time or connect rates, so never mention them.\n'
+      + '2. For ACCOMPLISHMENTS, write up only the verified achievements listed above. There is normally no formal record of awards or citations for this role, so if that list is empty, say plainly that there are no accomplishments on record for the period and do not manufacture one. Never describe simply meeting a baseline expectation, such as turning up, as an accomplishment.\n'
+      + '3. Each "specific examples" entry must cite an actual figure or quote an actual coaching note. Where a competency has no logged evidence, say so in that box rather than guessing at character.\n'
+      + '4. Approved leave is never a mark against the rep. NCNS is a serious attendance issue and should be named as one where it occurred.\n'
+      + '5. Be factual and fair, the tone of a supervisor writing for a permanent record that the employee will read and sign. No em dashes.\n\n'
+      + 'Return ONLY valid JSON with these fields, each a short paragraph:\n'
+      + '{'
+      + '"ex_quality":"evidence for quality of work, citing the show-up figure and what it means about how well qualified their bookings are",'
+      + '"ex_productivity":"evidence for productivity, citing booked DCs against target and the month-by-month movement",'
+      + '"ex_tardiness":"evidence on punctuality, citing late days",'
+      + '"ex_absences":"evidence on absences, citing absent days and naming NCNS separately if any",'
+      + '"ex_team":"team orientation, from the coaching notes, or state there is no logged evidence",'
+      + '"ex_dependable":"dependability, drawing on attendance consistency and whether they acted on coaching",'
+      + '"ex_initiative":"initiative, from the coaching notes, or state there is no logged evidence",'
+      + '"ex_discipline":"discipline, covering adherence to process and any coaching level above a verbal note",'
+      + '"accomplishments":"write up the verified achievements, or state plainly that none are on record",'
+      + '"develop":"the two or three specific things to develop next, tied to the weakest figures and to recurring coaching themes",'
+      + '"plans":"2 to 4 specific measurable targets for the next review period, as one paragraph, with numbers drawn from where they stand now",'
+      + '"comments":"closing comment for the record"}';
     try {
-      const d = await clAiRelay({ model:'claude-haiku-4-5-20251001', max_tokens:2000, messages:[{ role:'user', content:prompt }] });
+      const d = await clAiRelay({ model:'claude-haiku-4-5-20251001', max_tokens:2400, messages:[{ role:'user', content:prompt }] });
       const m = clAiText(d).trim().match(/\{[\s\S]*\}/); if (!m) throw new Error('Could not parse the draft.');
       const g = JSON.parse(m[0]);
       Object.keys(g).forEach(function(k){ if (typeof g[k] === 'string' && g[k].trim()) S.text[k] = clDeDash(g[k].trim()); });
       renderPaf();
       $('pafStatus').style.color = '#0A7A0A';
-      $('pafStatus').textContent = '✓ Draft written into every narrative box. Read it, correct it, and set the Section B ratings yourself before printing.';
+      $('pafStatus').textContent = '✓ Drafted from ' + E.wins.length + ' verified achievement(s), ' + M.sessions + ' coaching note(s) and ' + M.monthCount + ' month(s) of figures. Read it, correct it, and set the Section B ratings yourself before printing.';
     } catch (err){
       $('pafStatus').style.color = '#C00';
       $('pafStatus').textContent = 'Could not draft: ' + err.message;
