@@ -2507,6 +2507,7 @@
   function pafSetRating(key, val){
     if (!_pafState) return;
     _pafState.ratings[key] = parseInt(val,10) || 0;
+    _pafState.touched[key] = true;   // an explicit override: stop re-syncing this one to the data
     const el = $('pafW_' + key); if (el) el.textContent = (( _pafState.ratings[key] || 0) * (PAF_A.concat(PAF_B).find(function(r){return r.key===key;}).w)).toFixed(2);
     pafRenderSummary();
   }
@@ -2561,9 +2562,18 @@
       ratings: { quality:M.auto.quality||3, productivity:M.auto.productivity||3,
                  tardiness:M.auto.tardiness||3, absences:M.auto.absences||3,
                  team:3, dependable:3, initiative:3, discipline:3 },
-      text: {}
+      touched: {}, text: {}
     };
     _pafState.M = M;
+    if (!_pafState.touched) _pafState.touched = {};
+    // Re-sync the derived Section A grades to the data whenever the inputs behind them move,
+    // which they do when the grading bands are edited or calibrated. Without this the band
+    // editor would change the bands and the auto-graded hint while the actual rating, the
+    // weighted score and the total silently kept their old values. Anything the evaluator has
+    // set by hand is left alone.
+    PAF_A.forEach(function(r){
+      if (!_pafState.touched[r.key] && M.auto[r.key] != null) _pafState.ratings[r.key] = M.auto[r.key];
+    });
     const S = _pafState, att = M.att;
     const NAVY='#0D1A6E', SLATE='#5B6678', BORDER='var(--border)', HEAD='#1A2DB5';
 
