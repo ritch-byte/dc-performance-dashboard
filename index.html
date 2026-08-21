@@ -644,6 +644,12 @@
       </svg>
       SDR Scorecard
     </a>
+    <a class="nav-item" id="navPaf" href="#" onclick="showPage('paf');return false;">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M3 1.5h7l3 3v10H3z"/><path d="M10 1.5v3h3"/><path d="M5.5 8h5M5.5 10.5h3"/>
+      </svg>
+      Appraisal (PAF)
+    </a>
     <a class="nav-item" id="navAck" href="#" onclick="showPage('ack');return false;">
       <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
         <path d="M2 4.5h12v9H2z"/><path d="M4 8l2 2 4-4"/>
@@ -1387,6 +1393,25 @@
       </div>
     </div>
 
+    <!-- ── Performance Appraisal Form ── -->
+    <div id="pafSection" style="display:none;">
+      <div class="content-header">
+        <div class="page-title">Performance Appraisal</div>
+        <div class="ch-right" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <select id="pafRep" class="week-select" onchange="renderPaf()"></select>
+          <select id="pafFrom" class="week-select" onchange="renderPaf()"></select>
+          <span style="font-size:11px;color:var(--slate)">to</span>
+          <select id="pafTo" class="week-select" onchange="renderPaf()"></select>
+          <button class="cl-chip" id="pafAiBtn" onclick="pafDraft()">Draft with AI &#10024;</button>
+          <button class="cl-chip" id="pafPrintBtn" onclick="pafPrint()">Print / PDF</button>
+        </div>
+      </div>
+      <div style="padding:0 24px 32px">
+        <div id="pafStatus" style="font-size:11px;color:var(--slate);min-height:14px;margin-bottom:10px"></div>
+        <div id="pafBody"></div>
+      </div>
+    </div>
+
     <!-- ── Acknowledgement Tracker ── -->
     <div id="ackSection" style="display:none;">
       <div class="content-header">
@@ -2084,6 +2109,7 @@
     $('scheduleSection').style.display     = page === 'schedule'    ? '' : 'none';
     $('leadersSection').style.display      = page === 'leaders'     ? '' : 'none';
     $('impactSection').style.display       = page === 'impact'      ? '' : 'none';
+    $('pafSection').style.display          = page === 'paf'         ? '' : 'none';
     $('scorecardSection').style.display    = page === 'scorecard'   ? '' : 'none';
     $('ackSection').style.display          = page === 'ack'         ? '' : 'none';
     $('navDashboard').classList.toggle('active',   page === 'dashboard');
@@ -2097,11 +2123,13 @@
     $('navSchedule').classList.toggle('active',     page === 'schedule');
     $('navLeaders').classList.toggle('active',      page === 'leaders');
     $('navImpact').classList.toggle('active',       page === 'impact');
+    $('navPaf').classList.toggle('active',          page === 'paf');
     $('navScorecard').classList.toggle('active',    page === 'scorecard');
     $('navAck').classList.toggle('active',          page === 'ack');
     if (page === 'team')       renderTeamRoster();
     if (page === 'leaders')    renderTeamLeaders();
     if (page === 'impact')     { liBuildMonths(); renderLeaderImpact(); }
+    if (page === 'paf')        renderPaf();
     if (page === 'scorecard')  scInit();
     if (page === 'ack')        renderAckTracker();
     if (page === 'reports')    { buildReportMonthSelect(); renderReports(); }
@@ -2273,6 +2301,445 @@
     $('teamBody').innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(430px,1fr));gap:18px;padding:4px 4px 24px">${cards}</div>`;
 
     if (!_coachLogsLoaded) loadCoachingLogs(false).then(() => { if ($('teamSection').style.display !== 'none') renderTeamRoster(); });
+  }
+
+  // ── PERFORMANCE APPRAISAL FORM ────────────────────────────────────────────
+  // Fills the company PAF template from the data the dashboard already holds. Section A
+  // (results) is derived: booked DCs, show-up, tardiness and absences. Section B
+  // (competencies) is judgement and stays with the evaluator, with AI only drafting the
+  // supporting examples from logged coaching notes.
+  const PAF_POSITION = 'Business Development Representative';
+  const PAF_DEPT     = 'Sales Development - Outbound';
+  // Weights come from the template: within A, and within B, each column sums to 100%.
+  // A and B are then worth 50% each, so the overall total lands back on the 1-5 scale.
+  const PAF_A = [
+    { key:'quality',      label:'Quality of Work',  desc:'Accuracy, attention to detail, compliance with standards', w:0.50 },
+    { key:'productivity', label:'Productivity',     desc:'Timeliness, efficiency, ability to meet deadlines',        w:0.30 },
+    { key:'tardiness',    label:'Attendance — Tardiness', desc:'Reporting to work beyond one’s prescribed work schedule', w:0.10 },
+    { key:'absences',     label:'Attendance — Absences',  desc:'Unplanned days not worked',                          w:0.10 }
+  ];
+  const PAF_B = [
+    { key:'team',        label:'Team Orientation', desc:'Collaboration, respect, and positive team dynamics', w:0.30 },
+    { key:'dependable',  label:'Dependability',    desc:'Reliability, accountability, consistency',           w:0.30 },
+    { key:'initiative',  label:'Initiative',       desc:'Problem-solving, going beyond assigned tasks',       w:0.20 },
+    { key:'discipline',  label:'Discipline',       desc:'Adherence to operations and company policies',       w:0.20 }
+  ];
+  const PAF_GRADE = { 5:'Outstanding', 4:'Exceeds Expectations', 3:'Meets Expectations', 2:'Needs Improvement', 1:'Unacceptable' };
+  // Grading bands for the two derived KPIs. These are a BUSINESS decision, not a technical
+  // one, so they are editable and stored per browser rather than baked in. The shipped
+  // defaults are absolute standards; measured against the floor in Jul-Aug 2026 they put 42
+  // of 48 reps at grade 1 for productivity and 81% of the floor below expectations overall,
+  // which says the 40-DC monthly target is a stretch goal rather than an appraisal standard.
+  // Set them deliberately, or use "Calibrate to this floor" to anchor the median rep at 3.
+  const PAF_BANDS_DEFAULT = { quality:[80,70,60,50], prod:[100,80,60,40] };
+  function pafGetBands(){
+    try { const b = JSON.parse(localStorage.getItem('oaPafBands') || 'null');
+      if (b && b.quality && b.quality.length === 4 && b.prod && b.prod.length === 4) return b; } catch(e){}
+    return { quality: PAF_BANDS_DEFAULT.quality.slice(), prod: PAF_BANDS_DEFAULT.prod.slice() };
+  }
+  function pafSaveBands(b){ try { localStorage.setItem('oaPafBands', JSON.stringify(b)); } catch(e){} }
+  function pafBandsToPairs(arr){ return [[arr[0],5],[arr[1],4],[arr[2],3],[arr[3],2],[0,1]]; }
+  function pafSetBand(which, idx, val){
+    const b = pafGetBands(); const n = parseInt(val,10);
+    if (!isNaN(n)) { b[which][idx] = n; pafSaveBands(b); renderPaf(); }
+  }
+  function pafResetBands(){ pafSaveBands({ quality: PAF_BANDS_DEFAULT.quality.slice(), prod: PAF_BANDS_DEFAULT.prod.slice() }); renderPaf(); }
+  // Anchor the bands on the floor's own distribution so the median rep sits at 3 (Meets).
+  // This makes the appraisal relative to the floor rather than to an absolute standard,
+  // which is a real trade-off: it flatters a weak floor and penalises a strong one.
+  function pafCalibrate(){
+    const rows = pafFloorRows(); if (!rows.length) return;
+    const pctl = function(a, p){ if (!a.length) return 0; const s = a.slice().sort(function(x,y){return x-y;}); return Math.round(s[Math.min(s.length-1, Math.floor(s.length*p))]); };
+    const su = rows.filter(function(r){ return r.suPct != null; }).map(function(r){ return r.suPct; });
+    const pr = rows.map(function(r){ return r.prodPct; });
+    if (!su.length || !pr.length) return;
+    const b = { quality:[pctl(su,0.90), pctl(su,0.70), pctl(su,0.45), pctl(su,0.20)],
+                prod:   [pctl(pr,0.90), pctl(pr,0.70), pctl(pr,0.45), pctl(pr,0.20)] };
+    ['quality','prod'].forEach(function(k){ for (let i=1;i<4;i++) if (b[k][i] >= b[k][i-1]) b[k][i] = Math.max(0, b[k][i-1]-1); });
+    pafSaveBands(b); renderPaf();
+  }
+  // Every current rep scored over the selected period, used for the calibration and for the
+  // honesty note about what the bands are actually doing to the floor.
+  function pafFloorRows(){
+    const from = $('pafFrom') && $('pafFrom').value, to = $('pafTo') && $('pafTo').value;
+    if (!from || !to || from > to) return [];
+    const out = [], seen = {};
+    TEAMS.forEach(function(t){ if (t.id === 'poc') return;
+      t.members.forEach(function(m){ if (m.hidden || seen[m.id]) return; seen[m.id] = 1;
+        const r = pafCompute(m.id, from, to); if (r) out.push(r); }); });
+    return out;
+  }
+  function pafFloorImpact(){
+    const rows = pafFloorRows(); if (!rows.length) return '';
+    const cnt = {};
+    rows.forEach(function(r){
+      const a = r.auto;
+      const secA = (a.quality||1)*0.5 + (a.productivity||1)*0.3 + (a.tardiness||1)*0.1 + (a.absences||1)*0.1;
+      const c = pafCategory(secA*0.5 + 3*0.5);   // Section B held at 3 so this isolates the bands
+      cnt[c] = (cnt[c]||0) + 1;
+    });
+    const parts = Object.keys(cnt).sort(function(x,y){ return cnt[y]-cnt[x]; })
+      .map(function(k){ return cnt[k] + ' ' + k.toLowerCase() + ' (' + Math.round(cnt[k]/rows.length*100) + '%)'; });
+    return 'With the current bands and Section B held at 3, the ' + rows.length + ' reps on the floor would land: ' + parts.join(', ') + '.';
+  }
+  function pafBandEditor(){
+    const b = pafGetBands(), NAVY='#0D1A6E', SLATE='#5B6678', BORDER='var(--border)';
+    const inp = function(which, i){
+      return '<input type="number" value="' + b[which][i] + '" onchange="pafSetBand(\'' + which + '\',' + i + ',this.value)" style="width:56px;padding:3px 5px;border:1px solid ' + BORDER + ';border-radius:5px;font-size:11.5px;text-align:right">';
+    };
+    const row = function(label, which, unit){
+      return '<div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:6px">'
+        + '<span style="font-size:11.5px;color:' + NAVY + ';font-weight:700;min-width:150px">' + label + '</span>'
+        + '<span style="font-size:11px;color:' + SLATE + '">5 at</span>' + inp(which,0) + '<span style="font-size:11px;color:' + SLATE + '">' + unit + '+ &nbsp;·&nbsp; 4 at</span>' + inp(which,1)
+        + '<span style="font-size:11px;color:' + SLATE + '">' + unit + '+ &nbsp;·&nbsp; 3 at</span>' + inp(which,2)
+        + '<span style="font-size:11px;color:' + SLATE + '">' + unit + '+ &nbsp;·&nbsp; 2 at</span>' + inp(which,3)
+        + '<span style="font-size:11px;color:' + SLATE + '">' + unit + '+, below that 1</span></div>';
+    };
+    return '<details style="background:#fff;border:1px solid ' + BORDER + ';border-radius:12px;padding:11px 14px;margin-bottom:14px">'
+      + '<summary style="font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:' + NAVY + ';cursor:pointer">Grading bands &middot; who counts as a 3</summary>'
+      + '<div style="font-size:11px;color:' + SLATE + ';margin-top:8px;line-height:1.6">These decide the two derived grades, and they are a business call rather than a technical one. ' + esc(pafFloorImpact()) + '</div>'
+      + row('Quality (show-up %)','quality','%')
+      + row('Productivity (% of DC target)','prod','%')
+      + '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">'
+      + '<button class="cl-chip" onclick="pafCalibrate()">Calibrate to this floor</button>'
+      + '<button class="cl-chip" onclick="pafResetBands()">Reset to absolute standards</button></div>'
+      + '<div style="font-size:10.5px;color:' + SLATE + ';margin-top:8px">Calibrating anchors the median rep at 3, which grades people against the floor instead of against a fixed standard. That flatters a weak floor and penalises a strong one, so it is a deliberate choice, not a default.</div>'
+      + '</details>';
+  }
+  function pafBand(bands, v){ for (let i=0;i<bands.length;i++){ if (v >= bands[i][0]) return bands[i][1]; } return 1; }
+  // Template bands: 5 = none, 4 = 1, 3 = 2, 2 = 3, 1 = 4 or more, averaged per month.
+  function pafCountGrade(avgPerMonth){ const n = Math.round(avgPerMonth); return n <= 0 ? 5 : n >= 4 ? 1 : 5 - n; }
+  function pafCategory(total){
+    if (total >= 5)   return 'Outstanding';
+    if (total >= 4)   return 'Exceeds Expectations';
+    if (total >= 3)   return 'Meets Expectations';
+    if (total >= 2)   return 'Below Expectations';
+    return 'Needs Improvement';
+  }
+  let _pafState = null;
+
+  function pafMonths(fromYm, toYm){
+    const out = []; const f = fromYm.split('-').map(Number), t = toYm.split('-').map(Number);
+    let y = f[0], m = f[1];
+    while ((y < t[0] || (y === t[0] && m <= t[1])) && out.length < 36){
+      out.push(y + '-' + String(m).padStart(2,'0'));
+      m++; if (m > 12){ m = 1; y++; }
+    }
+    return out;
+  }
+  // Own attendance counter: the shared one ignores NCNS and Suspended entirely, which is
+  // tolerable for a dashboard tile and not tolerable on an appraisal. NCNS is counted as an
+  // unexcused absence; approved leave is reported but never counted against the rep.
+  function pafAttendance(memberId, months){
+    const set = {}; months.forEach(function(m){ set[m] = 1; });
+    const c = { present:0, late:0, absent:0, ncns:0, undertime:0, leave:0, suspended:0, off:0, other:0, scheduled:0 };
+    for (let i = 0; i < rawAttRows.length; i++){
+      const row = rawAttRows[i];
+      const d = normalizeDate(row.rawDate); if (!d || !set[d.slice(0,7)]) continue;
+      if (resolveAgent(row.name) !== memberId) continue;
+      const s = (row.status || '').toLowerCase().trim();
+      if (s === 'present'){ c.present++; c.scheduled++; }
+      else if (s === 'late'){ c.late++; c.scheduled++; }
+      else if (s === 'undertime'){ c.undertime++; c.scheduled++; }
+      else if (s === 'absent'){ c.absent++; c.scheduled++; }
+      else if (s === 'ncns'){ c.ncns++; c.scheduled++; }
+      else if (s === 'on leave'){ c.leave++; }
+      else if (s === 'suspended'){ c.suspended++; }
+      else if (s === 'off' || s === 'rdot'){ c.off++; }
+      else if (s) c.other++;
+    }
+    c.absencesTotal = c.absent + c.ncns;
+    c.rate = c.scheduled ? Math.round((c.present + c.late + c.undertime) / c.scheduled * 100) : null;
+    c.onTime = c.scheduled ? Math.round(c.present / c.scheduled * 100) : null;
+    return c;
+  }
+
+  function pafCompute(memberId, fromYm, toYm){
+    const found = scFindMember(memberId); if (!found) return null;
+    const months = pafMonths(fromYm, toYm); if (!months.length) return null;
+    let dcs = 0, dates = [];
+    months.forEach(function(ym){
+      const mo = aggregateMonth(ym, true);
+      dcs += (mo.counts[memberId] || 0);
+      dates = dates.concat(mo.dates);
+    });
+    const su = aggregateShowupForDates(dates)[memberId] || { yes:0, happened:0 };
+    const suPct = su.happened ? Math.round(su.yes / su.happened * 100) : null;
+    const target = MONTHLY_TARGET * months.length;
+    const prodPct = target ? Math.round(dcs / target * 100) : 0;
+    const att = _attLoaded ? pafAttendance(memberId, months) : null;
+    const tardyAvg = att ? att.late / months.length : null;
+    const absAvg   = att ? att.absencesTotal / months.length : null;
+    const logs = _coachLogs.filter(function(l){
+      return (l.rep||'').trim().toLowerCase() === found.m.display.trim().toLowerCase()
+          && months.indexOf((l.date||'').slice(0,7)) >= 0;
+    }).sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+    return {
+      id: memberId, name: found.m.display, team: found.team.name, teamId: found.team.id,
+      months: months, monthCount: months.length,
+      dcs: dcs, target: target, prodPct: prodPct,
+      suYes: su.yes, suHappened: su.happened, suPct: suPct,
+      att: att, tardyAvg: tardyAvg, absAvg: absAvg,
+      logs: logs, sessions: logs.length,
+      auto: {
+        quality:      suPct == null ? null : pafBand(pafBandsToPairs(pafGetBands().quality), suPct),
+        productivity: pafBand(pafBandsToPairs(pafGetBands().prod), prodPct),
+        tardiness:    tardyAvg == null ? null : pafCountGrade(tardyAvg),
+        absences:     absAvg   == null ? null : pafCountGrade(absAvg)
+      }
+    };
+  }
+
+  function pafPeriodLabel(M){
+    const f = M.months[0].split('-').map(Number), t = M.months[M.months.length-1].split('-').map(Number);
+    const fl = new Date(f[0],f[1]-1,1).toLocaleDateString('en-US',{month:'long',year:'numeric'});
+    const tl = new Date(t[0],t[1]-1,1).toLocaleDateString('en-US',{month:'long',year:'numeric'});
+    return fl === tl ? fl : fl + ' to ' + tl;
+  }
+  function pafScores(){
+    const s = _pafState; if (!s) return { a:0, b:0, total:0, category:'' };
+    let a = 0, b = 0;
+    PAF_A.forEach(function(r){ a += (s.ratings[r.key] || 0) * r.w; });
+    PAF_B.forEach(function(r){ b += (s.ratings[r.key] || 0) * r.w; });
+    const total = a * 0.5 + b * 0.5;
+    return { a:a, b:b, total:total, category: pafCategory(total) };
+  }
+  function pafSetRating(key, val){
+    if (!_pafState) return;
+    _pafState.ratings[key] = parseInt(val,10) || 0;
+    const el = $('pafW_' + key); if (el) el.textContent = (( _pafState.ratings[key] || 0) * (PAF_A.concat(PAF_B).find(function(r){return r.key===key;}).w)).toFixed(2);
+    pafRenderSummary();
+  }
+  function pafSetText(key, val){ if (_pafState) _pafState.text[key] = val; }
+  function pafRenderSummary(){
+    const box = $('pafSummary'); if (!box || !_pafState) return;
+    const sc = pafScores();
+    const NAVY='#0D1A6E', SLATE='#5B6678', BORDER='var(--border)';
+    const col = sc.total >= 4 ? '#0E9F6E' : sc.total >= 3 ? '#1A2DB5' : sc.total >= 2 ? '#C97000' : '#C00000';
+    box.innerHTML = '<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:stretch">'
+      + '<div style="flex:1;min-width:150px;background:#F8FAFD;border:1px solid ' + BORDER + ';border-radius:10px;padding:12px 14px"><div style="font-size:9.5px;letter-spacing:.5px;text-transform:uppercase;color:' + SLATE + '">Results (A) &middot; 50%</div><div style="font-size:24px;font-weight:800;color:' + NAVY + '">' + sc.a.toFixed(2) + '</div></div>'
+      + '<div style="flex:1;min-width:150px;background:#F8FAFD;border:1px solid ' + BORDER + ';border-radius:10px;padding:12px 14px"><div style="font-size:9.5px;letter-spacing:.5px;text-transform:uppercase;color:' + SLATE + '">Competencies (B) &middot; 50%</div><div style="font-size:24px;font-weight:800;color:' + NAVY + '">' + sc.b.toFixed(2) + '</div></div>'
+      + '<div style="flex:1.4;min-width:190px;background:' + col + ';border-radius:10px;padding:12px 14px;color:#fff"><div style="font-size:9.5px;letter-spacing:.5px;text-transform:uppercase;opacity:.85">Overall total</div><div style="font-size:26px;font-weight:800">' + sc.total.toFixed(2) + '</div><div style="font-size:12.5px;font-weight:700;opacity:.95">' + esc(sc.category) + '</div></div>'
+      + '</div>';
+  }
+
+  function pafBuildSelectors(){
+    const rep = $('pafRep');
+    if (rep && !rep.options.length){
+      const opts = [];
+      TEAMS.forEach(function(t){
+        if (t.id === 'poc') return;
+        t.members.forEach(function(m){ if (!m.hidden) opts.push({ id:m.id, name:m.display, team:t.name }); });
+      });
+      opts.sort(function(a,b){ return a.name.localeCompare(b.name); });
+      rep.innerHTML = opts.map(function(o){ return '<option value="' + o.id + '">' + esc(o.name) + ' · ' + esc(o.team) + '</option>'; }).join('');
+    }
+    ['pafFrom','pafTo'].forEach(function(id){
+      const sel = $(id); if (!sel || sel.options.length) return;
+      const set = {}; rawRows.forEach(function(r){ const d = normalizeDate(r.rawDate); if (d && d <= localIso(new Date())) set[d.slice(0,7)] = 1; });
+      set[localIso(new Date()).slice(0,7)] = 1;
+      const months = Object.keys(set).sort().reverse().slice(0,18);
+      sel.innerHTML = months.map(function(m){
+        const q = m.split('-').map(Number);
+        return '<option value="' + m + '">' + new Date(q[0],q[1]-1,1).toLocaleDateString('en-US',{month:'long',year:'numeric'}) + '</option>';
+      }).join('');
+    });
+  }
+
+  function renderPaf(){
+    const body = $('pafBody'); if (!body) return;
+    if (!_coachLogsLoaded) loadCoachingLogs(false).then(function(){ if ($('pafSection').style.display !== 'none') renderPaf(); });
+    if (!_attLoaded && !_attLoading) loadAttendanceData();
+    pafBuildSelectors();
+    const id = $('pafRep').value, from = $('pafFrom').value, to = $('pafTo').value;
+    if (!id || !from || !to){ body.innerHTML = ''; return; }
+    if (from > to){ body.innerHTML = '<div style="background:#FFF4F4;border:1px solid #F3C2C2;border-radius:12px;padding:18px;color:#B3261E;font-size:13px">The period start is after the period end. Swap the two months.</div>'; return; }
+    const M = pafCompute(id, from, to); if (!M) return;
+    const keep = (_pafState && _pafState.id === id && _pafState.from === from && _pafState.to === to) ? _pafState : null;
+    _pafState = keep || {
+      id:id, from:from, to:to, M:M,
+      ratings: { quality:M.auto.quality||3, productivity:M.auto.productivity||3,
+                 tardiness:M.auto.tardiness||3, absences:M.auto.absences||3,
+                 team:3, dependable:3, initiative:3, discipline:3 },
+      text: {}
+    };
+    _pafState.M = M;
+    const S = _pafState, att = M.att;
+    const NAVY='#0D1A6E', SLATE='#5B6678', BORDER='var(--border)', HEAD='#1A2DB5';
+
+    const evidence = {
+      quality:      M.suPct == null ? 'No resolved DCs in this period' : M.suPct + '% show-up (' + M.suYes + ' of ' + M.suHappened + ' resolved DCs)',
+      productivity: M.dcs + ' booked DCs vs target ' + M.target + ' (' + M.prodPct + '%)',
+      tardiness:    att ? att.late + ' late over ' + M.monthCount + ' month' + (M.monthCount===1?'':'s') + ' (' + (M.tardyAvg).toFixed(1) + '/month)' : 'Attendance not loaded',
+      absences:     att ? att.absencesTotal + ' absences over ' + M.monthCount + ' month' + (M.monthCount===1?'':'s') + ' (' + (M.absAvg).toFixed(1) + '/month)' + (att.ncns ? ', incl. ' + att.ncns + ' NCNS' : '') : 'Attendance not loaded'
+    };
+    const BQ = pafGetBands();
+    const bandTxt = function(a){ return a[0] + '%+ = 5, ' + a[1] + '-' + (a[0]-1) + ' = 4, ' + a[2] + '-' + (a[1]-1) + ' = 3, ' + a[3] + '-' + (a[2]-1) + ' = 2, under ' + a[3] + ' = 1'; };
+    const bandRef = {
+      quality:      'Show-up: ' + bandTxt(BQ.quality),
+      productivity: 'Of DC target: ' + bandTxt(BQ.prod),
+      tardiness:    'Per month: 0 = 5, 1 = 4, 2 = 3, 3 = 2, 4+ = 1',
+      absences:     'Per month: 0 = 5, 1 = 4, 2 = 3, 3 = 2, 4+ = 1'
+    };
+    const sel = function(key, auto){
+      let o = '';
+      for (let g = 5; g >= 1; g--) o += '<option value="' + g + '"' + (S.ratings[key] === g ? ' selected' : '') + '>' + g + ' — ' + PAF_GRADE[g] + '</option>';
+      return '<select onchange="pafSetRating(\'' + key + '\',this.value)" style="width:100%;padding:5px 6px;border:1px solid ' + BORDER + ';border-radius:6px;font-size:11.5px;color:var(--ink)">' + o + '</select>'
+        + (auto != null ? '<div style="font-size:9.5px;color:' + SLATE + ';margin-top:3px">auto-graded ' + auto + ' from the data</div>' : '');
+    };
+    const ta = function(key, ph){
+      return '<textarea oninput="pafSetText(\'' + key + '\',this.value)" rows="3" placeholder="' + ph + '" style="width:100%;padding:6px 8px;border:1px solid ' + BORDER + ';border-radius:6px;font-size:11.5px;font-family:inherit;color:var(--ink);resize:vertical">' + esc(S.text[key] || '') + '</textarea>';
+    };
+    const th = function(t,w){ return '<th style="padding:7px 9px;background:' + HEAD + ';color:#fff;font-size:10px;text-transform:uppercase;letter-spacing:.4px;text-align:left' + (w?';width:'+w:'') + '">' + t + '</th>'; };
+    const rowsA = PAF_A.map(function(r){
+      return '<tr style="border-top:1px solid ' + BORDER + '">'
+        + '<td style="padding:8px 9px;vertical-align:top"><div style="font-size:12.5px;font-weight:700;color:' + NAVY + '">' + esc(r.label) + '</div><div style="font-size:10.5px;color:' + SLATE + ';margin-top:2px">' + esc(r.desc) + '</div><div style="font-size:10px;color:' + SLATE + ';margin-top:4px">' + esc(bandRef[r.key]) + '</div></td>'
+        + '<td style="padding:8px 9px;vertical-align:top;font-size:11.5px;color:var(--ink)"><b>' + esc(evidence[r.key]) + '</b></td>'
+        + '<td style="padding:8px 9px;vertical-align:top;text-align:center;font-size:12px;font-weight:700;color:' + NAVY + '">' + Math.round(r.w*100) + '%</td>'
+        + '<td style="padding:8px 9px;vertical-align:top;min-width:150px">' + sel(r.key, M.auto[r.key]) + '</td>'
+        + '<td style="padding:8px 9px;vertical-align:top;text-align:right;font-size:13px;font-weight:800;color:' + NAVY + '" id="pafW_' + r.key + '">' + ((S.ratings[r.key]||0)*r.w).toFixed(2) + '</td>'
+        + '<td style="padding:8px 9px;vertical-align:top;min-width:230px">' + ta('ex_' + r.key, 'Specific examples') + '</td>'
+        + '</tr>';
+    }).join('');
+    const rowsB = PAF_B.map(function(r){
+      return '<tr style="border-top:1px solid ' + BORDER + '">'
+        + '<td style="padding:8px 9px;vertical-align:top"><div style="font-size:12.5px;font-weight:700;color:' + NAVY + '">' + esc(r.label) + '</div><div style="font-size:10.5px;color:' + SLATE + ';margin-top:2px">' + esc(r.desc) + '</div></td>'
+        + '<td style="padding:8px 9px;vertical-align:top;font-size:11px;color:' + SLATE + '">Evaluator judgement</td>'
+        + '<td style="padding:8px 9px;vertical-align:top;text-align:center;font-size:12px;font-weight:700;color:' + NAVY + '">' + Math.round(r.w*100) + '%</td>'
+        + '<td style="padding:8px 9px;vertical-align:top;min-width:150px">' + sel(r.key, null) + '</td>'
+        + '<td style="padding:8px 9px;vertical-align:top;text-align:right;font-size:13px;font-weight:800;color:' + NAVY + '" id="pafW_' + r.key + '">' + ((S.ratings[r.key]||0)*r.w).toFixed(2) + '</td>'
+        + '<td style="padding:8px 9px;vertical-align:top;min-width:230px">' + ta('ex_' + r.key, 'Specific examples') + '</td>'
+        + '</tr>';
+    }).join('');
+    const tbl = function(title, rows){
+      return '<div style="background:#fff;border:1px solid ' + BORDER + ';border-radius:12px;overflow:hidden;margin-bottom:16px">'
+        + '<div style="padding:10px 14px;background:#F3F5FC;font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:' + NAVY + '">' + title + '</div>'
+        + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:960px"><thead><tr>'
+        + th('Area') + th('From the data') + th('Weight','70px') + th('Rating','170px') + th('Score','70px') + th('Specific examples')
+        + '</tr></thead><tbody>' + rows + '</tbody></table></div></div>';
+    };
+    const freeText = function(t, key, ph){
+      return '<div style="background:#fff;border:1px solid ' + BORDER + ';border-radius:12px;padding:12px 14px;margin-bottom:12px">'
+        + '<div style="font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:' + NAVY + ';margin-bottom:6px">' + t + '</div>'
+        + '<textarea oninput="pafSetText(\'' + key + '\',this.value)" rows="3" placeholder="' + ph + '" style="width:100%;padding:7px 9px;border:1px solid ' + BORDER + ';border-radius:6px;font-size:12px;font-family:inherit;color:var(--ink);resize:vertical">' + esc(S.text[key] || '') + '</textarea></div>';
+    };
+    const extra = att ? ('Attendance overall ' + (att.rate == null ? 'n/a' : att.rate + '%') + ', on-time ' + (att.onTime == null ? 'n/a' : att.onTime + '%')
+        + ' · ' + att.present + ' present, ' + att.late + ' late, ' + att.absent + ' absent, ' + att.ncns + ' NCNS, ' + att.undertime + ' undertime'
+        + (att.leave ? ', ' + att.leave + ' on approved leave (not counted against the rep)' : '')
+        + (att.suspended ? ', ' + att.suspended + ' suspended' : '')
+        + ' across ' + att.scheduled + ' scheduled days.') : 'Attendance data still loading.';
+
+    body.innerHTML =
+      '<div style="background:#fff;border:1px solid ' + BORDER + ';border-radius:12px;padding:14px 16px;margin-bottom:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px">'
+      + '<div><div style="font-size:9.5px;letter-spacing:.5px;text-transform:uppercase;color:' + SLATE + '">Employee</div><div style="font-size:14px;font-weight:800;color:' + NAVY + '">' + esc(M.name) + '</div></div>'
+      + '<div><div style="font-size:9.5px;letter-spacing:.5px;text-transform:uppercase;color:' + SLATE + '">Position</div><div style="font-size:13px;color:var(--ink)">' + esc(PAF_POSITION) + '</div></div>'
+      + '<div><div style="font-size:9.5px;letter-spacing:.5px;text-transform:uppercase;color:' + SLATE + '">Department / LOB</div><div style="font-size:13px;color:var(--ink)">' + esc(PAF_DEPT) + ' · ' + esc(M.team) + '</div></div>'
+      + '<div><div style="font-size:9.5px;letter-spacing:.5px;text-transform:uppercase;color:' + SLATE + '">Appraisal period</div><div style="font-size:13px;color:var(--ink)">' + esc(pafPeriodLabel(M)) + '</div></div>'
+      + '<div><div style="font-size:9.5px;letter-spacing:.5px;text-transform:uppercase;color:' + SLATE + '">Rater</div><div style="font-size:13px;color:var(--ink)">' + esc(scTLName(M.teamId) || 'Team Leader') + '</div></div>'
+      + '<div><div style="font-size:9.5px;letter-spacing:.5px;text-transform:uppercase;color:' + SLATE + '">Coaching on file</div><div style="font-size:13px;color:var(--ink)">' + M.sessions + ' session' + (M.sessions===1?'':'s') + '</div></div>'
+      + '</div>'
+      + '<div id="pafSummary" style="margin-bottom:14px"></div>'
+      + '<div style="font-size:11px;color:' + SLATE + ';background:#fff;border:1px solid ' + BORDER + ';border-radius:10px;padding:11px 13px;margin-bottom:14px;line-height:1.6">'
+      + '<b style="color:' + NAVY + '">Section A is proposed from the data, Section B is yours.</b> Every rating stays editable and the weighted scores follow the template exactly (A and B are 50% each, landing the total back on the 1 to 5 scale). '
+      + esc(extra)
+      + ' <b style="color:' + NAVY + '">Two limits worth knowing:</b> the attendance sheet records that someone was late but not by how many minutes, so the tardiness bands are applied on count alone and you should adjust the grade if duration matters. And NCNS is counted here as an unexcused absence, which the rest of the dashboard does not do.'
+      + '</div>'
+      + pafBandEditor()
+      + tbl('A. Performance objectives and results &middot; 50%', rowsA)
+      + tbl('B. Competencies &middot; 50%', rowsB)
+      + freeText('D. Accomplishments (awards, recognitions, citations)', 'accomplishments', 'Awards, recognitions, standout wins in the period')
+      + freeText('E. Competencies, skills and knowledge to be further developed', 'develop', 'What to build next')
+      + freeText('F. Developmental plans (targets for the next review period)', 'plans', 'Specific, measurable targets')
+      + freeText('G. Comments', 'comments', 'Anything else for the record');
+    pafRenderSummary();
+  }
+
+  async function pafDraft(){
+    if (!_pafState){ return; }
+    const btn = $('pafAiBtn'), M = _pafState.M, S = _pafState;
+    btn.disabled = true; btn.textContent = 'Drafting…';
+    $('pafStatus').style.color = 'var(--slate)'; $('pafStatus').textContent = 'Drafting the narrative sections from the data and coaching notes…';
+    const att = M.att || {};
+    const notes = M.logs.slice(0,15).map(function(l){ return '- [' + (l.date||'').slice(0,10) + ' ' + (l.topic||'') + '] ' + (l.summary || '(no summary)'); }).join('\n') || '(no coaching notes on file)';
+    const prompt = 'You are helping a sales supervisor at Outsource Accelerator (offshore staffing) complete a Performance Appraisal Form for a BDR. "DC" = Discovery Call.\n\n'
+      + 'EMPLOYEE: ' + M.name + ' (' + M.team + '), period ' + pafPeriodLabel(M) + ' (' + M.monthCount + ' month(s))\n'
+      + 'Booked DCs: ' + M.dcs + ' against a target of ' + M.target + ' (' + M.prodPct + '%)\n'
+      + 'Show-up on their booked DCs: ' + (M.suPct == null ? 'no resolved DCs' : M.suPct + '% (' + M.suYes + ' of ' + M.suHappened + ')') + '\n'
+      + 'Attendance: ' + (att.scheduled ? att.present + ' present, ' + att.late + ' late, ' + att.absent + ' absent, ' + att.ncns + ' NCNS, ' + att.undertime + ' undertime across ' + att.scheduled + ' scheduled days' : 'not available') + '\n'
+      + 'Coaching sessions logged this period: ' + M.sessions + '\n'
+      + 'Coaching notes (newest first):\n' + notes + '\n\n'
+      + 'Write the narrative parts of the appraisal. Use ONLY the figures above and what the coaching notes actually say. Do not invent numbers, incidents, awards or metrics, and do not mention dials or talk time, which are not tracked. Where there is no evidence for something, say so plainly rather than filling space. Be specific and factual, the tone of a fair supervisor writing for the record. Do NOT use em dashes.\n\n'
+      + 'Return ONLY valid JSON with these fields, each a short paragraph unless noted:\n'
+      + '{"ex_quality":"evidence for quality of work","ex_productivity":"evidence for productivity","ex_tardiness":"evidence on punctuality","ex_absences":"evidence on absences","ex_team":"evidence on team orientation from the coaching notes, or say there is no logged evidence","ex_dependable":"evidence on dependability","ex_initiative":"evidence on initiative, or say there is no logged evidence","ex_discipline":"evidence on discipline","accomplishments":"genuine accomplishments in the period, or state plainly that none are on record","develop":"skills and knowledge to develop next","plans":"2 to 4 specific measurable targets for the next period, as one paragraph","comments":"closing comment for the record"}';
+    try {
+      const d = await clAiRelay({ model:'claude-haiku-4-5-20251001', max_tokens:2000, messages:[{ role:'user', content:prompt }] });
+      const m = clAiText(d).trim().match(/\{[\s\S]*\}/); if (!m) throw new Error('Could not parse the draft.');
+      const g = JSON.parse(m[0]);
+      Object.keys(g).forEach(function(k){ if (typeof g[k] === 'string' && g[k].trim()) S.text[k] = clDeDash(g[k].trim()); });
+      renderPaf();
+      $('pafStatus').style.color = '#0A7A0A';
+      $('pafStatus').textContent = '✓ Draft written into every narrative box. Read it, correct it, and set the Section B ratings yourself before printing.';
+    } catch (err){
+      $('pafStatus').style.color = '#C00';
+      $('pafStatus').textContent = 'Could not draft: ' + err.message;
+    } finally { btn.disabled = false; btn.textContent = 'Draft with AI ✨'; }
+  }
+
+  function pafPrint(){
+    if (!_pafState) return;
+    const S = _pafState, M = S.M, sc = pafScores(), att = M.att || {};
+    const g = function(k){ return esc(S.text[k] || ''); };
+    const rowsFor = function(defs){
+      return defs.map(function(r){
+        return '<tr><td class="area"><b>' + esc(r.label) + '</b><br><span class="sub">' + esc(r.desc) + '</span></td>'
+          + '<td class="grade">' + S.ratings[r.key] + ' &mdash; ' + PAF_GRADE[S.ratings[r.key]] + '</td>'
+          + '<td class="w">' + Math.round(r.w*100) + '%</td>'
+          + '<td class="ex">' + g('ex_' + r.key) + '</td>'
+          + '<td class="w">' + S.ratings[r.key] + '</td>'
+          + '<td class="w">' + (S.ratings[r.key]*r.w).toFixed(2) + '</td></tr>';
+      }).join('');
+    };
+    const sec = function(t, k){ return '<div class="sec">' + t + '</div><div class="box">' + g(k) + '</div>'; };
+    const html = '<!doctype html><html><head><meta charset="utf-8"><title>PAF ' + esc(M.name) + '</title><style>'
+      + 'body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:26px;font-size:11px}'
+      + 'h1{font-size:15px;text-align:center;margin:0 0 14px}'
+      + 'table{width:100%;border-collapse:collapse;margin-bottom:12px}'
+      + 'td,th{border:1px solid #888;padding:5px 6px;vertical-align:top}'
+      + 'th{background:#1F4E9C;color:#fff;font-size:10px;text-align:left}'
+      + '.hdr td{border:1px solid #888}.hdr b{display:inline-block;min-width:120px}'
+      + '.sec{background:#1F4E9C;color:#fff;font-weight:bold;padding:4px 6px;font-size:10px;margin-top:10px}'
+      + '.box{border:1px solid #888;border-top:none;min-height:52px;padding:6px;white-space:pre-wrap}'
+      + '.area{width:26%}.sub{color:#555;font-size:10px}.grade{width:16%}.w{width:7%;text-align:center}.ex{width:30%;white-space:pre-wrap}'
+      + '.tot td{background:#1F4E9C;color:#fff;font-weight:bold}'
+      + '.sign{margin-top:34px;display:flex;gap:40px}.sign div{flex:1;border-top:1px solid #333;padding-top:5px;text-align:center;font-size:10px}'
+      + '@media print{body{margin:12mm}}'
+      + '</style></head><body>'
+      + '<h1>PERFORMANCE APPRAISAL FORM</h1>'
+      + '<table class="hdr"><tr><td><b>Employee’s Name:</b> ' + esc(M.name) + '</td><td><b>Date Appraised:</b> ' + new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}) + '</td></tr>'
+      + '<tr><td><b>Position Title:</b> ' + esc(PAF_POSITION) + '</td><td><b>Appraisal Period:</b> ' + esc(pafPeriodLabel(M)) + '</td></tr>'
+      + '<tr><td><b>Department/LOB:</b> ' + esc(PAF_DEPT) + ' · ' + esc(M.team) + '</td><td><b>Rater/Evaluator:</b> ' + esc(scTLName(M.teamId) || '') + '</td></tr></table>'
+      + '<table><tr><th colspan="6">A. PERFORMANCE OBJECTIVES AND RESULTS</th></tr>'
+      + '<tr><th>KPIs and goals</th><th>Grade</th><th>Weight</th><th>Specific examples</th><th>Rating</th><th>Weighted score</th></tr>'
+      + rowsFor(PAF_A)
+      + '<tr class="tot"><td colspan="2">Total Results</td><td>50%</td><td></td><td></td><td>' + sc.a.toFixed(2) + '</td></tr></table>'
+      + '<table><tr><th colspan="6">B. COMPETENCIES</th></tr>'
+      + '<tr><th>Area</th><th>Grade</th><th>Weight</th><th>Specific examples</th><th>Rating</th><th>Weighted score</th></tr>'
+      + rowsFor(PAF_B)
+      + '<tr class="tot"><td colspan="2">Total for Competencies</td><td>50%</td><td></td><td></td><td>' + sc.b.toFixed(2) + '</td></tr></table>'
+      + '<table><tr><th colspan="3">C. SUMMARY OF RATINGS</th></tr>'
+      + '<tr><td>RESULTS weighted score (A)</td><td class="w">' + sc.a.toFixed(2) + '</td><td rowspan="3"><b>Rating category:</b> ' + esc(sc.category) + '<br><span class="sub">5 Outstanding &middot; 4.0-4.99 Exceeds Expectations &middot; 3.0-3.99 Meets Expectations &middot; 2.0-2.99 Below Expectations &middot; below 2 Needs Improvement</span></td></tr>'
+      + '<tr><td>COMPETENCIES weighted score (B)</td><td class="w">' + sc.b.toFixed(2) + '</td></tr>'
+      + '<tr class="tot"><td>TOTAL</td><td class="w">' + sc.total.toFixed(2) + '</td></tr></table>'
+      + sec('D. ACCOMPLISHMENTS (Awards, Recognitions and Citations)','accomplishments')
+      + sec('E. COMPETENCIES, SKILLS AND KNOWLEDGE TO BE FURTHER DEVELOPED','develop')
+      + sec('F. DEVELOPMENTAL PLANS (Targets for the next review period)','plans')
+      + sec('G. COMMENTS','comments')
+      + '<div class="sign"><div>Employee’s Name &amp; Signature / Date</div><div>Rater/Evaluator’s Name &amp; Signature / Date</div></div>'
+      + '</body></html>';
+    const w = window.open('', '_blank');
+    if (!w){ alert('Allow pop-ups for this site to open the printable form.'); return; }
+    w.document.write(html); w.document.close(); w.focus();
+    setTimeout(function(){ try { w.print(); } catch(e){} }, 350);
   }
 
   // ── LEADER IMPACT ─────────────────────────────────────────────────────────
