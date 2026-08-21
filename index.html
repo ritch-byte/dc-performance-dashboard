@@ -2595,7 +2595,12 @@
       let o = '';
       for (let g = 5; g >= 1; g--) o += '<option value="' + g + '"' + (S.ratings[key] === g ? ' selected' : '') + '>' + g + ' — ' + PAF_GRADE[g] + '</option>';
       return '<select onchange="pafSetRating(\'' + key + '\',this.value)" style="width:100%;padding:5px 6px;border:1px solid ' + BORDER + ';border-radius:6px;font-size:11.5px;color:var(--ink)">' + o + '</select>'
-        + (auto != null ? '<div style="font-size:9.5px;color:' + SLATE + ';margin-top:3px">auto-graded ' + auto + ' from the data</div>' : '');
+        + '<div style="font-size:9.5px;color:' + (S.touched[key] ? '#0E9F6E' : SLATE) + ';margin-top:3px">'
+        + (S.touched[key] ? 'set by you'
+           : auto != null ? 'auto-graded ' + auto + ' from the data'
+           : (S.aiSet && S.aiSet[key]) ? 'proposed from the coaching record, not yet reviewed'
+           : 'default of 3, no evidence applied yet')
+        + '</div>';
     };
     const ta = function(key, ph){
       return '<textarea oninput="pafSetText(\'' + key + '\',this.value)" rows="3" placeholder="' + ph + '" style="width:100%;padding:6px 8px;border:1px solid ' + BORDER + ';border-radius:6px;font-size:11.5px;font-family:inherit;color:var(--ink);resize:vertical">' + esc(S.text[key] || '') + '</textarea>';
@@ -2725,8 +2730,22 @@
       if (f.suPct != null && l.suPct != null && f.suHappened >= 8 && l.suHappened >= 8 && l.suPct > f.suPct + 5)
         wins.push('Show-up improved from ' + f.suPct + '% in ' + f.label + ' (' + f.suHappened + ' resolved) to ' + l.suPct + '% in ' + l.label + ' (' + l.suHappened + ' resolved)');
     }
+    // Signal the competencies can actually be judged on. Coaching level is the disciplinary
+    // escalation (Verbal, Written, Final Written) and type separates a routine weekly session
+    // from a logged violation, so the two together are real evidence rather than impressions.
+    const lv = { verbal:0, written:0, final:0 }, ty = { weekly:0, performance:0, violation:0, pip:0 };
+    M.logs.forEach(function(l){
+      const L = (l.level||'').toLowerCase(), T = (l.type||'').toLowerCase();
+      if (L.indexOf('final') >= 0) lv.final++; else if (L.indexOf('written') >= 0) lv.written++; else if (L) lv.verbal++;
+      if (T.indexOf('violation') >= 0) ty.violation++; else if (T.indexOf('pip') >= 0) ty.pip++;
+      else if (T.indexOf('perf') >= 0) ty.performance++; else if (T.indexOf('weekly') >= 0) ty.weekly++;
+    });
+    const topics = {};
+    M.logs.forEach(function(l){ const t = (l.topic||'').trim(); if (t && t !== 'Weekly Coaching') topics[t] = (topics[t]||0)+1; });
+    const repeated = Object.keys(topics).filter(function(t){ return topics[t] > 1; });
     return { perMonth:perMonth, rankDc:rankDc, rankSu:rankSu, teamSize:peers.length,
-             teamDcAvg:teamDcAvg, teamSuPct:teamSuPct, wins:wins };
+             teamDcAvg:teamDcAvg, teamSuPct:teamSuPct, wins:wins,
+             levels:lv, types:ty, topics:topics, repeated:repeated };
   }
 
   async function pafDraft(){
@@ -2755,6 +2774,10 @@
       + (E.teamSuPct != null ? ', team show-up average ' + E.teamSuPct + '%' : '') + '\n\n'
       + 'MONTH BY MONTH\n' + months + '\n\n'
       + 'COACHING LOGGED THIS PERIOD (' + M.sessions + ' session(s), newest first)\n' + notes + '\n\n'
+      + 'COACHING RECORD SHAPE\n'
+      + '  Escalation level: ' + E.levels.verbal + ' verbal, ' + E.levels.written + ' WRITTEN warning(s), ' + E.levels.final + ' FINAL WRITTEN warning(s)\n'
+      + '  Session type: ' + E.types.weekly + ' routine weekly, ' + E.types.performance + ' performance, ' + E.types.violation + ' logged violation(s), ' + E.types.pip + ' PIP\n'
+      + '  Issues raised more than once: ' + (E.repeated.length ? E.repeated.join('; ') : 'none') + '\n\n'
       + 'VERIFIED ACHIEVEMENTS, computed from the data\n' + wins + '\n\n'
       + 'RULES\n'
       + '1. Use ONLY the figures and coaching notes above. Never invent a number, an incident, a client name, an award, or a metric. The company does not track dials, talk time or connect rates, so never mention them.\n'
@@ -2762,6 +2785,7 @@
       + '3. Each "specific examples" entry must cite an actual figure or quote an actual coaching note. Where a competency has no logged evidence, say so in that box rather than guessing at character.\n'
       + '4. Approved leave is never a mark against the rep. NCNS is a serious attendance issue and should be named as one where it occurred.\n'
       + '5. Be factual and fair, the tone of a supervisor writing for a permanent record that the employee will read and sign. No em dashes.\n\n'
+      + '6. You must also PROPOSE a 1 to 5 rating for each of the four competencies. Start every one at 3, meaning meets expectations, and move only where the record actually supports it. Go to 4 or 5 only where the coaching notes record something specifically good. Go to 2 or 1 only on documented grounds: a Written or Final Written warning, a logged violation, the same issue raised repeatedly, or for Dependability a pattern of absence and NCNS. Where there is no evidence either way, keep 3 and say so in that competency box. Never infer character from booked DC numbers alone, and never rate someone down for approved leave.\n\n'
       + 'Return ONLY valid JSON with these fields, each a short paragraph:\n'
       + '{'
       + '"ex_quality":"evidence for quality of work, citing the show-up figure and what it means about how well qualified their bookings are",'
@@ -2775,15 +2799,27 @@
       + '"accomplishments":"write up the verified achievements, or state plainly that none are on record",'
       + '"develop":"the two or three specific things to develop next, tied to the weakest figures and to recurring coaching themes",'
       + '"plans":"2 to 4 specific measurable targets for the next review period, as one paragraph, with numbers drawn from where they stand now",'
-      + '"comments":"closing comment for the record"}';
+      + '"comments":"closing comment for the record",'
+      + '"rate_team":3,"rate_dependable":3,"rate_initiative":3,"rate_discipline":3}';
     try {
       const d = await clAiRelay({ model:'claude-haiku-4-5-20251001', max_tokens:2400, messages:[{ role:'user', content:prompt }] });
       const m = clAiText(d).trim().match(/\{[\s\S]*\}/); if (!m) throw new Error('Could not parse the draft.');
       const g = JSON.parse(m[0]);
       Object.keys(g).forEach(function(k){ if (typeof g[k] === 'string' && g[k].trim()) S.text[k] = clDeDash(g[k].trim()); });
+      // Proposed competency ratings. Section A stays derived from the figures and is never
+      // touched here. Section B is where the coaching record IS the evidence, so the model
+      // proposes it, but anything the evaluator set by hand wins and is left exactly alone.
+      if (!S.aiSet) S.aiSet = {};
+      let applied = 0;
+      PAF_B.forEach(function(r){
+        const v = parseInt(g['rate_' + r.key], 10);
+        if (!(v >= 1 && v <= 5)) return;
+        if (S.touched[r.key]) return;
+        S.ratings[r.key] = v; S.aiSet[r.key] = true; applied++;
+      });
       renderPaf();
       $('pafStatus').style.color = '#0A7A0A';
-      $('pafStatus').textContent = '✓ Drafted from ' + E.wins.length + ' verified achievement(s), ' + M.sessions + ' coaching note(s) and ' + M.monthCount + ' month(s) of figures. Read it, correct it, and set the Section B ratings yourself before printing.';
+      $('pafStatus').textContent = '✓ Drafted from ' + E.wins.length + ' verified achievement(s), ' + M.sessions + ' coaching note(s) and ' + M.monthCount + ' month(s) of figures, and proposed ' + applied + ' of the 4 competency ratings. Every rating stays editable, and a proposal is only ever as good as what was logged, so read it before printing.';
     } catch (err){
       $('pafStatus').style.color = '#C00';
       $('pafStatus').textContent = 'Could not draft: ' + err.message;
