@@ -2771,6 +2771,37 @@
       if (f.suPct != null && l.suPct != null && f.suHappened >= 8 && l.suHappened >= 8 && l.suPct > f.suPct + 5)
         wins.push('Show-up improved from ' + f.suPct + '% in ' + f.label + ' (' + f.suHappened + ' resolved) to ' + l.suPct + '% in ' + l.label + ' (' + l.suHappened + ' resolved)');
     }
+    // Pull the lines of each coaching note that actually bear on a competency, so the model is
+    // handed the evidence instead of being asked to notice it. Told only "do not invent", it
+    // over-corrected and reported "no logged evidence" for Team Orientation on a rep whose note
+    // read "Motivated to exert extra mile to help the team". Quoting the fragment fixes both
+    // failure modes at once: it cannot miss what is there, and it cannot embroider what is not.
+    const SIG = {
+      team:       ['team','teammate','peer','collaborat','help','support','mentor','share','buddy','group'],
+      dependable: ['consistent','reliable','on track','follow-up','follow up','cadence','commit','dependab','punctual','attendance','quality call'],
+      initiative: ['initiative','extra mile','volunteer','proactiv','beyond','suggest','idea','motivated','improv','push for'],
+      discipline: ['policy','adherence','adhere','violation','warning','compliance','process','script','break','schedule','tardy','late','cadence']
+    };
+    const RECOG = ['most improved','top performer','best ','award','recogni','commend','outstanding','highest','number 1','exceeded'];
+    const signals = { team:[], dependable:[], initiative:[], discipline:[] };
+    M.logs.forEach(function(l){
+      const sum = (l.summary || '').trim(); if (!sum) return;
+      const date = (l.date || '').slice(0,10);
+      // Notes are written as dash-separated bullets, so quote the bullet rather than the lot.
+      const frags = sum.split(/\s+-\s+/).map(function(f){ return f.replace(/^[-\s]+/, '').trim(); }).filter(function(f){ return f.length >= 8; });
+      const use = frags.length ? frags : [sum];
+      use.forEach(function(f){
+        const fl = f.toLowerCase();
+        Object.keys(SIG).forEach(function(k){
+          if (SIG[k].some(function(w){ return fl.indexOf(w) >= 0; })) signals[k].push(date + ': "' + f + '"');
+        });
+        if (RECOG.some(function(w){ return fl.indexOf(w) >= 0; }))
+          wins.push('Recorded in the ' + date + ' coaching note: "' + f + '" (a note by their coach, not a formal award)');
+      });
+    });
+    Object.keys(signals).forEach(function(k){
+      signals[k] = signals[k].filter(function(v,i,a){ return a.indexOf(v) === i; }).slice(0,6);
+    });
     // Signal the competencies can actually be judged on. Coaching level is the disciplinary
     // escalation (Verbal, Written, Final Written) and type separates a routine weekly session
     // from a logged violation, so the two together are real evidence rather than impressions.
@@ -2786,7 +2817,7 @@
     const repeated = Object.keys(topics).filter(function(t){ return topics[t] > 1; });
     return { perMonth:perMonth, rankDc:rankDc, rankSu:rankSu, teamSize:peers.length,
              teamDcAvg:teamDcAvg, teamSuPct:teamSuPct, wins:wins,
-             levels:lv, types:ty, topics:topics, repeated:repeated };
+             levels:lv, types:ty, topics:topics, repeated:repeated, signals:signals };
   }
 
   async function pafDraft(){
@@ -2819,11 +2850,16 @@
       + '  Escalation level: ' + E.levels.verbal + ' verbal, ' + E.levels.written + ' WRITTEN warning(s), ' + E.levels.final + ' FINAL WRITTEN warning(s)\n'
       + '  Session type: ' + E.types.weekly + ' routine weekly, ' + E.types.performance + ' performance, ' + E.types.violation + ' logged violation(s), ' + E.types.pip + ' PIP\n'
       + '  Issues raised more than once: ' + (E.repeated.length ? E.repeated.join('; ') : 'none') + '\n\n'
+      + 'CANDIDATE EVIDENCE PER COMPETENCY, quoted from the notes above\n'
+      + ['team','dependable','initiative','discipline'].map(function(k){
+          const v = E.signals[k] || [];
+          return '  ' + k + ': ' + (v.length ? v.join(' | ') : 'nothing in the notes touches this');
+        }).join('\n') + '\n\n'
       + 'VERIFIED ACHIEVEMENTS, computed from the data\n' + wins + '\n\n'
       + 'RULES\n'
       + '1. Use ONLY the figures and coaching notes above. Never invent a number, an incident, a client name, an award, or a metric. The company does not track dials, talk time or connect rates, so never mention them.\n'
       + '2. For ACCOMPLISHMENTS, write up only the verified achievements listed above. There is normally no formal record of awards or citations for this role, so if that list is empty, say plainly that there are no accomplishments on record for the period and do not manufacture one. Never describe simply meeting a baseline expectation, such as turning up, as an accomplishment.\n'
-      + '3. Each "specific examples" entry must cite an actual figure or quote an actual coaching note. Where a competency has no logged evidence, say so in that box rather than guessing at character.\n'
+      + '3. Each "specific examples" entry must cite an actual figure or quote an actual coaching note. Where the candidate evidence list above has entries for a competency you MUST use them and quote the wording, even if the phrasing is brief: a note saying someone goes the extra mile to help the team IS evidence of team orientation. Only write that there is no logged evidence when the candidate list for that competency says nothing in the notes touches it. Do not demand formal or elaborate proof before crediting what a coach actually wrote.\n'
       + '4. Approved leave is never a mark against the rep. NCNS is a serious attendance issue and should be named as one where it occurred.\n'
       + '5. Be factual and fair, the tone of a supervisor writing for a permanent record that the employee will read and sign. No em dashes.\n\n'
       + '6. You must also PROPOSE a 1 to 5 rating for each of the four competencies. Start every one at 3, meaning meets expectations, and move only where the record actually supports it. Go to 4 or 5 only where the coaching notes record something specifically good. Go to 2 or 1 only on documented grounds: a Written or Final Written warning, a logged violation, the same issue raised repeatedly, or for Dependability a pattern of absence and NCNS. Where there is no evidence either way, keep 3 and say so in that competency box. Never infer character from booked DC numbers alone, and never rate someone down for approved leave.\n\n'
