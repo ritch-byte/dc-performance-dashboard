@@ -1398,7 +1398,12 @@
       <div class="content-header">
         <div class="page-title">Performance Appraisal</div>
         <div class="ch-right" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <select id="pafRep" class="week-select" onchange="renderPaf()"></select>
+          <div style="position:relative;min-width:250px">
+            <input id="pafSearch" class="cl-input" autocomplete="off" placeholder="Type a name to search…"
+                   oninput="pafSearchInput()" onfocus="pafSearchInput()" onkeydown="pafSearchKey(event)"
+                   onblur="setTimeout(pafSearchHide,150)" style="width:100%">
+            <div id="pafSearchBox" style="position:absolute;left:0;right:0;top:100%;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.12);z-index:40;max-height:280px;overflow:auto;display:none"></div>
+          </div>
           <select id="pafFrom" class="week-select" onchange="renderPaf()"></select>
           <span style="font-size:11px;color:var(--slate)">to</span>
           <select id="pafTo" class="week-select" onchange="renderPaf()"></select>
@@ -2524,16 +2529,52 @@
       + '</div>';
   }
 
+  let _pafSelId = '';
+  function pafPool(){
+    const out = [], seen = {};
+    TEAMS.forEach(function(t){
+      if (t.id === 'poc') return;
+      t.members.forEach(function(m){ if (m.hidden || seen[m.id]) return; seen[m.id] = 1; out.push({ id:m.id, name:m.display, team:t.name }); });
+    });
+    out.sort(function(a,b){ return a.name.localeCompare(b.name); });
+    return out;
+  }
+  function pafMatches(){
+    const q = ($('pafSearch') ? $('pafSearch').value : '').trim().toLowerCase();
+    const pool = pafPool();
+    if (!q) return pool;
+    // Match on any part of the name or the team, so "sil", "godwin" and "meloace" all work.
+    return pool.filter(function(m){ return (m.name + ' ' + m.team).toLowerCase().indexOf(q) >= 0; });
+  }
+  function pafSearchInput(){
+    const box = $('pafSearchBox'); if (!box) return;
+    const list = pafMatches();
+    box.innerHTML = list.length
+      ? list.slice(0,25).map(function(m){
+          return '<div onmousedown="pafPick(' + String.fromCharCode(39) + esc(m.id) + String.fromCharCode(39) + ')" style="padding:8px 12px;font-size:13px;color:var(--ink);cursor:pointer;border-bottom:1px solid #EEF2F7' + (m.id === _pafSelId ? ';background:#F3F5FC;font-weight:700' : '') + '">' + esc(m.name) + ' <span style="color:var(--slate);font-size:11px">· ' + esc(m.team) + '</span></div>';
+        }).join('')
+      : '<div style="padding:10px 12px;font-size:12.5px;color:var(--slate)">No team member matches that.</div>';
+    box.style.display = '';
+  }
+  function pafSearchHide(){ const box = $('pafSearchBox'); if (box) box.style.display = 'none'; }
+  function pafSearchKey(e){
+    if (e.key === 'Enter'){ const list = pafMatches(); if (list.length){ pafPick(list[0].id); e.preventDefault(); } }
+    else if (e.key === 'Escape'){ pafSearchHide(); }
+  }
+  function pafPick(id){
+    _pafSelId = id;
+    const m = pafPool().find(function(x){ return x.id === id; });
+    if (m && $('pafSearch')) $('pafSearch').value = m.name;
+    pafSearchHide();
+    renderPaf();
+  }
   function pafBuildSelectors(){
-    const rep = $('pafRep');
-    if (rep && !rep.options.length){
-      const opts = [];
-      TEAMS.forEach(function(t){
-        if (t.id === 'poc') return;
-        t.members.forEach(function(m){ if (!m.hidden) opts.push({ id:m.id, name:m.display, team:t.name }); });
-      });
-      opts.sort(function(a,b){ return a.name.localeCompare(b.name); });
-      rep.innerHTML = opts.map(function(o){ return '<option value="' + o.id + '">' + esc(o.name) + ' · ' + esc(o.team) + '</option>'; }).join('');
+    const pool = pafPool();
+    if (!_pafSelId && pool.length) _pafSelId = pool[0].id;
+    const inp = $('pafSearch');
+    if (inp && !inp.value && _pafSelId){
+      const m = pool.find(function(x){ return x.id === _pafSelId; });
+      if (m) inp.value = m.name;
     }
     ['pafFrom','pafTo'].forEach(function(id){
       const sel = $(id); if (!sel || sel.options.length) return;
@@ -2552,7 +2593,7 @@
     if (!_coachLogsLoaded) loadCoachingLogs(false).then(function(){ if ($('pafSection').style.display !== 'none') renderPaf(); });
     if (!_attLoaded && !_attLoading) loadAttendanceData();
     pafBuildSelectors();
-    const id = $('pafRep').value, from = $('pafFrom').value, to = $('pafTo').value;
+    const id = _pafSelId, from = $('pafFrom').value, to = $('pafTo').value;
     if (!id || !from || !to){ body.innerHTML = ''; return; }
     if (from > to){ body.innerHTML = '<div style="background:#FFF4F4;border:1px solid #F3C2C2;border-radius:12px;padding:18px;color:#B3261E;font-size:13px">The period start is after the period end. Swap the two months.</div>'; return; }
     const M = pafCompute(id, from, to); if (!M) return;
