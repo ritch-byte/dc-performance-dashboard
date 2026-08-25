@@ -2669,21 +2669,26 @@
     const S = _pafState, att = M.att;
     const NAVY='#0D1A6E', SLATE='#5B6678', BORDER='var(--border)', HEAD='#1A2DB5';
 
+    const MET  = '<span style="color:#0E9F6E;font-weight:800">MET</span>';
+    const MISS = '<span style="color:#C00000;font-weight:800">MISSED</span>';
+    const mark = function(actual, pass){ return actual == null ? '' : ' ' + (actual >= pass ? MET : MISS + ' by ' + (pass - actual) + 'pts'); };
+    const prodPassUI = pafBandsFor(M.months[M.months.length-1]).prod[2];
     const evidence = {
       quality:      M.suPct == null ? 'No resolved DCs in this period'
                       : M.suPct + '% show-up (' + M.suYes + ' of ' + M.suHappened + ' resolved DCs)'
+                        + (M.qualityByMonth.length === 1 ? ', pass mark ' + M.qualityByMonth[0].pass + '%' + mark(M.suPct, M.qualityByMonth[0].pass) : '')
                         + (M.qualityByMonth.length > 1
                             ? '<div style="font-weight:400;color:' + SLATE + ';font-size:10.5px;margin-top:4px">'
                               + M.qualityByMonth.map(function(q){
                                   const lbl = new Date(q.ym + '-01T00:00:00').toLocaleDateString('en-US',{month:'short'});
-                                  return lbl + ' ' + (q.pct == null ? 'no resolved DCs' : q.pct + '% on ' + q.n + ' &rarr; grade ' + q.grade + ' (pass mark ' + q.pass + '%)');
+                                  return lbl + ' ' + (q.pct == null ? 'no resolved DCs' : q.pct + '% on ' + q.n + ' vs ' + q.pass + '% pass mark' + mark(q.pct, q.pass) + ' &rarr; grade ' + q.grade);
                                 }).join('<br>')
                               + (M.mixedBands ? '<br><b>Graded per month, weighted by resolved DCs, because the standard changed mid-period.</b>' : '')
                               + '</div>'
                             : ''),
-      productivity: M.dcs + ' booked DCs vs target ' + M.target + ' (' + M.prodPct + '%)',
-      tardiness:    att ? att.late + ' late over ' + M.monthCount + ' month' + (M.monthCount===1?'':'s') + ' (' + (M.tardyAvg).toFixed(1) + '/month)' : 'Attendance not loaded',
-      absences:     att ? att.absencesTotal + ' absences over ' + M.monthCount + ' month' + (M.monthCount===1?'':'s') + ' (' + (M.absAvg).toFixed(1) + '/month)' + (att.ncns ? ', incl. ' + att.ncns + ' NCNS' : '') : 'Attendance not loaded'
+      productivity: M.dcs + ' booked DCs vs target ' + M.target + ' (' + M.prodPct + '%), pass mark ' + prodPassUI + '%' + mark(M.prodPct, prodPassUI),
+      tardiness:    att ? att.late + ' late over ' + M.monthCount + ' month' + (M.monthCount===1?'':'s') + ' (' + (M.tardyAvg).toFixed(1) + '/month), pass mark 2/month ' + (M.tardyAvg <= 2 ? MET : MISS) : 'Attendance not loaded',
+      absences:     att ? att.absencesTotal + ' absences over ' + M.monthCount + ' month' + (M.monthCount===1?'':'s') + ' (' + (M.absAvg).toFixed(1) + '/month)' + (att.ncns ? ', incl. ' + att.ncns + ' NCNS' : '') + ', pass mark 2/month ' + (M.absAvg <= 2 ? MET : MISS) : 'Attendance not loaded'
     };
     const bandTxt = function(a){ return a[0] + '%+ = 5, ' + a[1] + '-' + (a[0]-1) + ' = 4, ' + a[2] + '-' + (a[1]-1) + ' = 3, ' + a[3] + '-' + (a[2]-1) + ' = 2, under ' + a[3] + ' = 1'; };
     const setsUsed = [];
@@ -2896,6 +2901,27 @@
     const notes = M.logs.slice(0,15).map(function(l){
       return '  - [' + (l.date||'').slice(0,10) + ' ' + (l.topic||'') + (l.level ? ' / ' + l.level : '') + '] ' + (l.summary || '(no summary recorded)');
     }).join('\n') || '  (no coaching notes on file for this period)';
+    // State the standard and whether it was met, in code, so the write-up cannot slide into
+    // comparing someone to a team average while never saying they missed the bar the grade was
+    // actually set against. Being below a weak average and being below the standard are
+    // different facts, and an appraisal has to say the second one out loud.
+    const BR = String.fromCharCode(10);
+    const prodPass = pafBandsFor(M.months[M.months.length-1]).prod[2];
+    const gap = function(actual, pass){
+      if (actual == null) return 'not measurable';
+      return actual >= pass ? 'MET, ' + (actual - pass) + ' points above the mark'
+                            : 'MISSED, ' + (pass - actual) + ' points below the mark';
+    };
+    const stdLines = [];
+    stdLines.push('  Show-up: ' + M.qualityByMonth.map(function(q){
+      const lbl = new Date(q.ym + '-01T00:00:00').toLocaleDateString('en-US',{month:'short'});
+      return lbl + ' pass mark ' + q.pass + '%, actual ' + (q.pct == null ? 'no resolved DCs' : q.pct + '% (' + gap(q.pct, q.pass) + ')');
+    }).join('; '));
+    if (M.mixedBands) stdLines.push('  NOTE: the show-up pass mark rose to 80% from July 2026, so earlier months in this period were held to a lower bar and must not be described as if the current mark applied then.');
+    stdLines.push('  Productivity: pass mark is ' + prodPass + '% of the booked-DC target; actual ' + M.prodPct + '% (' + M.dcs + ' of ' + M.target + '), ' + gap(M.prodPct, prodPass));
+    stdLines.push('  Tardiness: pass mark is 2 or fewer late days a month; actual ' + (M.tardyAvg == null ? 'not available' : M.tardyAvg.toFixed(1) + ' a month') + (M.tardyAvg == null ? '' : ', ' + (M.tardyAvg <= 2 ? 'MET' : 'MISSED')));
+    stdLines.push('  Absences: pass mark is 2 or fewer absences a month; actual ' + (M.absAvg == null ? 'not available' : M.absAvg.toFixed(1) + ' a month') + (M.absAvg == null ? '' : ', ' + (M.absAvg <= 2 ? 'MET' : 'MISSED')));
+    const standards = stdLines.join(BR);
     const wins = E.wins.length ? E.wins.map(function(w){ return '  - ' + w; }).join('\n') : '  (none: nothing in the data rises to an accomplishment)';
 
     const prompt = 'You are helping a sales supervisor at Outsource Accelerator (offshore staffing) complete a Performance Appraisal Form for a BDR. "DC" = Discovery Call, a booked meeting between a lead and a client.\n\n'
@@ -2918,13 +2944,15 @@
           return '  ' + k + ': ' + (v.length ? v.join(' | ') : 'nothing in the notes touches this');
         }).join('\n') + '\n\n'
       + 'VERIFIED ACHIEVEMENTS, computed from the data\n' + wins + '\n\n'
+      + 'STANDARD, AND WHETHER IT WAS MET\n' + standards + '\n\n'
       + 'RULES\n'
       + '1. Use ONLY the figures and coaching notes above. Never invent a number, an incident, a client name, an award, or a metric. The company does not track dials, talk time or connect rates, so never mention them.\n'
       + '2. For ACCOMPLISHMENTS, write up only the verified achievements listed above. There is normally no formal record of awards or citations for this role, so if that list is empty, say plainly that there are no accomplishments on record for the period and do not manufacture one. Never describe simply meeting a baseline expectation, such as turning up, as an accomplishment.\n'
       + '3. Each "specific examples" entry must cite an actual figure or quote an actual coaching note. Where the candidate evidence list above has entries for a competency you MUST use them and quote the wording, even if the phrasing is brief: a note saying someone goes the extra mile to help the team IS evidence of team orientation. Only write that there is no logged evidence when the candidate list for that competency says nothing in the notes touches it. Do not demand formal or elaborate proof before crediting what a coach actually wrote.\n'
       + '4. Approved leave is never a mark against the rep. NCNS is a serious attendance issue and should be named as one where it occurred.\n'
       + '5. Be factual and fair, the tone of a supervisor writing for a permanent record that the employee will read and sign. No em dashes.\n\n'
-      + '6. You must also PROPOSE a 1 to 5 rating for each of the four competencies. Start every one at 3, meaning meets expectations, and move only where the record actually supports it. Go to 4 or 5 only where the coaching notes record something specifically good. Go to 2 or 1 only on documented grounds: a Written or Final Written warning, a logged violation, the same issue raised repeatedly, or for Dependability a pattern of absence and NCNS. Where there is no evidence either way, keep 3 and say so in that competency box. Never infer character from booked DC numbers alone, and never rate someone down for approved leave.\n\n'
+      + '6. Every Section A example must state plainly whether the standard was met or missed, name the figure that is the standard, and give the gap in points. Never describe a metric only as below a team average when it is also below the standard, because the standard is what the grade is set against and being better than a weak floor is not the same as passing. Where the standard changed during the period, say which months were held to which mark.\n'
+      + '7. You must also PROPOSE a 1 to 5 rating for each of the four competencies. Start every one at 3, meaning meets expectations, and move only where the record actually supports it. Go to 4 or 5 only where the coaching notes record something specifically good. Go to 2 or 1 only on documented grounds: a Written or Final Written warning, a logged violation, the same issue raised repeatedly, or for Dependability a pattern of absence and NCNS. Where there is no evidence either way, keep 3 and say so in that competency box. Never infer character from booked DC numbers alone, and never rate someone down for approved leave.\n\n'
       + 'Return ONLY valid JSON with these fields, each a short paragraph:\n'
       + '{'
       + '"ex_quality":"evidence for quality of work, citing the show-up figure and what it means about how well qualified their bookings are",'
