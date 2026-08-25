@@ -2330,41 +2330,62 @@
     { key:'discipline',  label:'Discipline',       desc:'Adherence to operations and company policies',       w:0.20 }
   ];
   const PAF_GRADE = { 5:'Outstanding', 4:'Exceeds Expectations', 3:'Meets Expectations', 2:'Needs Improvement', 1:'Unacceptable' };
-  // Grading bands for the two derived KPIs. These are a BUSINESS decision, not a technical
-  // one, so they are editable and stored per browser rather than baked in. The shipped
-  // defaults are absolute standards; measured against the floor in Jul-Aug 2026 they put 42
-  // of 48 reps at grade 1 for productivity and 81% of the floor below expectations overall,
-  // which says the 40-DC monthly target is a stretch goal rather than an appraisal standard.
-  // Set them deliberately, or use "Calibrate to this floor" to anchor the median rep at 3.
-  const PAF_BANDS_DEFAULT = { quality:[80,70,60,50], prod:[100,80,60,40] };
-  function pafGetBands(){
-    try { const b = JSON.parse(localStorage.getItem('oaPafBands') || 'null');
-      if (b && b.quality && b.quality.length === 4 && b.prod && b.prod.length === 4) return b; } catch(e){}
-    return { quality: PAF_BANDS_DEFAULT.quality.slice(), prod: PAF_BANDS_DEFAULT.prod.slice() };
+  // Grading bands for the two derived KPIs. A BUSINESS decision, not a technical one, so they
+  // are editable and stored per browser. They are also EFFECTIVE-DATED, because the standard
+  // moved: from July 2026 an 80% show-up rate is the passing mark, where before it was the top
+  // of the scale. An appraisal period can straddle that change, so each month is graded against
+  // the rule that was in force at the time rather than judging June by a July standard.
+  const PAF_BAND_SETS_DEFAULT = [
+    { from:'2000-01', label:'Up to June 2026',   quality:[80,70,60,50], prod:[100,80,60,40] },
+    { from:'2026-07', label:'From July 2026',    quality:[95,90,80,70], prod:[100,80,60,40] }
+  ];
+  function pafGetSets(){
+    try {
+      const raw = JSON.parse(localStorage.getItem('oaPafBands') || 'null');
+      if (Array.isArray(raw) && raw.length && raw[0].quality) return raw;
+      // Migrate the single-set format that shipped first.
+      if (raw && raw.quality && raw.prod){
+        const out = PAF_BAND_SETS_DEFAULT.map(function(s){ return { from:s.from, label:s.label, quality:s.quality.slice(), prod:s.prod.slice() }; });
+        out[0].quality = raw.quality.slice(); out[0].prod = raw.prod.slice();
+        return out;
+      }
+    } catch(e){}
+    return PAF_BAND_SETS_DEFAULT.map(function(s){ return { from:s.from, label:s.label, quality:s.quality.slice(), prod:s.prod.slice() }; });
   }
-  function pafSaveBands(b){ try { localStorage.setItem('oaPafBands', JSON.stringify(b)); } catch(e){} }
+  function pafSaveSets(a){ try { localStorage.setItem('oaPafBands', JSON.stringify(a)); } catch(e){} }
+  // The rule in force for a given YYYY-MM.
+  function pafBandsFor(ym){
+    const sets = pafGetSets();
+    let hit = sets[0];
+    sets.forEach(function(s){ if (s.from <= ym) hit = s; });
+    return hit;
+  }
   function pafBandsToPairs(arr){ return [[arr[0],5],[arr[1],4],[arr[2],3],[arr[3],2],[0,1]]; }
-  function pafSetBand(which, idx, val){
-    const b = pafGetBands(); const n = parseInt(val,10);
-    if (!isNaN(n)) { b[which][idx] = n; pafSaveBands(b); renderPaf(); }
+  function pafSetBand(setIdx, which, idx, val){
+    const a = pafGetSets(); const n = parseInt(val,10);
+    if (!isNaN(n) && a[setIdx]) { a[setIdx][which][idx] = n; pafSaveSets(a); renderPaf(); }
   }
-  function pafResetBands(){ pafSaveBands({ quality: PAF_BANDS_DEFAULT.quality.slice(), prod: PAF_BANDS_DEFAULT.prod.slice() }); renderPaf(); }
+  function pafResetBands(){ pafSaveSets(PAF_BAND_SETS_DEFAULT.map(function(s){ return { from:s.from, label:s.label, quality:s.quality.slice(), prod:s.prod.slice() }; })); renderPaf(); }
   // Anchor the bands on the floor's own distribution so the median rep sits at 3 (Meets).
-  // This makes the appraisal relative to the floor rather than to an absolute standard,
-  // which is a real trade-off: it flatters a weak floor and penalises a strong one.
+  // This grades people against the floor rather than an absolute standard, which flatters a
+  // weak floor and penalises a strong one, so it is a deliberate choice and not a default.
+  // It only rewrites the rule set in force at the end of the selected period.
   function pafCalibrate(){
     const rows = pafFloorRows(); if (!rows.length) return;
     const pctl = function(a, p){ if (!a.length) return 0; const s = a.slice().sort(function(x,y){return x-y;}); return Math.round(s[Math.min(s.length-1, Math.floor(s.length*p))]); };
     const su = rows.filter(function(r){ return r.suPct != null; }).map(function(r){ return r.suPct; });
     const pr = rows.map(function(r){ return r.prodPct; });
     if (!su.length || !pr.length) return;
-    const b = { quality:[pctl(su,0.90), pctl(su,0.70), pctl(su,0.45), pctl(su,0.20)],
-                prod:   [pctl(pr,0.90), pctl(pr,0.70), pctl(pr,0.45), pctl(pr,0.20)] };
-    ['quality','prod'].forEach(function(k){ for (let i=1;i<4;i++) if (b[k][i] >= b[k][i-1]) b[k][i] = Math.max(0, b[k][i-1]-1); });
-    pafSaveBands(b); renderPaf();
+    const to = $('pafTo') ? $('pafTo').value : '';
+    const sets = pafGetSets();
+    let idx = 0; sets.forEach(function(s,i){ if (s.from <= to) idx = i; });
+    sets[idx].quality = [pctl(su,0.90), pctl(su,0.70), pctl(su,0.45), pctl(su,0.20)];
+    sets[idx].prod    = [pctl(pr,0.90), pctl(pr,0.70), pctl(pr,0.45), pctl(pr,0.20)];
+    ['quality','prod'].forEach(function(k){ for (let i=1;i<4;i++) if (sets[idx][k][i] >= sets[idx][k][i-1]) sets[idx][k][i] = Math.max(0, sets[idx][k][i-1]-1); });
+    pafSaveSets(sets); renderPaf();
   }
-  // Every current rep scored over the selected period, used for the calibration and for the
-  // honesty note about what the bands are actually doing to the floor.
+  // Every current rep scored over the selected period, for calibration and for the honesty
+  // note about what the bands are doing to the floor.
   function pafFloorRows(){
     const from = $('pafFrom') && $('pafFrom').value, to = $('pafTo') && $('pafTo').value;
     if (!from || !to || from > to) return [];
@@ -2388,27 +2409,39 @@
     return 'With the current bands and Section B held at 3, the ' + rows.length + ' reps on the floor would land: ' + parts.join(', ') + '.';
   }
   function pafBandEditor(){
-    const b = pafGetBands(), NAVY='#0D1A6E', SLATE='#5B6678', BORDER='var(--border)';
-    const inp = function(which, i){
-      return '<input type="number" value="' + b[which][i] + '" onchange="pafSetBand(\'' + which + '\',' + i + ',this.value)" style="width:56px;padding:3px 5px;border:1px solid ' + BORDER + ';border-radius:5px;font-size:11.5px;text-align:right">';
+    const sets = pafGetSets(), NAVY='#0D1A6E', SLATE='#5B6678', BORDER='var(--border)';
+    const from = $('pafFrom') ? $('pafFrom').value : '', to = $('pafTo') ? $('pafTo').value : '';
+    const inUse = {};
+    if (from && to) pafMonths(from, to).forEach(function(ym){ inUse[pafBandsFor(ym).from] = true; });
+    const inp = function(si, which, i){
+      return '<input type="number" value="' + sets[si][which][i] + '" onchange="pafSetBand(' + si + ',' + JSON.stringify(which) + ',' + i + ',this.value)" style="width:56px;padding:3px 5px;border:1px solid ' + BORDER + ';border-radius:5px;font-size:11.5px;text-align:right">';
     };
-    const row = function(label, which, unit){
-      return '<div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:6px">'
+    const row = function(si, label, which){
+      return '<div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:5px">'
         + '<span style="font-size:11.5px;color:' + NAVY + ';font-weight:700;min-width:150px">' + label + '</span>'
-        + '<span style="font-size:11px;color:' + SLATE + '">5 at</span>' + inp(which,0) + '<span style="font-size:11px;color:' + SLATE + '">' + unit + '+ &nbsp;·&nbsp; 4 at</span>' + inp(which,1)
-        + '<span style="font-size:11px;color:' + SLATE + '">' + unit + '+ &nbsp;·&nbsp; 3 at</span>' + inp(which,2)
-        + '<span style="font-size:11px;color:' + SLATE + '">' + unit + '+ &nbsp;·&nbsp; 2 at</span>' + inp(which,3)
-        + '<span style="font-size:11px;color:' + SLATE + '">' + unit + '+, below that 1</span></div>';
+        + '<span style="font-size:11px;color:' + SLATE + '">5 at</span>' + inp(si,which,0)
+        + '<span style="font-size:11px;color:' + SLATE + '">+ &nbsp;4 at</span>' + inp(si,which,1)
+        + '<span style="font-size:11px;color:' + SLATE + '">+ &nbsp;3 at</span>' + inp(si,which,2)
+        + '<span style="font-size:11px;color:' + SLATE + '">+ &nbsp;2 at</span>' + inp(si,which,3)
+        + '<span style="font-size:11px;color:' + SLATE + '">+, below that 1</span></div>';
     };
+    const blocks = sets.map(function(s, si){
+      const used = inUse[s.from];
+      return '<div style="border:1px solid ' + (used ? NAVY : BORDER) + ';border-radius:9px;padding:9px 11px;margin-top:9px;background:' + (used ? '#F8FAFD' : '#fff') + '">'
+        + '<div style="font-size:11px;font-weight:800;color:' + NAVY + '">' + esc(s.label || ('From ' + s.from))
+        + (used ? ' <span style="font-weight:600;color:#0E9F6E">· applies to this period</span>' : ' <span style="font-weight:600;color:' + SLATE + '">· not used for this period</span>') + '</div>'
+        + row(si, 'Quality (show-up %)', 'quality')
+        + row(si, 'Productivity (% of target)', 'prod')
+        + '</div>';
+    }).join('');
     return '<details style="background:#fff;border:1px solid ' + BORDER + ';border-radius:12px;padding:11px 14px;margin-bottom:14px">'
       + '<summary style="font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:' + NAVY + ';cursor:pointer">Grading bands &middot; who counts as a 3</summary>'
-      + '<div style="font-size:11px;color:' + SLATE + ';margin-top:8px;line-height:1.6">These decide the two derived grades, and they are a business call rather than a technical one. ' + esc(pafFloorImpact()) + '</div>'
-      + row('Quality (show-up %)','quality','%')
-      + row('Productivity (% of DC target)','prod','%')
+      + '<div style="font-size:11px;color:' + SLATE + ';margin-top:8px;line-height:1.6">These decide the two derived grades and are a business call, not a technical one. The show-up standard changed, so each month is graded against the rule in force at the time: an appraisal spanning June to August is judged partly under each. ' + esc(pafFloorImpact()) + '</div>'
+      + blocks
       + '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">'
       + '<button class="cl-chip" onclick="pafCalibrate()">Calibrate to this floor</button>'
-      + '<button class="cl-chip" onclick="pafResetBands()">Reset to absolute standards</button></div>'
-      + '<div style="font-size:10.5px;color:' + SLATE + ';margin-top:8px">Calibrating anchors the median rep at 3, which grades people against the floor instead of against a fixed standard. That flatters a weak floor and penalises a strong one, so it is a deliberate choice, not a default.</div>'
+      + '<button class="cl-chip" onclick="pafResetBands()">Reset to the standards</button></div>'
+      + '<div style="font-size:10.5px;color:' + SLATE + ';margin-top:8px">Calibrating rewrites only the rule set in force at the end of the selected period, and anchors the median rep at 3.</div>'
       + '</details>';
   }
   function pafBand(bands, v){ for (let i=0;i<bands.length;i++){ if (v >= bands[i][0]) return bands[i][1]; } return 1; }
@@ -2463,15 +2496,32 @@
     const found = scFindMember(memberId); if (!found) return null;
     const months = pafMonths(fromYm, toYm); if (!months.length) return null;
     let dcs = 0, dates = [];
+    const suByMonth = [];
     months.forEach(function(ym){
       const mo = aggregateMonth(ym, true);
       dcs += (mo.counts[memberId] || 0);
       dates = dates.concat(mo.dates);
+      const s = aggregateShowupForDates(mo.dates)[memberId] || { yes:0, happened:0 };
+      suByMonth.push({ ym:ym, yes:s.yes, happened:s.happened, pct: s.happened ? Math.round(s.yes/s.happened*100) : null });
     });
     const su = aggregateShowupForDates(dates)[memberId] || { yes:0, happened:0 };
     const suPct = su.happened ? Math.round(su.yes / su.happened * 100) : null;
     const target = MONTHLY_TARGET * months.length;
     const prodPct = target ? Math.round(dcs / target * 100) : 0;
+    // Show-up is graded month by month against the standard in force that month, then weighted
+    // by how many DCs actually resolved in each. An appraisal spanning the July 2026 change is
+    // therefore judged partly under each rule instead of wholly by one of them.
+    let qNum = 0, qDen = 0;
+    const qualityByMonth = suByMonth.map(function(m){
+      if (m.pct == null) return { ym:m.ym, pct:null, grade:null, n:0, pass:pafBandsFor(m.ym).quality[2] };
+      const g = pafBand(pafBandsToPairs(pafBandsFor(m.ym).quality), m.pct);
+      qNum += g * m.happened; qDen += m.happened;
+      return { ym:m.ym, pct:m.pct, grade:g, n:m.happened, pass:pafBandsFor(m.ym).quality[2] };
+    });
+    const qualityGrade = qDen ? Math.round(qNum / qDen) : null;
+    const bandSetsUsed = {};
+    months.forEach(function(ym){ bandSetsUsed[pafBandsFor(ym).from] = pafBandsFor(ym); });
+    const mixedBands = Object.keys(bandSetsUsed).length > 1;
     const att = _attLoaded ? pafAttendance(memberId, months) : null;
     const tardyAvg = att ? att.late / months.length : null;
     const absAvg   = att ? att.absencesTotal / months.length : null;
@@ -2485,10 +2535,11 @@
       dcs: dcs, target: target, prodPct: prodPct,
       suYes: su.yes, suHappened: su.happened, suPct: suPct,
       att: att, tardyAvg: tardyAvg, absAvg: absAvg,
+      suByMonth: suByMonth, qualityByMonth: qualityByMonth, mixedBands: mixedBands,
       logs: logs, sessions: logs.length,
       auto: {
-        quality:      suPct == null ? null : pafBand(pafBandsToPairs(pafGetBands().quality), suPct),
-        productivity: pafBand(pafBandsToPairs(pafGetBands().prod), prodPct),
+        quality:      qualityGrade,
+        productivity: pafBand(pafBandsToPairs(pafBandsFor(months[months.length-1]).prod), prodPct),
         tardiness:    tardyAvg == null ? null : pafCountGrade(tardyAvg),
         absences:     absAvg   == null ? null : pafCountGrade(absAvg)
       }
@@ -2619,16 +2670,27 @@
     const NAVY='#0D1A6E', SLATE='#5B6678', BORDER='var(--border)', HEAD='#1A2DB5';
 
     const evidence = {
-      quality:      M.suPct == null ? 'No resolved DCs in this period' : M.suPct + '% show-up (' + M.suYes + ' of ' + M.suHappened + ' resolved DCs)',
+      quality:      M.suPct == null ? 'No resolved DCs in this period'
+                      : M.suPct + '% show-up (' + M.suYes + ' of ' + M.suHappened + ' resolved DCs)'
+                        + (M.qualityByMonth.length > 1
+                            ? '<div style="font-weight:400;color:' + SLATE + ';font-size:10.5px;margin-top:4px">'
+                              + M.qualityByMonth.map(function(q){
+                                  const lbl = new Date(q.ym + '-01T00:00:00').toLocaleDateString('en-US',{month:'short'});
+                                  return lbl + ' ' + (q.pct == null ? 'no resolved DCs' : q.pct + '% on ' + q.n + ' &rarr; grade ' + q.grade + ' (pass mark ' + q.pass + '%)');
+                                }).join('<br>')
+                              + (M.mixedBands ? '<br><b>Graded per month, weighted by resolved DCs, because the standard changed mid-period.</b>' : '')
+                              + '</div>'
+                            : ''),
       productivity: M.dcs + ' booked DCs vs target ' + M.target + ' (' + M.prodPct + '%)',
       tardiness:    att ? att.late + ' late over ' + M.monthCount + ' month' + (M.monthCount===1?'':'s') + ' (' + (M.tardyAvg).toFixed(1) + '/month)' : 'Attendance not loaded',
       absences:     att ? att.absencesTotal + ' absences over ' + M.monthCount + ' month' + (M.monthCount===1?'':'s') + ' (' + (M.absAvg).toFixed(1) + '/month)' + (att.ncns ? ', incl. ' + att.ncns + ' NCNS' : '') : 'Attendance not loaded'
     };
-    const BQ = pafGetBands();
     const bandTxt = function(a){ return a[0] + '%+ = 5, ' + a[1] + '-' + (a[0]-1) + ' = 4, ' + a[2] + '-' + (a[1]-1) + ' = 3, ' + a[3] + '-' + (a[2]-1) + ' = 2, under ' + a[3] + ' = 1'; };
+    const setsUsed = [];
+    M.months.forEach(function(ym){ const b = pafBandsFor(ym); if (!setsUsed.some(function(x){ return x.from === b.from; })) setsUsed.push(b); });
     const bandRef = {
-      quality:      'Show-up: ' + bandTxt(BQ.quality),
-      productivity: 'Of DC target: ' + bandTxt(BQ.prod),
+      quality:      setsUsed.map(function(b){ return (setsUsed.length > 1 ? esc(b.label) + ' — ' : '') + 'show-up: ' + bandTxt(b.quality); }).join('<br>'),
+      productivity: 'Of DC target: ' + bandTxt(pafBandsFor(M.months[M.months.length-1]).prod),
       tardiness:    'Per month: 0 = 5, 1 = 4, 2 = 3, 3 = 2, 4+ = 1',
       absences:     'Per month: 0 = 5, 1 = 4, 2 = 3, 3 = 2, 4+ = 1'
     };
