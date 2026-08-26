@@ -3024,10 +3024,10 @@
       use.forEach(function(f){
         const fl = f.toLowerCase();
         Object.keys(SIG).forEach(function(k){
-          if (SIG[k].some(function(w){ return fl.indexOf(w) >= 0; })) signals[k].push(date + ': "' + f + '"');
+          if (SIG[k].some(function(w){ return fl.indexOf(w) >= 0; })) signals[k].push(date + ": '" + f + "'");
         });
         if (RECOG.some(function(w){ return fl.indexOf(w) >= 0; }))
-          wins.push('Recorded in the ' + date + ' coaching note: "' + f + '" (a note by their coach, not a formal award)');
+          wins.push("Recorded in the " + date + " coaching note: '" + f + "' (a note by their coach, not a formal award)");
       });
     });
     Object.keys(signals).forEach(function(k){
@@ -3117,7 +3117,7 @@
       + 'RULES\n'
       + '1. Use ONLY the figures and coaching notes above. Never invent a number, an incident, a client name, an award, or a metric. The company does not track dials, talk time or connect rates, so never mention them.\n'
       + '2. For ACCOMPLISHMENTS, write up only the verified achievements listed above. There is normally no formal record of awards or citations for this role, so if that list is empty, say plainly that there are no accomplishments on record for the period and do not manufacture one. Never describe simply meeting a baseline expectation, such as turning up, as an accomplishment.\n'
-      + '3. Each "specific examples" entry must cite an actual figure or quote an actual coaching note. Where the candidate evidence list above has entries for a competency you MUST use them and quote the wording, even if the phrasing is brief: a note saying someone goes the extra mile to help the team IS evidence of team orientation. Only write that there is no logged evidence when the candidate list for that competency says nothing in the notes touches it. Do not demand formal or elaborate proof before crediting what a coach actually wrote.\n'
+      + '3. Each "specific examples" entry must cite an actual figure or quote an actual coaching note. When you quote, use single quotation marks, never double, because a double quote inside a JSON value breaks the reply. Where the candidate evidence list above has entries for a competency you MUST use them and quote the wording, even if the phrasing is brief: a note saying someone goes the extra mile to help the team IS evidence of team orientation. Only write that there is no logged evidence when the candidate list for that competency says nothing in the notes touches it. Do not demand formal or elaborate proof before crediting what a coach actually wrote.\n'
       + '4. Approved leave is never a mark against the rep. NCNS is a serious attendance issue and should be named as one where it occurred.\n'
       + '5. Be factual and fair, the tone of a supervisor writing for a permanent record that the employee will read and sign. No em dashes.\n\n'
       + '6. Every Section A example must state plainly whether the standard was met or missed, name the figure that is the standard, and give the gap in points. Never describe a metric only as below a team average when it is also below the standard, because the standard is what the grade is set against and being better than a weak floor is not the same as passing. Where the standard changed during the period, say which months were held to which mark.\n'
@@ -3139,8 +3139,7 @@
       + '"rate_team":3,"rate_dependable":3,"rate_initiative":3,"rate_discipline":3}';
     try {
       const d = await clAiRelay({ model:'claude-haiku-4-5-20251001', max_tokens:2400, messages:[{ role:'user', content:prompt }] });
-      const m = clAiText(d).trim().match(/\{[\s\S]*\}/); if (!m) throw new Error('Could not parse the draft.');
-      const g = JSON.parse(m[0]);
+      const g = clParseJson(clAiText(d));
       // Proposed factor ratings are applied FIRST, so each paragraph can be stamped with the
       // grade it was actually written against. Stamping before this ran left every Section B
       // paragraph recorded against a blank grade.
@@ -3621,8 +3620,7 @@
       + '{"headline":"2 to 3 sentences on the month overall","mostActive":"who coached the most and what that covered","mostEffective":"best average movement per rep, with the sample-size caveat if relevant","mostImpact":"largest total DC movement","gaps":["coverage or consistency gap","..."],"recommendations":["specific action for a named leader","..."]}';
     try {
       const d = await clAiRelay({ model:'claude-haiku-4-5-20251001', max_tokens:1400, messages:[{role:'user',content:prompt}] });
-      const m = clAiText(d).trim().match(/\{[\s\S]*\}/); if (!m) throw new Error('Could not parse the report.');
-      const g = JSON.parse(m[0]);
+      const g = clParseJson(clAiText(d));
       const NAVY='#0D1A6E', SLATE='#5B6678', BORDER='var(--border)';
       const sec = (t,c,b) => '<div style="margin-top:14px"><div style="font-size:10px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:' + c + '">' + t + '</div><div style="font-size:13px;color:var(--ink);line-height:1.55;margin-top:3px">' + esc(b||'—') + '</div></div>';
       const list = (t,c,a) => (a && a.length) ? '<div style="margin-top:14px"><div style="font-size:10px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:' + c + '">' + t + '</div><ul style="margin:4px 0 0;padding-left:18px">' + a.map(function(x){ return '<li style="font-size:13px;color:var(--ink);line-height:1.5;margin-bottom:3px">' + esc(x) + '</li>'; }).join('') + '</ul></div>' : '';
@@ -5468,6 +5466,47 @@
   // endpoint as the tracker (no Netlify) — the script relays any payload with `messages` to Claude.
   const AI_COACH_URL = COACH_LOG_POST_URL;
 
+  // Models return JSON with unescaped double quotes inside string values, which is guaranteed
+  // here because the prompts ask them to quote coaching notes verbatim. A raw newline inside a
+  // value breaks it the same way. Both are recoverable, so repair before giving up: walking the
+  // text, a double quote only closes a value if the next non-space character is one that can
+  // legally follow it, and anything else is content that should have been escaped.
+  function clRepairJson(src){
+    let out = '', inStr = false, esc = false;
+    for (let i = 0; i < src.length; i++){
+      const c = src[i];
+      if (esc){ out += c; esc = false; continue; }
+      if (c === '\\'){ out += c; esc = true; continue; }
+      if (c === '"'){
+        if (!inStr){ inStr = true; out += c; continue; }
+        let j = i + 1; while (j < src.length && /\s/.test(src[j])) j++;
+        const nx = src[j];
+        let closes = false;
+        if (nx === undefined || nx === '}' || nx === ']' || nx === ':') closes = true;
+        else if (nx === ','){
+          // A comma alone is not enough. "note", which supports a 4 is an inner quotation
+          // continuing the same value, while "a","b" is one value ending and the next
+          // beginning, so look past the comma for the start of a key, item or close.
+          let k = j + 1; while (k < src.length && /\s/.test(src[k])) k++;
+          const after = src[k];
+          closes = (after === '"' || after === '}' || after === ']' || after === undefined);
+        }
+        if (closes){ inStr = false; out += c; } else out += '\\"';
+        continue;
+      }
+      if (inStr && (c === '\n' || c === '\r')){ out += '\\n'; continue; }
+      if (inStr && c === '\t'){ out += '\\t'; continue; }
+      out += c;
+    }
+    return out;
+  }
+  function clParseJson(raw){
+    const m = String(raw || '').match(/\{[\s\S]*\}/);
+    if (!m) throw new Error('The reply contained no JSON object.');
+    try { return JSON.parse(m[0]); } catch (e){}
+    try { return JSON.parse(clRepairJson(m[0])); } catch (e){}
+    throw new Error('The reply was not valid JSON and could not be repaired. Try generating again.');
+  }
   // Single entry point for every AI call. The /exec endpoint redirects to
   // script.googleusercontent.com, which intermittently answers 404 with an HTML error page
   // instead of the relay's JSON (measured at roughly 3 calls in 10, independent of payload
@@ -5642,9 +5681,7 @@ COACHING NOTES (oldest to newest):
 ${notes}`;
     try {
       const data = await clAiRelay({ model: 'claude-haiku-4-5-20251001', max_tokens: 700, messages: [{ role: 'user', content: prompt }] });
-      const m = clAiText(data).trim().match(/\{[\s\S]*\}/);
-      if (!m) throw new Error('Could not parse insights — try again.');
-      const g = JSON.parse(m[0]);
+      const g = clParseJson(clAiText(data));
       const list = arr => (arr && arr.length)
         ? '<ul style="margin:4px 0 0;padding-left:18px">' + arr.map(x => `<li style="font-size:13px;color:var(--ink);margin-bottom:3px">${esc(x)}</li>`).join('') + '</ul>'
         : '<div style="font-size:12px;color:var(--slate)">—</div>';
@@ -6371,9 +6408,7 @@ Generate 2-4 rating rows from the observation. Wins should reflect positives fro
         messages: [{ role: 'user', content: userPrompt }]
       });
       const text = clAiText(data).trim();
-      const m = text.match(/\{[\s\S]*\}/);
-      if (!m) throw new Error('Could not parse AI response — try again.');
-      window._clGeneratedWeekly = JSON.parse(m[0]);
+      window._clGeneratedWeekly = clParseJson(text);
       status.style.color = '#0A7A0A';
       status.textContent = '✓ Generated — preview updated.';
       clRenderWeekly();
@@ -6455,9 +6490,7 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
         messages: [{ role: 'user', content: userPrompt }]
       });
       const text = clAiText(data).trim();
-      const m = text.match(/\{[\s\S]*\}/);
-      if (!m) throw new Error('Could not parse AI response — try again.');
-      const g = JSON.parse(m[0]);
+      const g = clParseJson(text);
 
       // Pre-fill the editable SBI coaching-note fields (strip any em/en dashes the model slipped in)
       $('clSBISituation').value    = clDeDash(g.situation    || '');
@@ -7497,8 +7530,7 @@ Write in a natural human voice (not robotic, no meta-commentary about being an A
 {"headline":"2 to 3 sentences that OPEN the email: state the verdict and where they stand as of ${asOfLong}, lead with the booked DC pace (the real headline), note the week-over-week direction, and name the one main thing to fix. Name a bright spot ONLY if the figures above genuinely support one; if every metric is below standard, say that plainly rather than manufacturing a positive", "summary":"2 to 3 sentence deeper read", "suggestions":["specific action","specific action","specific action"]}`;
     try {
       const data=await clAiRelay({ model:'claude-haiku-4-5-20251001', max_tokens:700, messages:[{role:'user',content:prompt}] });
-      const m=clAiText(data).trim().match(/\{[\s\S]*\}/); if (!m) throw new Error('Could not parse AI response.');
-      const g=JSON.parse(m[0]);
+      const g=clParseJson(clAiText(data));
       _scAI[id+'|'+ym]={ headline:clDeDash(g.headline||''), summary:clDeDash(g.summary||''), suggestions:(g.suggestions||[]).map(s=>clDeDash(String(s))).filter(Boolean) };
       return true;
     } catch (err){ _scAI._lastError = err.message; return false; }
