@@ -2505,9 +2505,81 @@
     const n = parseInt(val, 10);
     _pafState.ratings[key] = (n >= 1 && n <= 5) ? n : null;
     _pafState.touched[key] = true;   // an explicit choice: stop re-syncing this one to the data
+    pafOnRatingChanged(key);
+  }
+  // When a grade changes, the paragraph underneath it is now arguing for the old one. If that
+  // paragraph came from the AI and nobody has edited it since, it is rewritten for the new
+  // grade automatically. If a person wrote or edited it, it is left alone and flagged instead,
+  // because silently discarding someone's own words is worse than showing a stale note.
+  function pafOnRatingChanged(key){
+    const S = _pafState; if (!S) return;
+    const body = (S.text['ex_' + key] || '').trim();
+    if (body && S.textSrc && S.textSrc['ex_' + key] === 'ai' && S.textGrade['ex_' + key] !== pafVal(key)){
+      pafRewriteOne(key);
+      return;
+    }
     renderPaf();
   }
-  function pafSetText(key, val){ if (_pafState) _pafState.text[key] = val; }
+  function pafItemContext(key){
+    const S = _pafState, M = S.M;
+    if (key === 'showup')       return 'Show-up rate ' + (M.suPct == null ? 'not measurable' : M.suPct + '% (' + M.suYes + ' of ' + M.suHappened + ' resolved DCs)') + ', goal ' + PAF_GOALS.showup + '%, pass line ' + PAF_STD.showup.rows[2][0] + '%';
+    if (key === 'productivity') return 'Booked DCs ' + M.dcsPerMonth.toFixed(1) + ' per month (' + M.dcs + ' over ' + M.monthCount + ' months), goal ' + PAF_GOALS.dcs + ', pass line ' + PAF_STD.dcs.rows[2][0];
+    if (key === 'tardiness')    return 'Tardiness ' + (M.tardyAvg == null ? 'not available' : M.tardyAvg.toFixed(1) + ' per month (' + M.att.late + ' late days)') + ', pass line 4 per month';
+    if (key === 'absences')     return 'Absences ' + (M.absAvg == null ? 'not available' : M.absAvg.toFixed(1) + ' per month (' + M.att.absencesTotal + (M.att.ncns ? ' including ' + M.att.ncns + ' NCNS' : '') + ')') + ', pass line 2 per month';
+    return '';
+  }
+  async function pafRewriteOne(key){
+    const S = _pafState; if (!S) return;
+    const M = S.M, grade = pafVal(key);
+    if (!grade){ renderPaf(); return; }
+    if (!S.rewriting) S.rewriting = {};
+    S.rewriting[key] = true; renderPaf();
+    const factor = PAF_B.find(function(r){ return r.key === key; });
+    const auto = M.auto ? M.auto[key] : null;
+    const E = pafEvidence(M);
+    const quotes = factor ? (E.signals[key] || []) : [];
+    const label = factor ? factor.label : PAF_ITEM[key].label;
+    let prompt = 'You are writing one "specific examples" paragraph for a line on a Performance Appraisal Form for a BDR at Outsource Accelerator. "DC" = Discovery Call.\n\n'
+      + 'EMPLOYEE: ' + M.name + ', ' + M.team + ', period ' + pafPeriodLabel(M) + '\n'
+      + 'LINE: ' + label + '\n'
+      + 'GRADE AWARDED: ' + grade + ' (' + PAF_GRADE[grade] + ')\n';
+    if (factor){
+      prompt += 'The behavioural standard for grade ' + grade + ' reads: ' + factor.std[grade] + '\n'
+        + 'Evidence quoted from the coaching notes for this factor:\n'
+        + (quotes.length ? quotes.map(function(q){ return '  - ' + q; }).join('\n') : '  (nothing in the notes touches this factor)') + '\n';
+    } else {
+      prompt += 'THE FIGURES: ' + pafItemContext(key) + '\n'
+        + (auto ? 'The figures on their own produce a grade of ' + auto + '.\n' : '');
+    }
+    prompt += '\nWrite ONE short paragraph, three sentences at most, supporting the line as it now stands.\n'
+      + 'CRITICAL: never restate a figure as anything other than what it is. If the grade awarded is higher or lower than the grade the figures or the notes produce, say so plainly, give the actual number, and record that the evaluator set this grade. Do not reshape the evidence to fit the grade, and do not invent numbers, incidents or metrics.\n'
+      + 'No em dashes. Return only the paragraph as plain text, with no preamble and no quotation marks around it.';
+    try {
+      const d = await clAiRelay({ model:'claude-haiku-4-5-20251001', max_tokens:400, messages:[{ role:'user', content:prompt }] });
+      const txt = clDeDash(clAiText(d).trim().replace(/^["']|["']$/g, ''));
+      if (txt){
+        S.text['ex_' + key] = txt;
+        if (!S.textSrc) S.textSrc = {};
+        if (!S.textGrade) S.textGrade = {};
+        S.textSrc['ex_' + key] = 'ai';
+        S.textGrade['ex_' + key] = grade;
+      }
+    } catch (err){
+      if ($('pafStatus')){ $('pafStatus').style.color = '#C00'; $('pafStatus').textContent = 'Could not rewrite ' + label + ': ' + err.message; }
+    } finally {
+      S.rewriting[key] = false;
+      renderPaf();
+    }
+  }
+  function pafSetText(key, val){
+    if (!_pafState) return;
+    _pafState.text[key] = val;
+    if (!_pafState.textSrc) _pafState.textSrc = {};
+    if (!_pafState.textGrade) _pafState.textGrade = {};
+    _pafState.textSrc[key] = 'human';           // hand-written from here on, never auto-replaced
+    const k = key.indexOf('ex_') === 0 ? key.slice(3) : null;
+    if (k) _pafState.textGrade[key] = pafVal(k); // written against the grade showing right now
+  }
   // Triggers are computed, not written: anything that should pull a reviewer's eye to this form
   // before it is signed. An incomplete form is itself the first trigger, because a score that
   // silently treats unrated factors as "meets expectations" is the failure this format exists
@@ -2703,7 +2775,7 @@
       id:id, from:from, to:to, M:M,
       ratings: { showup:null, productivity:null, tardiness:null, absences:null,
                  team:null, dependable:null, initiative:null, discipline:null },
-      touched: {}, text: {}
+      touched: {}, text: {}, textSrc: {}, textGrade: {}, rewriting: {}
     };
     _pafState.M = M;
     if (!_pafState.touched) _pafState.touched = {};
@@ -2759,7 +2831,20 @@
         + '</div>';
     };
     const ta = function(key, ph){
-      return '<textarea oninput="pafSetText(' + Q + key + Q + ',this.value)" rows="3" placeholder="' + ph + '" style="width:100%;padding:6px 8px;border:1px solid ' + BORDER + ';border-radius:6px;font-size:11.5px;font-family:inherit;color:var(--ink);resize:vertical">' + esc(S.text[key] || '') + '</textarea>';
+      const k = key.indexOf('ex_') === 0 ? key.slice(3) : null;
+      const cur = k ? pafVal(k) : null;
+      const wrote = S.textGrade ? S.textGrade[key] : null;
+      const body = (S.text[key] || '').trim();
+      const busy = k && S.rewriting && S.rewriting[k];
+      // Stale means the grade moved after this paragraph was written, so it is now arguing a
+      // grade that is no longer on the form.
+      const stale = !!(body && k && cur && wrote != null && wrote !== cur);
+      let note = '';
+      if (busy) note = '<div style="font-size:9.5px;color:' + NAVY + ';margin-top:3px">Rewriting for the new grade…</div>';
+      else if (stale) note = '<div style="font-size:9.5px;color:#C97000;margin-top:3px">Written for grade ' + wrote + ', the rating is now ' + cur + '. '
+        + '<a href="#" onclick="pafRewriteOne(' + Q + k + Q + ');return false;" style="color:' + NAVY + ';font-weight:700">Rewrite for grade ' + cur + '</a></div>';
+      else if (body && S.textSrc && S.textSrc[key] === 'ai') note = '<div style="font-size:9.5px;color:' + SLATE + ';margin-top:3px">Drafted for grade ' + (wrote == null ? '-' : wrote) + ', not yet reviewed</div>';
+      return '<textarea oninput="pafSetText(' + Q + key + Q + ',this.value)" rows="3" placeholder="' + ph + '" style="width:100%;padding:6px 8px;border:1px solid ' + (stale ? '#E9A23B' : BORDER) + ';border-radius:6px;font-size:11.5px;font-family:inherit;color:var(--ink);resize:vertical">' + esc(S.text[key] || '') + '</textarea>' + note;
     };
     const th = function(t,w){ return '<th style="padding:7px 9px;background:' + HEAD + ';color:#fff;font-size:10px;text-transform:uppercase;letter-spacing:.4px;text-align:left' + (w?';width:'+w:'') + '">' + t + '</th>'; };
     const SC = pafScores();
@@ -3056,10 +3141,9 @@
       const d = await clAiRelay({ model:'claude-haiku-4-5-20251001', max_tokens:2400, messages:[{ role:'user', content:prompt }] });
       const m = clAiText(d).trim().match(/\{[\s\S]*\}/); if (!m) throw new Error('Could not parse the draft.');
       const g = JSON.parse(m[0]);
-      Object.keys(g).forEach(function(k){ if (typeof g[k] === 'string' && g[k].trim()) S.text[k] = clDeDash(g[k].trim()); });
-      // Proposed competency ratings. Section A stays derived from the figures and is never
-      // touched here. Section B is where the coaching record IS the evidence, so the model
-      // proposes it, but anything the evaluator set by hand wins and is left exactly alone.
+      // Proposed factor ratings are applied FIRST, so each paragraph can be stamped with the
+      // grade it was actually written against. Stamping before this ran left every Section B
+      // paragraph recorded against a blank grade.
       if (!S.aiSet) S.aiSet = {};
       let applied = 0;
       PAF_B.forEach(function(r){
@@ -3067,6 +3151,15 @@
         if (!(v >= 1 && v <= 5)) return;
         if (S.touched[r.key]) return;
         S.ratings[r.key] = v; S.aiSet[r.key] = true; applied++;
+      });
+      if (!S.textSrc) S.textSrc = {};
+      if (!S.textGrade) S.textGrade = {};
+      Object.keys(g).forEach(function(k){
+        if (typeof g[k] !== 'string' || !g[k].trim()) return;
+        S.text[k] = clDeDash(g[k].trim());
+        S.textSrc[k] = 'ai';
+        const kk = k.indexOf('ex_') === 0 ? k.slice(3) : null;
+        if (kk) S.textGrade[k] = pafVal(kk);
       });
       renderPaf();
       $('pafStatus').style.color = '#0A7A0A';
