@@ -2796,8 +2796,12 @@
     let rowsB = PAF_B.map(function(r, i){
       return '<tr style="border-top:1px solid ' + BORDER + '">'
         + '<td style="padding:8px 9px;vertical-align:top"><div style="font-size:12.5px;font-weight:700;color:' + NAVY + '">' + (i+1) + '. ' + esc(r.label) + '</div><div style="font-size:10.5px;color:' + SLATE + ';margin-top:2px">' + esc(r.desc) + '</div></td>'
-        + '<td style="padding:8px 9px;vertical-align:top;font-size:11px;color:' + SLATE + '">'
-          + '<details><summary style="cursor:pointer;color:' + NAVY + ';font-weight:600">Behavioural standard</summary>'
+        + '<td style="padding:8px 9px;vertical-align:top;font-size:11px;color:' + SLATE + ';min-width:230px">'
+          + (pafVal(r.key)
+              ? '<div style="background:#F3F5FC;border-left:3px solid ' + NAVY + ';padding:6px 8px;border-radius:0 5px 5px 0;line-height:1.45;margin-bottom:6px">'
+                + '<b style="color:' + NAVY + '">' + pafVal(r.key) + ' ' + PAF_GRADE[pafVal(r.key)] + '</b><br>' + esc(r.std[pafVal(r.key)]) + '</div>'
+              : '<div style="margin-bottom:6px">Pick a grade to see the standard it means.</div>')
+          + '<details><summary style="cursor:pointer;color:' + NAVY + ';font-weight:600">All five grades</summary>'
           + [5,4,3,2,1].map(function(gr){ return '<div style="margin-top:5px;line-height:1.45"><b style="color:' + NAVY + '">' + gr + ' ' + PAF_GRADE[gr] + '</b><br>' + esc(r.std[gr]) + '</div>'; }).join('')
           + '</details></td>'
         + '<td style="padding:8px 9px;vertical-align:top;min-width:160px">' + sel(r.key, null) + '</td>'
@@ -3079,21 +3083,32 @@
     const g = function(k){ return esc(S.text[k] || ''); };
     const n2 = function(v){ return v == null ? '&mdash;' : v.toFixed(2); };
     const rv = function(k, word){ const v = pafVal(k); return v == null ? word : v + ' &mdash; ' + PAF_GRADE[v]; };
+    const GUIDE = {
+      showup:       PAF_STD.showup.rows.map(function(r,i){ return (5-i) + ' = ' + r[1]; }).join('  &middot;  '),
+      productivity: PAF_STD.dcs.rows.map(function(r,i){ return (5-i) + ' = ' + r[1]; }).join('  &middot;  '),
+      tardiness:    PAF_TARDY_ROWS.map(function(r){ return r[0] + ' = ' + r[1]; }).join('  &middot;  '),
+      absences:     PAF_ABSENT_ROWS.map(function(r){ return r[0] + ' = ' + r[1]; }).join('  &middot;  ')
+    };
+    const guideLine = function(k){ return GUIDE[k] ? '<div class="gd">' + GUIDE[k] + '</div>' : ''; };
     let aRows = '';
     PAF_GROUPS.forEach(function(grp, gi){
       if (grp.items.length === 1){
         const k = grp.items[0];
-        aRows += '<tr><td><b>' + (gi+1) + '. ' + esc(grp.label) + '</b></td><td class="c">' + rv(k, 'not entered') + '</td><td class="ex">' + g('ex_' + k) + '</td></tr>';
+        aRows += '<tr><td><b>' + (gi+1) + '. ' + esc(grp.label) + '</b><div class="sb">' + esc(PAF_ITEM[k].desc) + '</div>' + guideLine(k) + '</td><td class="c">' + rv(k, 'not entered') + '</td><td class="ex">' + g('ex_' + k) + '</td></tr>';
         return;
       }
       aRows += '<tr class="grp"><td>' + (gi+1) + '. ' + esc(grp.label) + '</td><td class="c">' + n2(SC.groups[gi]) + '</td><td></td></tr>';
       grp.items.forEach(function(k){
-        aRows += '<tr><td class="ind">' + esc(PAF_ITEM[k].label) + '</td><td class="c">' + rv(k, 'not entered') + '</td><td class="ex">' + g('ex_' + k) + '</td></tr>';
+        aRows += '<tr><td class="ind">' + esc(PAF_ITEM[k].label) + '<div class="sb">' + esc(PAF_ITEM[k].desc) + '</div>' + guideLine(k) + '</td><td class="c">' + rv(k, 'not entered') + '</td><td class="ex">' + g('ex_' + k) + '</td></tr>';
       });
     });
     aRows += '<tr class="tot"><td>SECTION A AVERAGE</td><td class="c">' + n2(SC.a) + '</td><td></td></tr>';
     let bRows = PAF_B.map(function(r, i){
-      return '<tr><td>' + (i+1) + '. ' + esc(r.label) + '</td><td class="c">' + rv(r.key, 'not rated') + '</td><td class="ex">' + g('ex_' + r.key) + '</td></tr>';
+      const v = pafVal(r.key);
+      return '<tr><td>' + (i+1) + '. ' + esc(r.label) + '<div class="sb">' + esc(r.desc) + '</div></td>'
+        + '<td class="c">' + rv(r.key, 'not rated')
+        + (v ? '<div class="gd" style="text-align:left">' + esc(r.std[v]) + '</div>' : '') + '</td>'
+        + '<td class="ex">' + g('ex_' + r.key) + '</td></tr>';
     }).join('');
     bRows += '<tr class="tot"><td>SECTION B AVERAGE</td><td class="c">' + n2(SC.b) + '</td><td></td></tr>';
     const trig = pafTriggers();
@@ -3114,6 +3129,9 @@
       + '.box{border:1px solid #888;border-top:none;min-height:46px;padding:6px;white-space:pre-wrap}'
       + '.final{border:2px solid #1F4E9C;padding:8px 10px;margin-bottom:12px}'
       + '.final .big{font-size:20px;font-weight:bold}'
+      + '.sb{color:#555;font-weight:normal;font-size:10px;margin-top:2px}'
+      + '.gd{color:#666;font-size:9.5px;margin-top:3px;line-height:1.45}'
+      + '.pb{page-break-before:always}'
       + '.sign{margin-top:30px}.sign div{margin-top:26px;border-top:1px solid #333;padding-top:4px;font-size:10px;width:62%}'
       + '@media print{body{margin:12mm}}'
       + '</style></head><body>'
@@ -3136,6 +3154,23 @@
       + sec('COMPETENCIES, SKILLS AND KNOWLEDGE TO BE FURTHER DEVELOPED','develop')
       + sec('DEVELOPMENTAL PLANS (Targets for the next review period)','plans')
       + sec('COMMENTS','comments')
+      + '<div class="pb"></div>'
+      + '<div class="sec">GRADING GUIDE &mdash; SD OPERATIONS GROUP</div>'
+      + '<div class="box" style="min-height:0">'
+        + '<p style="margin:0 0 6px"><b>Scale</b> 5 Outstanding &middot; 4 Exceeds Expectations &middot; 3 Meets Expectations &middot; 2 Needs Improvement &middot; 1 Unacceptable. '
+        + '<b>Goals</b> ' + PAF_GOALS.showup + '% show-up rate, ' + PAF_GOALS.dcs + ' discovery calls per month. '
+        + 'The goal and the pass line are different numbers: grade 3 is the pass line for each objective.</p>'
+        + '<p style="margin:0 0 8px"><b>How the score is computed.</b> Quality of Work, Productivity and Attendance carry equal weight, so attendance cannot outweigh output. '
+        + 'Attendance is the mean of tardiness and absences. Section A is the mean of the three objectives, Section B the mean of the four factors, and the final score the mean of the two sections. '
+        + '<b>3.00 is a gate, not a weighting:</b> at or above 3.00 passes, and below 3.00 does not, decided on the case rather than by rounding up.</p>'
+        + ['showup','productivity','tardiness','absences'].map(function(k){
+            return '<p style="margin:0 0 4px"><b>' + esc(PAF_ITEM[k].label) + '</b><br><span style="color:#555">' + GUIDE[k] + '</span></p>';
+          }).join('')
+        + PAF_B.map(function(r){
+            return '<p style="margin:8px 0 0"><b>' + esc(r.label) + '</b> &mdash; ' + esc(r.desc) + '<br>'
+              + [5,4,3,2,1].map(function(gr){ return '<span style="color:#555"><b>' + gr + '</b> ' + esc(r.std[gr]) + '</span>'; }).join('<br>') + '</p>';
+          }).join('')
+      + '</div>'
       + '<div class="sign"><div>Employee signature / Date</div><div>Rated by / Date</div><div>Approved by / Date</div></div>'
       + '</body></html>';
     const w = window.open('', '_blank');
