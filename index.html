@@ -5538,9 +5538,15 @@
     const today = localIso(new Date());
     if (!_tagDate) _tagDate = today;
     const Q = String.fromCharCode(39);
+    // Who may tag: the team leaders, the POC team who cover the floor alongside them, and Ritch.
+    // Deduplicated, because Jonathan appears in TEAM_LEADERS once per team he covers and was
+    // listed twice here.
+    const taggers = [];
+    TEAM_LEADERS.forEach(function(t){ if (taggers.indexOf(t.name) < 0) taggers.push(t.name); });
+    ['Vincent Gadier','Alvin Melo','Alvin Bayhon','Diana Vosotros','Ritch Joy Manipol']
+      .forEach(function(n){ if (taggers.indexOf(n) < 0) taggers.push(n); });
     const tlOpts = ['<option value="">Who is tagging…</option>'].concat(
-      TEAM_LEADERS.map(function(t){ return '<option value="' + esc(t.name) + '"' + (_tagWho === t.name ? ' selected' : '') + '>' + esc(t.name) + '</option>'; })
-        .concat(['<option value="Ritch Joy Manipol"' + (_tagWho === 'Ritch Joy Manipol' ? ' selected' : '') + '>Ritch Joy Manipol</option>'])
+      taggers.map(function(n){ return '<option value="' + esc(n) + '"' + (_tagWho === n ? ' selected' : '') + '>' + esc(n) + '</option>'; })
     ).join('');
     const teams = TEAMS.filter(function(t){ return t.id !== 'poc'; });
     const teamOpts = '<option value="">All teams</option>' + teams.map(function(t){ return '<option value="' + t.id + '"' + (_tagTeam === t.id ? ' selected' : '') + '>' + esc(t.name) + '</option>'; }).join('');
