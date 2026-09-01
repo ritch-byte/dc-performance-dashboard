@@ -5437,21 +5437,23 @@
     };
     take(_attRemoteTags);
     take(attTagsLocal());
+    // A clear is a write, not an absence of one. It has to travel to the sheet and win by
+    // timestamp like any other tag, then disappear here, otherwise the shared tab keeps
+    // handing the old status back and the clear link looks broken.
+    Object.keys(out).forEach(function(k){ if (out[k] && out[k].cleared) delete out[k]; });
     return out;
   }
   function attTagGet(id, date){ return attTagsMerged()[id + '|' + date] || null; }
   function attTagSet(id, date, status){
     const all = attTagsLocal(), key = id + '|' + date;
     const found = scFindMember(id);
-    if (!status){ delete all[key]; }
-    else {
-      all[key] = { sdr_id:id, sdr:found ? found.m.display : id, team:found ? found.team.name : '',
-                   date:date, status:status, taggedBy:_tagWho || '', at:new Date().toISOString() };
-    }
+    all[key] = { sdr_id:id, sdr:found ? found.m.display : id, team:found ? found.team.name : '',
+                 date:date, status:status || '', taggedBy:_tagWho || '', at:new Date().toISOString() };
+    if (!status) all[key].cleared = true;
     attTagsSave(all);
     attMergeTags();
     const postUrl = attTagPostUrl();
-    if (status && postUrl){
+    if (postUrl){
       try {
         fetch(postUrl, { method:'POST', mode:'no-cors',
           headers:{ 'Content-Type':'text/plain;charset=utf-8' },
@@ -5499,13 +5501,14 @@
         const c = splitLine(lines[i]);
         const date = normalizeDate((c[iDate] || '').trim());
         const status = (c[iStat] || '').trim();
-        if (!date || !status) continue;
+        if (!date) continue;
         // Trust the resolved name over a stored id, so a row typed by hand still lands.
         let id = (c[iId] || '').trim();
         if (!id || !scFindMember(id)) id = resolveAgent((c[iSdr] || '').trim());
         if (!id || !scFindMember(id)) continue;               // unknown person, or the test row
         const rec = { sdr_id:id, sdr:(c[iSdr]||'').trim(), team:(c[iTeam]||'').trim(),
                       date:date, status:status, taggedBy:(c[iBy]||'').trim(), at:(c[iAt]||'').trim() };
+        if (!status) rec.cleared = true;
         const k = id + '|' + date;
         if (!out[k] || String(rec.at) >= String(out[k].at)) out[k] = rec;   // last write wins
       }
