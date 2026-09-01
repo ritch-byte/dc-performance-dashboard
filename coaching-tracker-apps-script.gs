@@ -13,6 +13,8 @@
  * 3. Deploy → Manage deployments → ✏️ Edit → Version: New version → Deploy.
  *    (Execute as: Me · Who has access: Anyone.) The /exec URL stays the same.
  * 4. In the Sheet: File → Share → Publish to web → the "Logs" tab → CSV  (for reads).
+ * 5. Same again for the "Attendance" tab once a leader has tagged a day, and give that
+ *    CSV link to the dashboard so attendance tags are shared rather than per browser.
  *
  * The dashboard posts to the SAME /exec URL for both logging and AI.
  */
@@ -87,6 +89,22 @@ function doPost(e) {
       if (!sc) { sc = ssc.insertSheet('Scorecards'); }
       if (sc.getLastRow() === 0) { sc.appendRow(SC_HEADERS); }
       sc.appendRow(SC_HEADERS.map(function (h) { return data[h] || ''; }));
+      return json_({ ok: true });
+    }
+
+    // ── Attendance tags: route to a separate "Attendance" tab ──
+    // A team leader tagging a day in the dashboard posts
+    // {record:'attendance', date, sdr, sdr_id, team, status, taggedBy, at}.
+    // Rows are appended rather than updated, so the tab is a log: re-tagging the same
+    // person and day writes a second row, and the dashboard treats the newest as current.
+    // That keeps who changed what, and when, instead of overwriting the earlier call.
+    if (data && data.record === 'attendance') {
+      const AT_HEADERS = ['at', 'date', 'sdr', 'sdr_id', 'team', 'status', 'taggedBy'];
+      const ssa = SpreadsheetApp.getActiveSpreadsheet();
+      let at = ssa.getSheetByName('Attendance');
+      if (!at) { at = ssa.insertSheet('Attendance'); }
+      if (at.getLastRow() === 0) { at.appendRow(AT_HEADERS); }
+      at.appendRow(AT_HEADERS.map(function (h) { return data[h] || ''; }));
       return json_({ ok: true });
     }
 
