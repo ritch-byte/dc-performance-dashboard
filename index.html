@@ -829,6 +829,7 @@
             <button class="view-btn active" id="attBtnDaily"   onclick="setAttView('daily')">Daily</button>
             <button class="view-btn"        id="attBtnWeekly"  onclick="setAttView('weekly')">Weekly</button>
             <button class="view-btn"        id="attBtnMonthly" onclick="setAttView('monthly')">Monthly</button>
+            <button class="view-btn"        id="attBtnGrid"    onclick="setAttView('grid')">Week grid</button>
           </div>
           <div id="attWeekSelectWrap" style="display:none;">
             <select id="attWeekSelect" class="week-select" onchange="renderAttendance()"></select>
@@ -4974,13 +4975,13 @@
 
   function setAttView(v) {
     attView = v;
-    ['Daily','Weekly','Monthly'].forEach(id => {
+    ['Daily','Weekly','Monthly','Grid'].forEach(id => {
       $('attBtn'+id).classList.toggle('active', v === id.toLowerCase());
     });
-    $('attWeekSelectWrap').style.display  = v === 'weekly'  ? 'block' : 'none';
+    $('attWeekSelectWrap').style.display  = (v === 'weekly' || v === 'grid') ? 'block' : 'none';
     $('attMonthSelectWrap').style.display = v === 'monthly' ? 'block' : 'none';
     $('attDate').style.display            = v === 'daily'   ? ''      : 'none';
-    if (v === 'weekly')  buildAttWeekSelect();
+    if (v === 'weekly' || v === 'grid') buildAttWeekSelect();
     if (v === 'monthly') buildAttMonthSelect();
     renderAttendance();
   }
@@ -5065,6 +5066,11 @@
       $('attHeading').textContent = 'Attendance — Week of ' + wtdRangeLabel(dates);
       const rows = rawAttRows.filter(r => { const d = normalizeDate(r.rawDate); return d && dates.includes(d); });
       renderAttPeriod(c, rows);
+    } else if (attView === 'grid') {
+      const mon = $('attWeekSelect').value;
+      if (!mon) return;
+      $('attHeading').textContent = 'Attendance — day by day, week of ' + wtdRangeLabel(getBusinessDaysFrom(mon));
+      renderAttGrid(c, mon);
     } else {
       const ym = $('attMonthSelect').value || localIso(new Date()).slice(0,7);
       const [y, m] = ym.split('-').map(Number);
@@ -5271,6 +5277,55 @@
     wrap.appendChild(summaryEl);
 
     el.appendChild(wrap);
+  }
+
+  // Day-by-day matrix for a week. This lived on the Schedule page, where it was meant to show
+  // each SDR's shift tinted by their attendance status. The attendance sheet no longer carries
+  // a Schedule column, so the shift was always blank and the page had quietly become a second
+  // attendance view. It belongs here, and it is not a duplicate: the Weekly view above totals a
+  // person up, this shows which day was which.
+  function renderAttGrid(container, mondayIso){
+    const dates = getBusinessDaysFrom(mondayIso);
+    const NAVY = '#0C1F42', SLATE = '#5B6678', BORDER = 'var(--border)';
+    // Key on the resolved member, so a name written differently in the sheet still lands on the
+    // right person, and group by the dashboard roster rather than the sheet's team column.
+    const cell = {};
+    for (const r of rawAttRows){
+      const d = normalizeDate(r.rawDate); if (!d || dates.indexOf(d) < 0) continue;
+      const id = resolveAgent(r.name); if (!id) continue;
+      cell[id + '|' + d] = (r.status || '').trim();
+    }
+    const dayHdr = dates.map(function(d){
+      const p = d.split('-').map(Number), dt = new Date(p[0], p[1]-1, p[2]);
+      return '<th style="padding:7px 8px;background:' + NAVY + ';color:#fff;font-size:10px;letter-spacing:.3px;text-align:center;white-space:nowrap">'
+        + dt.toLocaleDateString('en-US',{weekday:'short'}) + ' ' + dt.getDate() + '-' + dt.toLocaleDateString('en-US',{month:'short'}) + '</th>';
+    }).join('');
+    let html = '';
+    for (const team of TEAMS){
+      const visible = team.members.filter(function(m){ return !m.hidden; });
+      if (!visible.length) continue;
+      const rows = visible.map(function(m, i){
+        const tds = dates.map(function(d){
+          const st = cell[m.id + '|' + d];
+          if (st === undefined) return '<td style="padding:6px 8px;text-align:center;font-size:11px;color:#C9CEDA">&middot;</td>';
+          const cls = attStatusClass(st);
+          return '<td class="' + cls + '" style="padding:6px 8px;text-align:center;font-size:11px;font-weight:600;white-space:nowrap">' + esc(attStatusLabel(st) || st) + '</td>';
+        }).join('');
+        return '<tr style="background:' + (i % 2 ? '#F8FAFD' : '#fff') + ';border-top:1px solid ' + BORDER + '">'
+          + '<td style="padding:6px 10px;font-size:12px;color:' + NAVY + ';white-space:nowrap">' + esc(m.display) + '</td>' + tds + '</tr>';
+      }).join('');
+      html += '<div style="background:#fff;border:1px solid ' + BORDER + ';border-radius:12px;overflow:hidden;margin-bottom:16px">'
+        + '<div style="background:' + esc(team.color) + ';padding:10px 14px;color:#fff;font-weight:800;font-size:13px">' + esc(team.name)
+        + ' <span style="font-weight:500;opacity:.85;font-size:11px">&middot; ' + visible.length + ' SDR' + (visible.length === 1 ? '' : 's') + '</span></div>'
+        + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:640px"><thead><tr>'
+        + '<th style="padding:7px 10px;background:' + NAVY + ';color:#fff;font-size:10px;letter-spacing:.3px;text-align:left">SDR</th>' + dayHdr
+        + '</tr></thead><tbody>' + rows + '</tbody></table></div></div>';
+    }
+    const legend = ['Present','Late','Absent','On Leave','Off'].map(function(s){
+      return '<span class="' + attStatusClass(s) + '" style="padding:2px 8px;border-radius:5px;font-size:10.5px;font-weight:600;margin-right:7px">' + s + '</span>';
+    }).join('');
+    container.innerHTML = '<div style="margin-bottom:12px;font-size:11px;color:' + SLATE + '">' + legend
+      + '<span style="margin-left:6px">&middot; a dot means nothing was logged for that day</span></div>' + html;
   }
 
   function renderAttPeriod(container, rows) {
@@ -7113,116 +7168,21 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
   //  the selected Month/Week into Team -> SDR -> per-day shift, tinted by
   //  attendance status. Updates automatically when the sheet changes.
   // ══════════════════════════════════════════════════════════════════
-  let _schedWeekKey = null;
-
-  function schedStatusStyle(status) {
-    const s = (status || '').toLowerCase();
-    if (s.includes('present'))   return { bg:'#EAF7F0', fg:'#0A7A4A', dot:'#0E9F6E' };
-    if (s.includes('late'))      return { bg:'#FBF1E3', fg:'#B26B00', dot:'#C97000' };
-    if (s.includes('undertime')) return { bg:'#FBF1E3', fg:'#B26B00', dot:'#C97000' };
-    if (s.includes('absent'))    return { bg:'#FCEBEC', fg:'#B3261E', dot:'#C0362C' };
-    if (s.includes('leave'))     return { bg:'#EAF0FB', fg:'#28489C', dot:'#3B5BB5' };
-    if (s.includes('off'))       return { bg:'#EEF2F7', fg:'#5B6678', dot:'#9AA7B8' };
-    return { bg:'#EEF3FB', fg:'#0C1F42', dot:'#9FB4DA' };
-  }
-
+  // The day-by-day attendance matrix that used to live here now sits on the Attendance page
+  // under "Week grid", where it belongs. This page is deliberately empty, waiting on what it
+  // is actually for, rather than left showing a second copy of attendance.
   function renderSchedule() {
-    const NAVY='#0C1F42', SLATE='#5B6678', BORDER='#E4E9F1';
-    if (!_attLoaded) {
-      $('scheduleBody').innerHTML = `<div style="padding:50px;text-align:center;color:${SLATE};font-size:13px">Loading schedule…</div>`;
-      if (!_attLoading) loadAttendanceData();
-      return;
-    }
-    // Per-row Month/Week. If the sheet has no Week column, derive the week from the date.
-    const fmtMon = mon => { const [y,m,d] = mon.split('-').map(Number); return new Date(y,m-1,d).toLocaleDateString('en-US',{month:'short',day:'numeric'}); };
-    const rowMeta = r => {
-      const iso = normalizeDate(r.rawDate);
-      let month = r.month || (iso ? new Date(iso+'T00:00:00').toLocaleDateString('en-US',{month:'long'}) : '');
-      let week = r.week;
-      if (!week && iso) { try { week = 'Week of ' + fmtMon(getMondayIso(iso)); } catch (e) { week = ''; } }
-      return { key: month + ' · ' + (week || ''), month, week: week || '' };
-    };
-    // Ordered Month/Week combos (first-seen = chronological order in the sheet)
-    const weeks = [], seen = new Set();
-    for (const r of rawAttRows) {
-      const meta = rowMeta(r);
-      if (meta.week && !seen.has(meta.key)) { seen.add(meta.key); weeks.push(meta); }
-    }
-    if (!weeks.length) { $('scheduleBody').innerHTML = `<div style="padding:40px;text-align:center;color:${SLATE}">No schedule data in the sheet yet.</div>`; return; }
-    if (!_schedWeekKey || !weeks.some(w => w.key === _schedWeekKey)) _schedWeekKey = weeks[weeks.length-1].key;
-    const cur = weeks.find(w => w.key === _schedWeekKey);
-    $('schedWeekLabel').textContent = cur.key;
-
-    const wkRows = rawAttRows.filter(r => rowMeta(r).key === _schedWeekKey);
-    const dateMap = {};
-    wkRows.forEach(r => { if (r.rawDate) dateMap[r.rawDate] = normalizeDate(r.rawDate) || r.rawDate; });
-    const dates = Object.keys(dateMap).sort((a,b) => dateMap[a] < dateMap[b] ? -1 : dateMap[a] > dateMap[b] ? 1 : 0);
-    const dayHdr = d => {
-      const iso = dateMap[d];
-      if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return new Date(iso+'T00:00:00').toLocaleDateString('en-US',{weekday:'short'}) + ' ' + d;
-      return d;
-    };
-    const teams = [], tSeen = new Set(), cellData = {}, sdrByTeam = {};
-    wkRows.forEach(r => {
-      if (!tSeen.has(r.team)) { tSeen.add(r.team); teams.push(r.team); sdrByTeam[r.team] = []; }
-      if (!sdrByTeam[r.team].includes(r.name)) sdrByTeam[r.team].push(r.name);
-      cellData[r.team+'|'+r.name+'|'+r.rawDate] = { schedule:r.schedule, status:r.status };
-    });
-    // Map the sheet's team names to the dashboard Group labels, and order A -> D.
-    // Current structure first; the legacy labels below still appear in the attendance sheet
-    // until whoever maintains it switches over, so keep tidying those too rather than dropping them.
-    const SCHED_TEAM_MAP = { dijumhon:'DiJumHon', dijumhom:'DiJumHon', meloace:'MeloAce', acevin:'MeloAce', ace:'MeloAce',
-                             ev:'EV', bridge:'Bridge',
-                             rv:'RV', diathan:'Diathan', jumhon:'JumHon' };
-    const teamKey   = t => (t||'').toLowerCase().replace(/[^a-z0-9]/g,'');
-    const teamLabel = t => SCHED_TEAM_MAP[teamKey(t)] || t;
-    const SCHED_ORDER = ['DiJumHon','MeloAce','EV','Bridge','RV','Diathan','JumHon'];
-    const teamOrder = t => { const i = SCHED_ORDER.indexOf(teamLabel(t)); return i < 0 ? 99 : i; };
-    teams.sort((a,b) => teamOrder(a) - teamOrder(b));
-
-    const sel = `<select onchange="_schedWeekKey=this.value;renderSchedule()" class="cl-input" style="width:auto">
-      ${weeks.map(w => `<option value="${esc(w.key)}"${w.key===_schedWeekKey?' selected':''}>${esc(w.month)} · ${esc(w.week)}</option>`).join('')}
-    </select>`;
-
-    const cell = (info) => {
-      if (!info) return `<td style="padding:6px 8px;border:1px solid ${BORDER};text-align:center;color:#C7D0DD">·</td>`;
-      const sh = info.schedule || '', st = (info.status||'').toLowerCase(), style = schedStatusStyle(info.status);
-      let label, sub = '';
-      if (sh) { label = (sh.toUpperCase()==='RD' || st.includes('rest')) ? 'RD' : sh; sub = info.status || ''; }
-      else    { label = info.status || '—'; }   // no Schedule column -> show the attendance status
-      return `<td style="padding:6px 8px;border:1px solid ${BORDER};text-align:center;background:${style.bg}">
-        <div style="font-size:11px;font-weight:600;color:${style.fg};white-space:nowrap">${esc(label)}</div>
-        ${sub ? `<div style="font-size:9.5px;color:${style.fg};opacity:.85;margin-top:1px">${esc(sub)}</div>` : ''}
-      </td>`;
-    };
-
-    const teamBlocks = teams.map(t => {
-      const head = `<tr style="background:${NAVY};color:#fff">
-        <th style="text-align:left;padding:8px 10px;font-size:11px;position:sticky;left:0;background:${NAVY};min-width:180px">SDR</th>
-        ${dates.map(d => `<th style="padding:8px 8px;font-size:11px;white-space:nowrap">${esc(dayHdr(d))}</th>`).join('')}
-      </tr>`;
-      const body = sdrByTeam[t].map((sdr,i) => `<tr style="background:${i%2?'#F8FAFD':'#fff'}">
-        <td style="padding:6px 10px;font-size:12px;color:${NAVY};font-weight:600;border:1px solid ${BORDER};white-space:nowrap;position:sticky;left:0;background:${i%2?'#F8FAFD':'#fff'}">${esc(sdr)}</td>
-        ${dates.map(d => cell(cellData[t+'|'+sdr+'|'+d])).join('')}
-      </tr>`).join('');
-      return `<div style="background:#fff;border:1px solid ${BORDER};border-radius:12px;overflow:hidden;margin-bottom:16px">
-        <div style="background:${NAVY};padding:10px 16px"><span style="color:#fff;font-size:14px;font-weight:800">${esc(teamLabel(t))}</span> ${teamLabel(t)!==t?`<span style="color:#9FB4DA;font-size:11.5px">· ${esc(t)}</span> `:''}<span style="color:#9FB4DA;font-size:11.5px">· ${sdrByTeam[t].length} SDRs</span></div>
-        <div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;min-width:640px"><thead>${head}</thead><tbody>${body}</tbody></table></div>
-      </div>`;
-    }).join('');
-
-    const legend = ['Present','Late','Absent','On Leave','Off'].map(s => {
-      const st = schedStatusStyle(s);
-      return `<span style="display:inline-flex;align-items:center;gap:5px;margin-right:14px"><span style="width:9px;height:9px;border-radius:2px;background:${st.dot}"></span><span style="font-size:11px;color:${SLATE}">${s}</span></span>`;
-    }).join('');
-
-    $('scheduleBody').innerHTML =
-      `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px">
-        <div style="display:flex;align-items:center;gap:10px"><label class="cl-label" style="margin:0">Week</label>${sel}</div>
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">${legend}<button onclick="loadAttendanceData()" class="cl-chip">↻ Refresh</button></div>
-      </div>`
-      + teamBlocks
-      + `<div style="font-size:11px;color:${SLATE};margin-top:4px">Live from the Attendance sheet · each cell shows the scheduled shift, tinted by attendance status.</div>`;
+    const el = $('scheduleBody'); if (!el) return;
+    const lbl = $('schedWeekLabel'); if (lbl) lbl.textContent = '';
+    el.innerHTML = '<div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:40px 28px;text-align:center">'
+      + '<div style="font-size:15px;font-weight:800;color:#0D1A6E">Nothing here yet</div>'
+      + '<div style="font-size:13px;color:var(--slate);line-height:1.6;margin-top:8px;max-width:560px;margin-left:auto;margin-right:auto">'
+      + 'This page used to show a day-by-day attendance matrix, which was really a second view of Attendance rather than a schedule. '
+      + 'It has moved to <b>Attendance &rarr; Week grid</b>.'
+      + '<br><br>The original intent was the shift each SDR is rostered for, tinted by whether they turned up, but the attendance sheet no longer carries a Schedule column, so the shift was always blank.'
+      + '</div>'
+      + '<div style="margin-top:14px"><a href="#" onclick="showPage(' + String.fromCharCode(39) + 'attendance' + String.fromCharCode(39) + ');setAttView(' + String.fromCharCode(39) + 'grid' + String.fromCharCode(39) + ');return false;" style="background:#1A2DB5;color:#fff;text-decoration:none;font-size:13px;font-weight:700;padding:9px 18px;border-radius:9px;display:inline-block">Open the week grid</a></div>'
+      + '</div>';
   }
 
   // ══════════════════════════════════════════════════════════════════
