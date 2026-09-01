@@ -826,11 +826,11 @@
         <div class="page-title" id="attHeading">Attendance</div>
         <div class="ch-right">
           <div class="view-toggle">
-            <button class="view-btn active" id="attBtnDaily"   onclick="setAttView('daily')">Daily</button>
+            <button class="view-btn active" id="attBtnTag"     onclick="setAttView('tag')">Tag attendance</button>
+            <button class="view-btn"        id="attBtnDaily"   onclick="setAttView('daily')">Daily</button>
             <button class="view-btn"        id="attBtnWeekly"  onclick="setAttView('weekly')">Weekly</button>
             <button class="view-btn"        id="attBtnMonthly" onclick="setAttView('monthly')">Monthly</button>
             <button class="view-btn"        id="attBtnGrid"    onclick="setAttView('grid')">Week grid</button>
-            <button class="view-btn"        id="attBtnTag"     onclick="setAttView('tag')">Tag attendance</button>
             <button class="cl-chip" style="margin-left:8px" onclick="attExportCsv()" title="One row per person per business day for the month on screen">Export CSV</button>
           </div>
           <div id="attWeekSelectWrap" style="display:none;">
@@ -839,7 +839,7 @@
           <div id="attMonthSelectWrap" style="display:none;">
             <select id="attMonthSelect" class="week-select" onchange="renderAttendance()"></select>
           </div>
-          <input type="date" id="attDate" oninput="renderAttendance()">
+          <input type="date" id="attDate" oninput="renderAttendance()" style="display:none;">
         </div>
       </div>
       <div class="main-body">
@@ -1668,7 +1668,7 @@
   // on a fresh page. _attSheetRows is the sheet exactly as parsed; rawAttRows is the merged
   // view over it once a leader's tags are layered on.
   let rawAttRows = [], _attSheetRows = [], _attTagCount = 0, _attRemoteTags = {},
-      attView = 'daily', _attLoaded = false, _attLoading = false;
+      attView = 'tag', _attLoaded = false, _attLoading = false;
 
   // Deferred rather than run inline. This used to be an IIFE, so it executed while the script
   // was still being evaluated and reached functions whose module state is declared further
