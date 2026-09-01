@@ -831,6 +831,7 @@
             <button class="view-btn"        id="attBtnMonthly" onclick="setAttView('monthly')">Monthly</button>
             <button class="view-btn"        id="attBtnGrid"    onclick="setAttView('grid')">Week grid</button>
             <button class="view-btn"        id="attBtnTag"     onclick="setAttView('tag')">Tag attendance</button>
+            <button class="cl-chip" style="margin-left:8px" onclick="attExportCsv()" title="One row per person per business day for the month on screen">Export CSV</button>
           </div>
           <div id="attWeekSelectWrap" style="display:none;">
             <select id="attWeekSelect" class="week-select" onchange="renderAttendance()"></select>
@@ -5146,6 +5147,61 @@
   // Daily. It already said what happened; what it never said was what was supposed to happen.
   // The rostered shift and off day come from the uploaded schedule, so a blank is now readable:
   // someone rostered off is not missing data, and someone due in at 9PM with nothing logged is.
+  // Export what the dashboard actually holds for a month: one row per person per business day,
+  // with the status, where it came from and who tagged it. The Attendance tab is an append-only
+  // log of individual clicks, so exporting from here rather than from the sheet gives the
+  // resolved picture instead of every keystroke, and includes days that came from the master
+  // attendance sheet rather than from a tag.
+  function attExportCsv(){
+    const ym = attView === 'monthly'
+      ? ($('attMonthSelect').value || localIso(new Date()).slice(0,7))
+      : (attView === 'daily' ? ($('attDate').value || localIso(new Date())).slice(0,7)
+                             : (_tagDate || localIso(new Date())).slice(0,7));
+    const [y, m] = ym.split('-').map(Number);
+    const today = localIso(new Date()), dates = [], lastDay = new Date(y, m, 0).getDate();
+    for (let d = 1; d <= lastDay; d++){
+      const dt = new Date(y, m-1, d), dow = dt.getDay();
+      if (dow === 0 || dow === 6) continue;
+      const iso = localIso(dt); if (iso > today) break;
+      dates.push(iso);
+    }
+    if (!dates.length){ alert('That month has no business days yet.'); return; }
+    const tags = attTagsMerged();
+    const sheetOf = {};
+    for (const r of _attSheetRows){
+      const d = normalizeDate(r.rawDate); if (!d || dates.indexOf(d) < 0) continue;
+      const id = resolveAgent(r.name); if (!id) continue;
+      sheetOf[id + '|' + d] = (r.status || '').trim();
+    }
+    const rows = [['Date','Day','Team','SDR','Status','Source','Tagged by','Rostered shift','Rostered off day','Counts as scheduled','Counts as attended']];
+    TEAMS.forEach(function(t){
+      t.members.filter(function(x){ return !x.hidden; }).forEach(function(mem){
+        dates.forEach(function(d){
+          const k = mem.id + '|' + d, tag = tags[k], sheet = sheetOf[k];
+          const status = tag ? tag.status : (sheet || '');
+          const sch = attSchedFor(mem.id, d);
+          rows.push([
+            d, attDow(d), t.name, mem.display,
+            status || 'not logged',
+            tag ? 'tagged in dashboard' : (sheet ? 'attendance sheet' : 'no record'),
+            tag ? (tag.taggedBy || 'not stated') : '',
+            sch ? sch.shift : '', sch ? sch.off : '',
+            status && isScheduled(status) ? 'yes' : 'no',
+            status && isAttended(status) ? 'yes' : 'no'
+          ]);
+        });
+      });
+    });
+    const csv = rows.map(function(r){ return r.map(function(v){ return '"' + String(v).replace(/"/g,'""') + '"'; }).join(','); }).join('\r\n');
+    const blob = new Blob(['﻿' + csv], { type:'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'OA-attendance-' + ym + '.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
   function renderAttDaily(container, rows, dateIso){
     const NAVY='#0C1F42', SLATE='#5B6678', BORDER='var(--border)';
     const statusMap = {};
