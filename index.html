@@ -2222,6 +2222,15 @@
     // Weekly breakdown tables removed — the AI Performance Report above is the Reports view now.
   }
 
+  function getFridayIso(mondayIso){
+    const p = mondayIso.split('-').map(Number), d = new Date(p[0], p[1]-1, p[2]);
+    d.setDate(d.getDate() + 4); return localIso(d);
+  }
+  function lastBusinessOfMonth(ym){
+    const p = ym.split('-').map(Number), d = new Date(p[0], p[1], 0);
+    while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() - 1);
+    return localIso(d);
+  }
   let _teamView = 'monthly', _teamDate = '';
   function setTeamCardView(v) {
     _teamView = v;
@@ -2252,6 +2261,20 @@
       return view === 'weekly' ? wk === curWeek : monthWeeks.indexOf(wk) >= 0;
     };
     const periodWord = view === 'daily' ? 'that day' : view === 'weekly' ? 'that week' : 'that month';
+    const fmtD = iso => { const [y,m,d] = iso.split('-').map(Number); return new Date(y,m-1,d).toLocaleDateString('en-US',{month:'short',day:'numeric'}); };
+    const first = periodDates[0], last = periodDates[periodDates.length-1];
+    // A week or month still running is counted only as far as today, so say so rather than
+    // letting a part-week read as a whole one.
+    // Only a week or a month can be part-finished; a single day is never "in progress".
+    const partial = view !== 'daily' && !!last && last < (view === 'weekly' ? getFridayIso(curWeek) : lastBusinessOfMonth(ym));
+    let periodRange;
+    if (view === 'daily'){
+      periodRange = new Date(ty, tm-1, Number(today.split('-')[2])).toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+    } else if (view === 'weekly'){
+      periodRange = periodDates.length ? 'Week of ' + fmtD(first) + ' to ' + fmtD(last) : 'That week has no business days yet';
+    } else {
+      periodRange = new Date(ty, tm-1, 1).toLocaleDateString('en-US',{month:'long',year:'numeric'}) + (periodDates.length ? ', ' + fmtD(first) + ' to ' + fmtD(last) : '');
+    }
 
     const statCell = (label, val, color, size) =>
       `<div><div style="font-size:${size||22}px;font-weight:800;font-family:'Plus Jakarta Sans',sans-serif;color:${color||'var(--ink)'};line-height:1.1">${val}</div>` +
@@ -2325,7 +2348,12 @@
       </div>`;
     }).join('');
 
-    $('teamBody').innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(430px,1fr));gap:18px;padding:4px 4px 24px">${cards}</div>`;
+    $('teamBody').innerHTML =
+      `<div style="padding:10px 4px 0;font-size:12.5px;color:var(--slate)">Showing <b style="color:var(--ink)">${esc(periodRange)}</b>`
+      + (partial ? ` <span style="color:#C97000">&middot; still in progress, counted to ${esc(fmtD(last))}</span>` : '')
+      + (view === 'daily' ? '' : ` <span style="font-size:11px">&middot; the date box picks any day inside the ${view === 'weekly' ? 'week' : 'month'} you want</span>`)
+      + `</div>`
+      + `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(430px,1fr));gap:18px;padding:4px 4px 24px">${cards}</div>`;
 
     if (!_coachLogsLoaded) loadCoachingLogs(false).then(() => { if ($('teamSection').style.display !== 'none') renderTeamRoster(); });
   }
