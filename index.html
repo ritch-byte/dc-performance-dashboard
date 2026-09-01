@@ -830,6 +830,7 @@
             <button class="view-btn"        id="attBtnWeekly"  onclick="setAttView('weekly')">Weekly</button>
             <button class="view-btn"        id="attBtnMonthly" onclick="setAttView('monthly')">Monthly</button>
             <button class="view-btn"        id="attBtnGrid"    onclick="setAttView('grid')">Week grid</button>
+            <button class="view-btn"        id="attBtnTag"     onclick="setAttView('tag')">Tag attendance</button>
           </div>
           <div id="attWeekSelectWrap" style="display:none;">
             <select id="attWeekSelect" class="week-select" onchange="renderAttendance()"></select>
@@ -1789,7 +1790,10 @@
       if (s === 'present')        { present++;   scheduled++; }
       else if (s === 'late')      { late++;      scheduled++; }
       else if (s === 'undertime') { undertime++; scheduled++; }
-      else if (s === 'absent')    { absent++;    scheduled++; }
+      // NCNS is an unexcused absence and was being dropped entirely, so a no-call-no-show
+      // improved someone's attendance rate by shrinking the denominator. It counts now, which
+      // it must, given a team leader can tag it directly.
+      else if (s === 'absent' || s === 'ncns') { absent++; scheduled++; }
     }
     const attended = present + late + undertime;
     const rate = scheduled > 0 ? Math.round(attended / scheduled * 100) : null;
@@ -4938,7 +4942,8 @@
     try {
       const res = await fetch(ATTENDANCE_CSV_URL + '&t=' + Date.now());
       if (!res.ok) throw new Error('HTTP ' + res.status);
-      rawAttRows = parseAttendanceCSV(await res.text());
+      _attSheetRows = parseAttendanceCSV(await res.text());
+      attMergeTags();   // a leader's own tags win over the sheet for that person and day
       _attLoaded = true;
       if ($('attErrorBanner')) $('attErrorBanner').classList.remove('show');
       if ($('attendanceSection').style.display !== 'none') renderAttendance();
@@ -4975,12 +4980,14 @@
 
   function setAttView(v) {
     attView = v;
-    ['Daily','Weekly','Monthly','Grid'].forEach(id => {
+    ['Daily','Weekly','Monthly','Grid','Tag'].forEach(id => {
       $('attBtn'+id).classList.toggle('active', v === id.toLowerCase());
     });
     $('attWeekSelectWrap').style.display  = (v === 'weekly' || v === 'grid') ? 'block' : 'none';
+    // the Tag view carries its own date picker
     $('attMonthSelectWrap').style.display = v === 'monthly' ? 'block' : 'none';
     $('attDate').style.display            = v === 'daily'   ? ''      : 'none';
+    $('attMonthSelectWrap').style.display = v === 'monthly' ? 'block' : 'none';
     if (v === 'weekly' || v === 'grid') buildAttWeekSelect();
     if (v === 'monthly') buildAttMonthSelect();
     renderAttendance();
@@ -5071,6 +5078,9 @@
       if (!mon) return;
       $('attHeading').textContent = 'Attendance — day by day, week of ' + wtdRangeLabel(getBusinessDaysFrom(mon));
       renderAttGrid(c, mon);
+    } else if (attView === 'tag') {
+      $('attHeading').textContent = 'Tag attendance' + (_attTagCount ? ' — ' + _attTagCount + ' tagged so far' : '');
+      renderAttTag(c);
     } else {
       const ym = $('attMonthSelect').value || localIso(new Date()).slice(0,7);
       const [y, m] = ym.split('-').map(Number);
@@ -5277,6 +5287,161 @@
     wrap.appendChild(summaryEl);
 
     el.appendChild(wrap);
+  }
+
+  // ── ATTENDANCE TAGGING ────────────────────────────────────────────────────
+  // Team leaders mark their own people for a given day. Every tag is written locally at once so
+  // nothing is lost, and posted to the same Apps Script the coaching tracker already uses, under
+  // record:'attendance'. Until that script has an attendance branch and its tab is published,
+  // tags live in the tagger's browser only, and the page says so rather than implying they are
+  // shared. Tags are merged over the master sheet for the same person and day, so everything
+  // downstream, attendance rates, appraisals, scorecards, sees them without further plumbing.
+  const ATT_TAG_POST_URL = (typeof COACH_LOG_POST_URL !== 'undefined') ? COACH_LOG_POST_URL : '';
+  const ATT_TAG_CSV_URL  = '';   // published CSV of the Attendance tab, once it exists
+  const ATT_STATUSES = [
+    { v:'Present',   c:'#0E9F6E' },
+    { v:'Late',      c:'#C97000' },
+    { v:'Absent',    c:'#C00000' },
+    { v:'NCNS',      c:'#7F1D1D', t:'No call, no show' },
+    { v:'Off',       c:'#5B6678' },
+    { v:'RDOT',      c:'#1A2DB5', t:'Rest day overtime' },
+    { v:'On Leave',  c:'#6D28D9' },
+    { v:'Undertime', c:'#B45309' }
+  ];
+  let _tagDate = '', _tagWho = '', _tagTeam = '';
+
+  function attTagsAll(){
+    try { const o = JSON.parse(localStorage.getItem('oaAttTags') || '{}'); return (o && typeof o === 'object') ? o : {}; }
+    catch (e){ return {}; }
+  }
+  function attTagsSave(o){ try { localStorage.setItem('oaAttTags', JSON.stringify(o)); } catch (e){} }
+  function attTagGet(id, date){ return attTagsAll()[id + '|' + date] || null; }
+  function attTagSet(id, date, status){
+    const all = attTagsAll(), key = id + '|' + date;
+    const found = scFindMember(id);
+    if (!status){ delete all[key]; }
+    else {
+      all[key] = { sdr_id:id, sdr:found ? found.m.display : id, team:found ? found.team.name : '',
+                   date:date, status:status, taggedBy:_tagWho || '', at:new Date().toISOString() };
+    }
+    attTagsSave(all);
+    attMergeTags();
+    if (status && ATT_TAG_POST_URL){
+      try {
+        fetch(ATT_TAG_POST_URL, { method:'POST', mode:'no-cors',
+          headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+          body: JSON.stringify(Object.assign({ record:'attendance' }, all[key])) });
+      } catch (e){}
+    }
+    renderAttendance();
+  }
+  // Layer tags over the sheet: one row per person per day, the tag winning where both exist.
+  // The sheet rows are kept pristine and the merged view rebuilt from them each time, because
+  // filtering rawAttRows in place threw the sheet's own row away, so clearing a tag left the
+  // day blank instead of falling back to what the sheet said.
+  let _attSheetRows = [], _attTagCount = 0;
+  function attMergeTags(){
+    if (!Array.isArray(_attSheetRows)) return;
+    const tags = attTagsAll(), keys = Object.keys(tags);
+    _attTagCount = keys.length;
+    if (!keys.length){ rawAttRows = _attSheetRows.slice(); return; }
+    const override = {};
+    keys.forEach(function(k){ override[k] = tags[k]; });
+    const kept = _attSheetRows.filter(function(r){
+      const d = normalizeDate(r.rawDate); if (!d) return true;
+      const id = resolveAgent(r.name); if (!id) return true;
+      return !override[id + '|' + d];
+    });
+    keys.forEach(function(k){
+      const t = tags[k];
+      kept.push({ rawDate:t.date, name:t.sdr, status:t.status, commitment:'', month:'', week:'', team:t.team, schedule:'', _tag:true });
+    });
+    rawAttRows = kept;
+  }
+
+  // The rostered shift for a person on a date, from the uploaded schedule for that month, or
+  // the most recent one if that month has none.
+  function attSchedFor(id, date){
+    const all = schGetAll(), ym = date.slice(0,7);
+    let src = all[ym];
+    if (!src){ const ps = Object.keys(all).sort(); for (const k of ps) if (k <= ym) src = all[k]; }
+    if (!src) return null;
+    const row = (src.rows || []).find(function(r){ return r.id === id; });
+    return row || null;
+  }
+  function attStartTime(shift){
+    const m = String(shift || '').match(/(\d{1,2})(:\d{2})?\s*(AM|PM)/i);
+    return m ? (m[1] + (m[2] || '') + ' ' + m[3].toUpperCase()) : '';
+  }
+  function attDow(date){ const p = date.split('-').map(Number); return SCH_DAYS[new Date(p[0], p[1]-1, p[2]).getDay()]; }
+
+  function renderAttTag(container){
+    const NAVY='#0D1A6E', SLATE='#5B6678', BORDER='var(--border)';
+    const today = localIso(new Date());
+    if (!_tagDate) _tagDate = today;
+    const Q = String.fromCharCode(39);
+    const tlOpts = ['<option value="">Who is tagging…</option>'].concat(
+      TEAM_LEADERS.map(function(t){ return '<option value="' + esc(t.name) + '"' + (_tagWho === t.name ? ' selected' : '') + '>' + esc(t.name) + '</option>'; })
+        .concat(['<option value="Ritch Joy Manipol"' + (_tagWho === 'Ritch Joy Manipol' ? ' selected' : '') + '>Ritch Joy Manipol</option>'])
+    ).join('');
+    const teams = TEAMS.filter(function(t){ return t.id !== 'poc'; });
+    const teamOpts = '<option value="">All teams</option>' + teams.map(function(t){ return '<option value="' + t.id + '"' + (_tagTeam === t.id ? ' selected' : '') + '>' + esc(t.name) + '</option>'; }).join('');
+
+    const bar = '<div style="background:#fff;border:1px solid ' + BORDER + ';border-radius:12px;padding:12px 14px;margin-bottom:14px">'
+      + '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'
+      + '<input type="date" value="' + _tagDate + '" max="' + today + '" onchange="_tagDate=this.value;renderAttendance()" style="padding:5px 8px;border:1px solid ' + BORDER + ';border-radius:7px;font-size:12px">'
+      + '<select class="week-select" onchange="_tagWho=this.value;renderAttendance()">' + tlOpts + '</select>'
+      + '<select class="week-select" onchange="_tagTeam=this.value;renderAttendance()">' + teamOpts + '</select>'
+      + '<span style="font-size:11px;color:' + SLATE + '">' + attDow(_tagDate) + '</span>'
+      + '</div>'
+      + '<div style="font-size:10.5px;color:' + SLATE + ';margin-top:7px;line-height:1.6">'
+      + (ATT_TAG_CSV_URL
+          ? 'Tags are shared through the Attendance tab.'
+          : '<b style="color:#C97000">Tags are saved in this browser only.</b> They already count everywhere in the dashboard, including appraisals, but other leaders will not see them until the Apps Script has an attendance branch and its tab is published.')
+      + ' The expected start time comes from the uploaded schedule, so upload one for the month to see it.</div></div>';
+
+    let body = '';
+    teams.forEach(function(t){
+      if (_tagTeam && t.id !== _tagTeam) return;
+      const mem = t.members.filter(function(m){ return !m.hidden; });
+      if (!mem.length) return;
+      const rows = mem.map(function(m, i){
+        const sch = attSchedFor(m.id, _tagDate);
+        const isOff = sch && sch.off && sch.off === attDow(_tagDate);
+        const start = sch ? attStartTime(sch.shift) : '';
+        const tag = attTagGet(m.id, _tagDate);
+        // whatever the master sheet already says for this person and day
+        let sheet = '';
+        for (const r of rawAttRows){
+          if (r._tag) continue;
+          if (normalizeDate(r.rawDate) !== _tagDate) continue;
+          if (resolveAgent(r.name) !== m.id) continue;
+          sheet = (r.status || '').trim(); break;
+        }
+        const cur = tag ? tag.status : sheet;
+        const btns = ATT_STATUSES.map(function(s){
+          const on = cur && cur.toLowerCase() === s.v.toLowerCase();
+          return '<button title="' + esc(s.t || s.v) + '" onclick="attTagSet(' + Q + m.id + Q + ',' + Q + _tagDate + Q + ',' + Q + s.v + Q + ')" '
+            + 'style="border:1px solid ' + (on ? s.c : BORDER) + ';background:' + (on ? s.c : '#fff') + ';color:' + (on ? '#fff' : SLATE)
+            + ';font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:6px;cursor:pointer;margin-right:4px">' + s.v + '</button>';
+        }).join('');
+        return '<tr style="background:' + (i%2?'#F8FAFD':'#fff') + ';border-top:1px solid ' + BORDER + '">'
+          + '<td style="padding:7px 10px;font-size:12.5px;color:' + NAVY + ';white-space:nowrap">' + esc(m.display)
+            + (isOff ? ' <span style="background:#EEF0FB;color:' + NAVY + ';font-size:9.5px;font-weight:700;padding:1px 6px;border-radius:5px">rostered off</span>' : '') + '</td>'
+          + '<td style="padding:7px 10px;font-size:11.5px;color:' + SLATE + ';white-space:nowrap">' + (start ? esc(start) : '<span style="color:#C9CEDA">no schedule</span>') + '</td>'
+          + '<td style="padding:7px 10px;white-space:nowrap">' + btns + '</td>'
+          + '<td style="padding:7px 10px;font-size:11px;white-space:nowrap;color:' + SLATE + '">'
+            + (tag ? '<b style="color:' + NAVY + '">tagged</b>' + (tag.taggedBy ? ' by ' + esc(tag.taggedBy) : '') + ' <a href="#" onclick="attTagSet(' + Q + m.id + Q + ',' + Q + _tagDate + Q + ',' + Q + Q + ');return false;" style="color:#C00">clear</a>'
+                  : sheet ? 'from the sheet' : 'not recorded')
+          + '</td></tr>';
+      }).join('');
+      body += '<div style="background:#fff;border:1px solid ' + BORDER + ';border-radius:12px;overflow:hidden;margin-bottom:14px">'
+        + '<div style="background:' + esc(t.color) + ';padding:9px 14px;color:#fff;font-weight:800;font-size:13px">' + esc(t.name) + '</div>'
+        + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:720px"><thead><tr>'
+        + ['SDR','Expected in','Tag','Source'].map(function(x){ return '<th style="padding:7px 10px;background:#F3F5FC;color:' + NAVY + ';font-size:10px;text-transform:uppercase;letter-spacing:.4px;text-align:left">' + x + '</th>'; }).join('')
+        + '</tr></thead><tbody>' + rows + '</tbody></table></div></div>';
+    });
+    container.innerHTML = bar + body;
   }
 
   // Day-by-day matrix for a week. This lived on the Schedule page, where it was meant to show
