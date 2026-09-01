@@ -4903,7 +4903,12 @@
 
   // ── ATTENDANCE ──
   const ATTENDANCE_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS7dxiU_QuiUUcseHRZR9gVIFE55TnroOfzq7TfzxYbFN3J1pi6SaOPFlyRQayTuERcoBW0ZcGH6aiV/pub?output=csv';
-  let rawAttRows = [], attView = 'daily', _attLoaded = false, _attLoading = false;
+  // _attSheetRows holds the sheet exactly as parsed and rawAttRows is the merged view over
+  // it. Both are declared here, above every use: they were declared beside attMergeTags far
+  // lower down, so loading attendance touched them before that line had run and threw
+  // "Cannot access '_attSheetRows' before initialization".
+  let rawAttRows = [], _attSheetRows = [], _attTagCount = 0, _attRemoteTags = {},
+      attView = 'daily', _attLoaded = false, _attLoading = false;
 
   function parseAttendanceCSV(text) {
     const lines = splitCsvRows(text.trim());
@@ -5320,7 +5325,6 @@
   // The tab is append-only, so re-tagging the same day leaves both rows and the later one is
   // the current call. A leader's own tag also has to beat the tab briefly, because publishing
   // lags the POST by a minute or two and their screen should not appear to undo their click.
-  let _attRemoteTags = {};
   function attTagsMerged(){
     const out = {};
     const take = function(src){
@@ -5357,7 +5361,6 @@
   // The sheet rows are kept pristine and the merged view rebuilt from them each time, because
   // filtering rawAttRows in place threw the sheet's own row away, so clearing a tag left the
   // day blank instead of falling back to what the sheet said.
-  let _attSheetRows = [], _attTagCount = 0;
   function attMergeTags(){
     if (!Array.isArray(_attSheetRows)) return;
     const tags = attTagsMerged(), keys = Object.keys(tags);
