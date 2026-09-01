@@ -4944,6 +4944,7 @@
       if (!res.ok) throw new Error('HTTP ' + res.status);
       _attSheetRows = parseAttendanceCSV(await res.text());
       attMergeTags();   // a leader's own tags win over the sheet for that person and day
+      loadAttTags();    // and the shared tab brings in everyone else's
       _attLoaded = true;
       if ($('attErrorBanner')) $('attErrorBanner').classList.remove('show');
       if ($('attendanceSection').style.display !== 'none') renderAttendance();
@@ -5297,7 +5298,7 @@
   // shared. Tags are merged over the master sheet for the same person and day, so everything
   // downstream, attendance rates, appraisals, scorecards, sees them without further plumbing.
   const ATT_TAG_POST_URL = (typeof COACH_LOG_POST_URL !== 'undefined') ? COACH_LOG_POST_URL : '';
-  const ATT_TAG_CSV_URL  = '';   // published CSV of the Attendance tab, once it exists
+  const ATT_TAG_CSV_URL  = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSr9FXCEpsr01V3nxJhB4UZIH2AJqteMzsJ3YoNQO_r33FzI8XE53Xs0D1k21RI2AAfci5y79H89HBv/pub?gid=1168608807&single=true&output=csv';   // published CSV of the Attendance tab
   const ATT_STATUSES = [
     { v:'Present',   c:'#0E9F6E' },
     { v:'Late',      c:'#C97000' },
@@ -5310,14 +5311,31 @@
   ];
   let _tagDate = '', _tagWho = '', _tagTeam = '';
 
-  function attTagsAll(){
+  function attTagsLocal(){
     try { const o = JSON.parse(localStorage.getItem('oaAttTags') || '{}'); return (o && typeof o === 'object') ? o : {}; }
     catch (e){ return {}; }
   }
   function attTagsSave(o){ try { localStorage.setItem('oaAttTags', JSON.stringify(o)); } catch (e){} }
-  function attTagGet(id, date){ return attTagsAll()[id + '|' + date] || null; }
+  // Everyone's tags, this browser's and the shared tab's, with the newest write winning.
+  // The tab is append-only, so re-tagging the same day leaves both rows and the later one is
+  // the current call. A leader's own tag also has to beat the tab briefly, because publishing
+  // lags the POST by a minute or two and their screen should not appear to undo their click.
+  let _attRemoteTags = {};
+  function attTagsMerged(){
+    const out = {};
+    const take = function(src){
+      Object.keys(src).forEach(function(k){
+        const t = src[k];
+        if (!out[k] || String(t.at || '') >= String(out[k].at || '')) out[k] = t;
+      });
+    };
+    take(_attRemoteTags);
+    take(attTagsLocal());
+    return out;
+  }
+  function attTagGet(id, date){ return attTagsMerged()[id + '|' + date] || null; }
   function attTagSet(id, date, status){
-    const all = attTagsAll(), key = id + '|' + date;
+    const all = attTagsLocal(), key = id + '|' + date;
     const found = scFindMember(id);
     if (!status){ delete all[key]; }
     else {
@@ -5342,7 +5360,7 @@
   let _attSheetRows = [], _attTagCount = 0;
   function attMergeTags(){
     if (!Array.isArray(_attSheetRows)) return;
-    const tags = attTagsAll(), keys = Object.keys(tags);
+    const tags = attTagsMerged(), keys = Object.keys(tags);
     _attTagCount = keys.length;
     if (!keys.length){ rawAttRows = _attSheetRows.slice(); return; }
     const override = {};
@@ -5357,6 +5375,37 @@
       kept.push({ rawDate:t.date, name:t.sdr, status:t.status, commitment:'', month:'', week:'', team:t.team, schedule:'', _tag:true });
     });
     rawAttRows = kept;
+  }
+
+  async function loadAttTags(){
+    if (!ATT_TAG_CSV_URL) return;
+    try {
+      const res = await fetch(ATT_TAG_CSV_URL + '&t=' + Date.now());
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const lines = splitCsvRows((await res.text()).trim());
+      if (lines.length < 2) { _attRemoteTags = {}; return; }
+      const h = splitLine(lines[0]).map(function(x){ return x.trim().toLowerCase(); });
+      const ix = function(n){ return h.indexOf(n); };
+      const iAt = ix('at'), iDate = ix('date'), iSdr = ix('sdr'), iId = ix('sdr_id'),
+            iTeam = ix('team'), iStat = ix('status'), iBy = ix('taggedby');
+      const out = {};
+      for (let i = 1; i < lines.length; i++){
+        const c = splitLine(lines[i]);
+        const date = normalizeDate((c[iDate] || '').trim());
+        const status = (c[iStat] || '').trim();
+        if (!date || !status) continue;
+        // Trust the resolved name over a stored id, so a row typed by hand still lands.
+        let id = (c[iId] || '').trim();
+        if (!id || !scFindMember(id)) id = resolveAgent((c[iSdr] || '').trim());
+        if (!id || !scFindMember(id)) continue;               // unknown person, or the test row
+        const rec = { sdr_id:id, sdr:(c[iSdr]||'').trim(), team:(c[iTeam]||'').trim(),
+                      date:date, status:status, taggedBy:(c[iBy]||'').trim(), at:(c[iAt]||'').trim() };
+        const k = id + '|' + date;
+        if (!out[k] || String(rec.at) >= String(out[k].at)) out[k] = rec;   // last write wins
+      }
+      _attRemoteTags = out;
+      attMergeTags();
+    } catch (err){ /* the sheet is optional; local tags still work */ }
   }
 
   // The rostered shift for a person on a date, from the uploaded schedule for that month, or
@@ -5396,8 +5445,8 @@
       + '</div>'
       + '<div style="font-size:10.5px;color:' + SLATE + ';margin-top:7px;line-height:1.6">'
       + (ATT_TAG_CSV_URL
-          ? 'Tags are shared through the Attendance tab.'
-          : '<b style="color:#C97000">Tags are saved in this browser only.</b> They already count everywhere in the dashboard, including appraisals, but other leaders will not see them until the Apps Script has an attendance branch and its tab is published.')
+          ? 'Tags are shared: each one is written to the Attendance tab and every leader reads the same tab. Re-tagging a day keeps both entries and the newest counts, so there is a record of who changed what. Publishing lags a click by a minute or two, which is why your own tag shows here immediately.'
+          : '<b style="color:#C97000">Tags are saved in this browser only</b> until the Attendance tab is published.')
       + ' The expected start time comes from the uploaded schedule, so upload one for the month to see it.</div></div>';
 
     let body = '';
