@@ -5116,8 +5116,7 @@
       if (!mon) return;
       const dates = getBusinessDaysFrom(mon);
       $('attHeading').textContent = 'Attendance — Week of ' + wtdRangeLabel(dates);
-      const rows = rawAttRows.filter(r => { const d = normalizeDate(r.rawDate); return d && dates.includes(d); });
-      renderAttPeriod(c, rows);
+      renderAttWeek(c, dates);
     } else if (attView === 'grid') {
       const mon = $('attWeekSelect').value;
       if (!mon) return;
@@ -5589,6 +5588,86 @@
     }).join('');
     container.innerHTML = '<div style="margin-bottom:12px;font-size:11px;color:' + SLATE + '">' + legend
       + '<span style="margin-left:6px">&middot; a dot means nothing was logged for that day</span></div>' + html;
+  }
+
+  // Weekly view. The old one showed only a total, 1/1 and 100%, which answers "how much" but
+  // never "what happened when". Each person now carries the days of that week, so a Monday
+  // late reads as a Monday late instead of disappearing into a percentage.
+  const ATT_DAY_STYLE = {
+    present:   { bg:'#E9F7EF', fg:'#0E7A45', bd:'#B7E3C8', short:'Present' },
+    late:      { bg:'#FFF4E5', fg:'#B45309', bd:'#FBD9A5', short:'Late' },
+    undertime: { bg:'#FFF4E5', fg:'#B45309', bd:'#FBD9A5', short:'Undertime' },
+    absent:    { bg:'#FDECEC', fg:'#C00000', bd:'#F4BFBF', short:'Absent' },
+    ncns:      { bg:'#FBE3E3', fg:'#7F1D1D', bd:'#E9A8A8', short:'NCNS' },
+    'on leave':{ bg:'#F1ECFD', fg:'#5B21B6', bd:'#D6C9F7', short:'On leave' },
+    off:       { bg:'#F1F3F7', fg:'#5B6678', bd:'#DDE1E9', short:'Off' },
+    rdot:      { bg:'#EAEFFC', fg:'#1A2DB5', bd:'#C3CEF3', short:'RDOT' },
+    suspended: { bg:'#FBE3E3', fg:'#7F1D1D', bd:'#E9A8A8', short:'Suspended' }
+  };
+  function attDayStyle(status){
+    const s = (status || '').toLowerCase().trim();
+    return ATT_DAY_STYLE[s] || { bg:'#FFFFFF', fg:'#9AA3B2', bd:'#E2E5EC', short: status || 'not logged' };
+  }
+  function renderAttWeek(container, dates){
+    const NAVY='#0C1F42', SLATE='#5B6678', BORDER='var(--border)';
+    // status per person per day, keyed on the resolved member so a differently spelled name
+    // still lands on the right row
+    const cell = {};
+    for (const r of rawAttRows){
+      const d = normalizeDate(r.rawDate); if (!d || dates.indexOf(d) < 0) continue;
+      const id = resolveAgent(r.name); if (!id) continue;
+      cell[id + '|' + d] = (r.status || '').trim();
+    }
+    const dayMeta = dates.map(function(d){
+      const p = d.split('-').map(Number), dt = new Date(p[0], p[1]-1, p[2]);
+      return { iso:d, dow:dt.toLocaleDateString('en-US',{weekday:'short'}), num:dt.getDate(),
+               mon:dt.toLocaleDateString('en-US',{month:'short'}) };
+    });
+    let html = '';
+    for (const team of TEAMS){
+      const visible = team.members.filter(function(m){ return !m.hidden; });
+      if (!visible.length) continue;
+      let tA = 0, tS = 0;
+      const rows = visible.map(function(m){
+        let att = 0, sch = 0;
+        const days = dayMeta.map(function(dm){
+          const st = cell[m.id + '|' + dm.iso];
+          if (st !== undefined){
+            if (isScheduled(st)) sch++;
+            if (isAttended(st))  att++;
+          }
+          const sty = attDayStyle(st);
+          return '<div style="flex:1;min-width:74px;border:1px solid ' + sty.bd + ';background:' + sty.bg
+            + ';border-radius:8px;padding:5px 6px;text-align:center">'
+            + '<div style="font-size:9px;letter-spacing:.3px;text-transform:uppercase;color:' + SLATE + '">' + dm.dow + ' ' + dm.num + '</div>'
+            + '<div style="font-size:11.5px;font-weight:700;color:' + sty.fg + ';margin-top:2px;white-space:nowrap">' + esc(sty.short) + '</div>'
+            + '</div>';
+        }).join('');
+        tA += att; tS += sch;
+        const pct = sch ? Math.round(att/sch*100) : null;
+        const col = pct === null ? '#9AA3B2' : pct >= 90 ? '#0E7A45' : pct >= 75 ? '#B45309' : '#C00000';
+        return '<div style="border-top:1px solid ' + BORDER + ';padding:9px 14px;display:flex;gap:14px;align-items:center;flex-wrap:wrap">'
+          + '<div style="min-width:190px;flex-shrink:0">'
+            + '<div style="font-size:13px;font-weight:700;color:' + NAVY + '">' + esc(m.display) + '</div>'
+            + '<div style="font-size:11px;color:' + col + ';font-weight:700">' + (sch ? att + '/' + sch + ' days · ' + pct + '%' : 'nothing logged') + '</div>'
+          + '</div>'
+          + '<div style="display:flex;gap:6px;flex:1;flex-wrap:wrap">' + days + '</div>'
+          + '</div>';
+      }).join('');
+      const rate = tS ? Math.round(tA/tS*100) : 0;
+      html += '<div style="background:#fff;border:1px solid ' + BORDER + ';border-radius:12px;overflow:hidden;margin-bottom:16px">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:' + esc(team.color) + ';color:#fff">'
+          + '<span style="font-weight:800;font-size:13px">' + esc(team.name) + '</span>'
+          + '<span style="font-size:11.5px;font-weight:700">' + tA + '/' + tS + ' days · ' + rate + '%</span>'
+        + '</div>' + rows + '</div>';
+    }
+    const legend = ['Present','Late','Absent','NCNS','On leave','Off','RDOT'].map(function(k){
+      const s = attDayStyle(k);
+      return '<span style="border:1px solid ' + s.bd + ';background:' + s.bg + ';color:' + s.fg
+        + ';font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:6px;margin-right:6px">' + k + '</span>';
+    }).join('');
+    container.innerHTML = '<div style="margin-bottom:12px;font-size:11px;color:' + SLATE + '">' + legend
+      + '<span style="margin-left:4px">· a blank day means nothing was logged</span></div>' + html;
   }
 
   function renderAttPeriod(container, rows) {
