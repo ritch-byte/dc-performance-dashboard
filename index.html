@@ -7168,21 +7168,248 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
   //  the selected Month/Week into Team -> SDR -> per-day shift, tinted by
   //  attendance status. Updates automatically when the sheet changes.
   // ══════════════════════════════════════════════════════════════════
-  // The day-by-day attendance matrix that used to live here now sits on the Attendance page
-  // under "Week grid", where it belongs. This page is deliberately empty, waiting on what it
-  // is actually for, rather than left showing a second copy of attendance.
-  function renderSchedule() {
+  // ── FLOOR SCHEDULE ────────────────────────────────────────────────────────
+  // Rostered shift, off day and rest days per SDR, uploaded as a CSV and kept per period so a
+  // new month never overwrites the old one. Deliberately NOT the same thing as the TEAMS
+  // roster: a schedule is what was planned for one month, the roster is who works here now, and
+  // conflating them would let a partial schedule file quietly delete people from the dashboard.
+  const SCH_KEY = 'oaSchedules';
+  const SCH_DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  let _schYm = '';
+
+  function schGetAll(){
+    try { const o = JSON.parse(localStorage.getItem(SCH_KEY) || '{}'); return (o && typeof o === 'object') ? o : {}; }
+    catch (e){ return {}; }
+  }
+  function schSaveAll(o){ try { localStorage.setItem(SCH_KEY, JSON.stringify(o)); return true; } catch (e){ return false; } }
+  function schPeriods(){ return Object.keys(schGetAll()).sort().reverse(); }
+  function schLabel(ym){ const p = ym.split('-').map(Number); return new Date(p[0], p[1]-1, 1).toLocaleDateString('en-US',{month:'long',year:'numeric'}); }
+
+  // Tolerant parse: find the header row rather than assuming line 1, map by column name, and
+  // stop cleanly at the management block or the trailing notes.
+  function schParseCsv(text){
+    const lines = splitCsvRows(String(text || '').replace(/\r/g,'').trim());
+    const warn = [];
+    let hdrIdx = -1, hdr = null;
+    for (let i = 0; i < Math.min(lines.length, 15); i++){
+      const c = splitLine(lines[i]).map(function(x){ return x.trim().toLowerCase(); });
+      if (c.indexOf('team') >= 0 && (c.indexOf('shift') >= 0 || c.indexOf('off day') >= 0)){ hdrIdx = i; hdr = c; break; }
+    }
+    if (hdrIdx < 0) return { rows:[], mgmt:[], warnings:['Could not find a header row containing Team and Shift. Expected columns like Full Name, Team, Shift, Off Day.'] };
+    const col = function(){ for (let i = 0; i < arguments.length; i++){ const j = hdr.indexOf(arguments[i]); if (j >= 0) return j; } return -1; };
+    const iName = col('full name (legal)','full name','name','legal name');
+    const iTeam = col('team'), iShift = col('shift'), iOff = col('off day','off'), iRest = col('rest days','rest');
+    const iBatch = col('batch'), iNote = col('role / notes','role/notes','notes','role'), iEmp = col('emp #','emp','employee #');
+    if (iName < 0) return { rows:[], mgmt:[], warnings:['The header has no name column.'] };
+    const rows = [], mgmt = [];
+    let inMgmt = false;
+    for (let i = hdrIdx + 1; i < lines.length; i++){
+      const c = splitLine(lines[i]);
+      const first = (c[0] || '').trim();
+      const joined = c.join('').trim();
+      if (!joined) continue;                                   // blank separator row
+      if (/^management/i.test(first)){ inMgmt = true; continue; }
+      if (/^seating/i.test(first)) continue;                   // trailing note
+      if (inMgmt){
+        // The management block re-heads its own columns: Emp #, Name, Role, Team, Shift, Off Day
+        if (/^emp/i.test(first)) continue;
+        const nm = (c[1] || '').trim(); if (!nm) continue;
+        mgmt.push({ name:nm, role:(c[2]||'').trim(), team:(c[3]||'').trim(), shift:(c[4]||'').trim(), off:(c[5]||'').trim() });
+        continue;
+      }
+      const name = (c[iName] || '').trim(); if (!name) continue;
+      const r = {
+        emp:   iEmp   >= 0 ? (c[iEmp]   || '').trim() : '',
+        name:  name,
+        batch: iBatch >= 0 ? (c[iBatch] || '').trim() : '',
+        team:  iTeam  >= 0 ? (c[iTeam]  || '').trim() : '',
+        shift: iShift >= 0 ? (c[iShift] || '').trim() : '',
+        off:   iOff   >= 0 ? (c[iOff]   || '').trim() : '',
+        rest:  iRest  >= 0 ? (c[iRest]  || '').trim() : '',
+        note:  iNote  >= 0 ? (c[iNote]  || '').trim() : ''
+      };
+      if (r.emp === '-' || /^\W$/.test(r.emp)) r.emp = '';      // placeholder for a pending OA ID
+      r.id = resolveAgent(name) || null;
+      if (!r.id) warn.push('No dashboard roster match for ' + name);
+      if (r.off && SCH_DAYS.indexOf(r.off) < 0) warn.push('Unrecognised off day for ' + name + ': ' + r.off);
+      rows.push(r);
+    }
+    return { rows:rows, mgmt:mgmt, warnings:warn };
+  }
+
+  function schHandleFile(input){
+    const f = input.files && input.files[0]; if (!f) return;
+    const rd = new FileReader();
+    rd.onload = function(){ schStage(String(rd.result || ''), f.name); };
+    rd.readAsText(f);
+    input.value = '';
+  }
+  function schHandlePaste(){
+    const el = $('schPaste'); if (!el || !el.value.trim()) return;
+    schStage(el.value, 'pasted text');
+  }
+  let _schStaged = null;
+  function schStage(text, source){
+    const parsed = schParseCsv(text);
+    _schStaged = { parsed:parsed, source:source, text:text };
+    renderSchedule();
+  }
+  function schDiscard(){ _schStaged = null; const el = $('schPaste'); if (el) el.value = ''; renderSchedule(); }
+  function schCommit(){
+    if (!_schStaged || !_schStaged.parsed.rows.length) return;
+    const ym = ($('schTargetMonth') && $('schTargetMonth').value) || localIso(new Date()).slice(0,7);
+    const all = schGetAll();
+    all[ym] = { savedAt:new Date().toISOString(), source:_schStaged.source,
+                rows:_schStaged.parsed.rows, mgmt:_schStaged.parsed.mgmt };
+    if (!schSaveAll(all)){ alert('Could not save the schedule: this browser refused local storage.'); return; }
+    _schStaged = null; _schYm = ym;
+    const el = $('schPaste'); if (el) el.value = '';
+    renderSchedule();
+  }
+  function schDelete(ym){
+    if (!confirm('Remove the ' + schLabel(ym) + ' schedule from this browser?')) return;
+    const all = schGetAll(); delete all[ym]; schSaveAll(all);
+    if (_schYm === ym) _schYm = '';
+    renderSchedule();
+  }
+
+  // Attendance cross-check: a person marked absent or late on their own rostered off day is
+  // almost always a logging slip rather than a real absence, and it drags their appraisal down.
+  function schOffDayConflicts(ym, rows){
+    if (!_attLoaded) return null;
+    const out = [];
+    const byId = {}; rows.forEach(function(r){ if (r.id && r.off) byId[r.id] = r; });
+    for (const ar of rawAttRows){
+      const d = normalizeDate(ar.rawDate); if (!d || d.slice(0,7) !== ym) continue;
+      const id = resolveAgent(ar.name); if (!id || !byId[id]) continue;
+      const p = d.split('-').map(Number);
+      const dow = SCH_DAYS[new Date(p[0], p[1]-1, p[2]).getDay()];
+      if (dow !== byId[id].off) continue;
+      const st = (ar.status || '').toLowerCase().trim();
+      if (st === 'absent' || st === 'ncns' || st === 'late' || st === 'undertime')
+        out.push({ name:byId[id].name, date:d, day:dow, status:(ar.status || '').trim() });
+    }
+    return out;
+  }
+
+  function renderSchedule(){
     const el = $('scheduleBody'); if (!el) return;
-    const lbl = $('schedWeekLabel'); if (lbl) lbl.textContent = '';
-    el.innerHTML = '<div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:40px 28px;text-align:center">'
-      + '<div style="font-size:15px;font-weight:800;color:#0D1A6E">Nothing here yet</div>'
-      + '<div style="font-size:13px;color:var(--slate);line-height:1.6;margin-top:8px;max-width:560px;margin-left:auto;margin-right:auto">'
-      + 'This page used to show a day-by-day attendance matrix, which was really a second view of Attendance rather than a schedule. '
-      + 'It has moved to <b>Attendance &rarr; Week grid</b>.'
-      + '<br><br>The original intent was the shift each SDR is rostered for, tinted by whether they turned up, but the attendance sheet no longer carries a Schedule column, so the shift was always blank.'
+    if (!_attLoaded && !_attLoading) loadAttendanceData();
+    const NAVY='#0D1A6E', SLATE='#5B6678', BORDER='var(--border)', GOOD='#0E9F6E', WARN='#C97000', BAD='#C00000';
+    const all = schGetAll(), periods = schPeriods();
+    if (!_schYm || periods.indexOf(_schYm) < 0) _schYm = periods[0] || '';
+    const lbl = $('schedWeekLabel'); if (lbl) lbl.textContent = _schYm ? schLabel(_schYm) : '';
+
+    // month options for the upload target: this month plus the next three
+    const now = new Date(); const opts = [];
+    for (let i = 0; i < 4; i++){ const d = new Date(now.getFullYear(), now.getMonth() + i, 1); opts.push(localIso(d).slice(0,7)); }
+
+    const Q = String.fromCharCode(39);
+    const upload = '<div style="background:#fff;border:1px solid ' + BORDER + ';border-radius:12px;padding:14px 16px;margin-bottom:16px">'
+      + '<div style="font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:' + NAVY + '">Upload a schedule</div>'
+      + '<div style="font-size:11.5px;color:' + SLATE + ';margin-top:6px;line-height:1.6">A CSV with a header row containing at least <b>Full Name</b>, <b>Team</b>, <b>Shift</b> and <b>Off Day</b>. Batch, Rest Days and Role / Notes are used when present, and a Management / Support block at the end is read separately. Each upload is filed under a month, so a new one never overwrites an old one.</div>'
+      + '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px">'
+        + '<span style="font-size:11.5px;color:' + NAVY + ';font-weight:700">Applies to</span>'
+        + '<select id="schTargetMonth" class="week-select">' + opts.map(function(m){ return '<option value="' + m + '">' + schLabel(m) + '</option>'; }).join('') + '</select>'
+        + '<input type="file" accept=".csv,text/csv" onchange="schHandleFile(this)" style="font-size:11.5px">'
       + '</div>'
-      + '<div style="margin-top:14px"><a href="#" onclick="showPage(' + String.fromCharCode(39) + 'attendance' + String.fromCharCode(39) + ');setAttView(' + String.fromCharCode(39) + 'grid' + String.fromCharCode(39) + ');return false;" style="background:#1A2DB5;color:#fff;text-decoration:none;font-size:13px;font-weight:700;padding:9px 18px;border-radius:9px;display:inline-block">Open the week grid</a></div>'
+      + '<div style="margin-top:8px"><textarea id="schPaste" rows="3" placeholder="…or paste the CSV here" style="width:100%;padding:7px 9px;border:1px solid ' + BORDER + ';border-radius:6px;font-size:11.5px;font-family:monospace;resize:vertical"></textarea>'
+      + '<button class="cl-chip" style="margin-top:6px" onclick="schHandlePaste()">Read pasted text</button></div>'
       + '</div>';
+
+    // staged preview, shown before anything is stored
+    let staged = '';
+    if (_schStaged){
+      const P = _schStaged.parsed;
+      const unmatched = P.rows.filter(function(r){ return !r.id; });
+      staged = '<div style="background:#fff;border:2px solid ' + NAVY + ';border-radius:12px;padding:14px 16px;margin-bottom:16px">'
+        + '<div style="font-size:12px;font-weight:800;color:' + NAVY + '">Preview &middot; ' + esc(_schStaged.source) + '</div>'
+        + '<div style="font-size:12px;color:var(--ink);margin-top:6px">' + P.rows.length + ' SDR row' + (P.rows.length===1?'':'s')
+          + (P.mgmt.length ? ' and ' + P.mgmt.length + ' management row' + (P.mgmt.length===1?'':'s') : '')
+          + ', ' + (P.rows.length - unmatched.length) + ' matched to the roster.</div>'
+        + (P.warnings.length ? '<ul style="margin:8px 0 0;padding-left:17px">' + P.warnings.slice(0,8).map(function(w){ return '<li style="font-size:11px;color:' + WARN + '">' + esc(w) + '</li>'; }).join('')
+            + (P.warnings.length > 8 ? '<li style="font-size:11px;color:' + SLATE + '">and ' + (P.warnings.length-8) + ' more</li>' : '') + '</ul>' : '')
+        + '<div style="margin-top:10px;display:flex;gap:8px"><button class="cl-chip" onclick="schCommit()" style="background:' + NAVY + ';color:#fff;border-color:' + NAVY + '">Save this schedule</button>'
+        + '<button class="cl-chip" onclick="schDiscard()">Discard</button></div></div>';
+    }
+
+    if (!periods.length){
+      el.innerHTML = upload + staged
+        + '<div style="background:#fff;border:1px solid ' + BORDER + ';border-radius:12px;padding:34px 26px;text-align:center;color:' + SLATE + ';font-size:13px">No schedule uploaded yet.</div>';
+      return;
+    }
+
+    const cur = all[_schYm], rows = cur.rows || [], mgmt = cur.mgmt || [];
+    const picker = '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">'
+      + '<span style="font-size:11.5px;color:' + NAVY + ';font-weight:700">Period</span>'
+      + '<select class="week-select" onchange="_schYm=this.value;renderSchedule()">'
+      + periods.map(function(m){ return '<option value="' + m + '"' + (m === _schYm ? ' selected' : '') + '>' + schLabel(m) + '</option>'; }).join('')
+      + '</select>'
+      + '<span style="font-size:11px;color:' + SLATE + '">' + rows.length + ' SDRs &middot; from ' + esc(cur.source || 'upload') + ' &middot; saved ' + new Date(cur.savedAt).toLocaleString() + '</span>'
+      + '<button class="cl-chip" onclick="schDelete(' + Q + _schYm + Q + ')">Remove</button>'
+      + '<span style="font-size:10.5px;color:' + SLATE + '">Stored in this browser only, so it is not shared with other leaders yet.</span>'
+      + '</div>';
+
+    // one card per team, in the order the file lists them
+    const order = []; rows.forEach(function(r){ if (order.indexOf(r.team) < 0) order.push(r.team); });
+    const teamCards = order.map(function(tm){
+      const mem = rows.filter(function(r){ return r.team === tm; });
+      const offs = {}; mem.forEach(function(r){ offs[r.off] = (offs[r.off]||0)+1; });
+      const offTxt = Object.keys(offs).sort(function(a,b){ return offs[b]-offs[a]; }).map(function(k){ return (k||'unspecified') + ' ' + offs[k]; }).join(', ');
+      const body = mem.map(function(r, i){
+        const nest = /nest/i.test(r.note);
+        return '<tr style="background:' + (i%2?'#F8FAFD':'#fff') + ';border-top:1px solid ' + BORDER + '">'
+          + '<td style="padding:6px 10px;font-size:12px;color:' + NAVY + ';white-space:nowrap">' + esc(r.name)
+            + (r.id ? '' : ' <span style="color:' + BAD + ';font-size:10px">not on roster</span>') + '</td>'
+          + '<td style="padding:6px 10px;font-size:11px;color:' + SLATE + ';white-space:nowrap">' + esc(r.emp || '—') + '</td>'
+          + '<td style="padding:6px 10px;font-size:11px;color:' + SLATE + '">' + esc(r.batch || '—') + '</td>'
+          + '<td style="padding:6px 10px;font-size:11.5px;color:var(--ink);white-space:nowrap">' + esc(r.shift || '—') + '</td>'
+          + '<td style="padding:6px 10px;font-size:11.5px;font-weight:700;color:' + NAVY + ';white-space:nowrap">' + esc(r.off || '—') + '</td>'
+          + '<td style="padding:6px 10px;font-size:11px;color:' + SLATE + ';white-space:nowrap">' + esc(r.rest || '—') + '</td>'
+          + '<td style="padding:6px 10px;font-size:11px;color:' + (nest ? WARN : SLATE) + '">' + esc(r.note || '—') + '</td></tr>';
+      }).join('');
+      return '<div style="background:#fff;border:1px solid ' + BORDER + ';border-radius:12px;overflow:hidden;margin-bottom:16px">'
+        + '<div style="background:' + NAVY + ';padding:10px 14px;color:#fff"><span style="font-weight:800;font-size:13px">' + esc(tm) + '</span>'
+          + '<span style="font-size:11px;opacity:.85"> &middot; ' + mem.length + ' SDRs &middot; off days: ' + esc(offTxt) + '</span></div>'
+        + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:820px"><thead><tr>'
+        + ['SDR','Emp #','Batch','Shift','Off day','Rest days','Notes'].map(function(t){ return '<th style="padding:7px 10px;background:#F3F5FC;color:' + NAVY + ';font-size:10px;text-transform:uppercase;letter-spacing:.4px;text-align:left">' + t + '</th>'; }).join('')
+        + '</tr></thead><tbody>' + body + '</tbody></table></div></div>';
+    }).join('');
+
+    const mgmtCard = mgmt.length ? '<div style="background:#fff;border:1px solid ' + BORDER + ';border-radius:12px;overflow:hidden;margin-bottom:16px">'
+      + '<div style="background:' + SLATE + ';padding:9px 14px;color:#fff;font-weight:800;font-size:12px">Management and support</div>'
+      + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:560px"><tbody>'
+      + mgmt.map(function(m, i){ return '<tr style="background:' + (i%2?'#F8FAFD':'#fff') + ';border-top:1px solid ' + BORDER + '">'
+          + '<td style="padding:6px 10px;font-size:12px;color:' + NAVY + '">' + esc(m.name) + '</td>'
+          + '<td style="padding:6px 10px;font-size:11px;color:' + SLATE + '">' + esc(m.role) + '</td>'
+          + '<td style="padding:6px 10px;font-size:11px;color:' + SLATE + '">' + esc(m.team) + '</td>'
+          + '<td style="padding:6px 10px;font-size:11.5px;color:var(--ink)">' + esc(m.shift) + '</td>'
+          + '<td style="padding:6px 10px;font-size:11.5px;font-weight:700;color:' + NAVY + '">' + esc(m.off) + '</td></tr>'; }).join('')
+      + '</tbody></table></div></div>' : '';
+
+    // reconciliation against the live roster, in both directions
+    const inSched = new Set(rows.map(function(r){ return r.id; }).filter(Boolean));
+    const missing = [];
+    TEAMS.forEach(function(t){ if (t.id === 'poc') return;
+      t.members.forEach(function(m){ if (!m.hidden && !inSched.has(m.id)) missing.push(m.display + ' (' + t.name + ')'); }); });
+    const noMatch = rows.filter(function(r){ return !r.id; }).map(function(r){ return r.name; });
+    const conflicts = schOffDayConflicts(_schYm, rows);
+
+    const recon = '<div style="background:#fff;border:1px solid ' + BORDER + ';border-radius:12px;padding:14px 16px;margin-bottom:16px">'
+      + '<div style="font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:' + NAVY + '">Against the live roster</div>'
+      + '<div style="font-size:11.5px;color:' + SLATE + ';margin-top:6px;line-height:1.6">The schedule is stored on its own and never edits the roster, so a partial file cannot delete anyone. These are the differences.</div>'
+      + '<div style="margin-top:9px;font-size:12px;color:var(--ink)"><b style="color:' + (missing.length ? WARN : GOOD) + '">' + missing.length + '</b> on the roster with no line in this schedule'
+        + (missing.length ? ': <span style="color:' + SLATE + '">' + esc(missing.join(', ')) + '</span>' : '') + '</div>'
+      + '<div style="margin-top:5px;font-size:12px;color:var(--ink)"><b style="color:' + (noMatch.length ? BAD : GOOD) + '">' + noMatch.length + '</b> in the schedule that match nobody on the roster'
+        + (noMatch.length ? ': <span style="color:' + SLATE + '">' + esc(noMatch.join(', ')) + '</span>' : '') + '</div>'
+      + (conflicts == null
+          ? '<div style="margin-top:5px;font-size:12px;color:' + SLATE + '">Attendance still loading, so the off-day check has not run.</div>'
+          : '<div style="margin-top:5px;font-size:12px;color:var(--ink)"><b style="color:' + (conflicts.length ? WARN : GOOD) + '">' + conflicts.length + '</b> attendance day' + (conflicts.length===1?'':'s') + ' logged as absent, NCNS, late or undertime on someone&rsquo;s own rostered off day'
+            + (conflicts.length ? ': <span style="color:' + SLATE + '">' + esc(conflicts.slice(0,12).map(function(c){ return c.name + ' ' + c.date + ' (' + c.status + ')'; }).join('; ')) + (conflicts.length>12 ? ' and ' + (conflicts.length-12) + ' more' : '') + '</span>' : '')
+            + '</div>')
+      + '</div>';
+
+    el.innerHTML = upload + staged + picker + recon + teamCards + mgmtCard;
   }
 
   // ══════════════════════════════════════════════════════════════════
