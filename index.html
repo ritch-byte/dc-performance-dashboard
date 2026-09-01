@@ -7573,7 +7573,7 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
     catch (e){ return {}; }
   }
   function schSaveAll(o){ try { localStorage.setItem(SCH_KEY, JSON.stringify(o)); return true; } catch (e){ return false; } }
-  const SCH_CSV_URL = '';   // published CSV of the Schedule tab, once it exists
+  const SCH_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSr9FXCEpsr01V3nxJhB4UZIH2AJqteMzsJ3YoNQO_r33FzI8XE53Xs0D1k21RI2AAfci5y79H89HBv/pub?gid=1803207209&single=true&output=csv';   // published Schedule tab
   async function loadSchedules(){
     if (!SCH_CSV_URL) return;
     try {
