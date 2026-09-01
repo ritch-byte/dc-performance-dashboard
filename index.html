@@ -1660,12 +1660,29 @@
     if (mon) { $('selectedDate').value = mon; renderDashboard(); }
   }
 
-  (function init() {
+  // Attendance state lives here rather than beside the attendance code, because the init
+  // below calls loadAttendanceData immediately and that runs while the script is still being
+  // evaluated. Declared any lower, the very first line of that function reads _attLoading
+  // inside its temporal dead zone, the promise rejects, and attendance silently never loads
+  // on a fresh page. _attSheetRows is the sheet exactly as parsed; rawAttRows is the merged
+  // view over it once a leader's tags are layered on.
+  let rawAttRows = [], _attSheetRows = [], _attTagCount = 0, _attRemoteTags = {},
+      attView = 'daily', _attLoaded = false, _attLoading = false;
+
+  // Deferred rather than run inline. This used to be an IIFE, so it executed while the script
+  // was still being evaluated and reached functions whose module state is declared further
+  // down the file. Anything it touched inside its temporal dead zone threw, and because these
+  // are async the failure surfaced as a rejected promise or a load banner rather than a stack
+  // trace. Waiting for the document means every declaration has run before anything is called,
+  // which removes the whole class of problem instead of chasing one identifier at a time.
+  function init() {
     $('selectedDate').value = localIso(new Date());
     $('attDate').value = localIso(new Date());
     loadData();
     loadAttendanceData();
-  })();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else setTimeout(init, 0);
 
   async function loadData() {
     setDot('loading');
@@ -4903,12 +4920,6 @@
 
   // ── ATTENDANCE ──
   const ATTENDANCE_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS7dxiU_QuiUUcseHRZR9gVIFE55TnroOfzq7TfzxYbFN3J1pi6SaOPFlyRQayTuERcoBW0ZcGH6aiV/pub?output=csv';
-  // _attSheetRows holds the sheet exactly as parsed and rawAttRows is the merged view over
-  // it. Both are declared here, above every use: they were declared beside attMergeTags far
-  // lower down, so loading attendance touched them before that line had run and threw
-  // "Cannot access '_attSheetRows' before initialization".
-  let rawAttRows = [], _attSheetRows = [], _attTagCount = 0, _attRemoteTags = {},
-      attView = 'daily', _attLoaded = false, _attLoading = false;
 
   function parseAttendanceCSV(text) {
     const lines = splitCsvRows(text.trim());
@@ -5302,7 +5313,13 @@
   // tags live in the tagger's browser only, and the page says so rather than implying they are
   // shared. Tags are merged over the master sheet for the same person and day, so everything
   // downstream, attendance rates, appraisals, scorecards, sees them without further plumbing.
-  const ATT_TAG_POST_URL = (typeof COACH_LOG_POST_URL !== 'undefined') ? COACH_LOG_POST_URL : '';
+  // Resolved when a tag is posted, not while the script is still being evaluated.
+  // COACH_LOG_POST_URL is a const declared several hundred lines below this point, and a const
+  // in its temporal dead zone throws even for typeof, so reading it here aborted the whole
+  // script and took every page down, not just this one.
+  function attTagPostUrl(){
+    try { return COACH_LOG_POST_URL || ''; } catch (e){ return ''; }
+  }
   const ATT_TAG_CSV_URL  = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSr9FXCEpsr01V3nxJhB4UZIH2AJqteMzsJ3YoNQO_r33FzI8XE53Xs0D1k21RI2AAfci5y79H89HBv/pub?gid=1168608807&single=true&output=csv';   // published CSV of the Attendance tab
   const ATT_STATUSES = [
     { v:'Present',   c:'#0E9F6E' },
@@ -5348,9 +5365,10 @@
     }
     attTagsSave(all);
     attMergeTags();
-    if (status && ATT_TAG_POST_URL){
+    const postUrl = attTagPostUrl();
+    if (status && postUrl){
       try {
-        fetch(ATT_TAG_POST_URL, { method:'POST', mode:'no-cors',
+        fetch(postUrl, { method:'POST', mode:'no-cors',
           headers:{ 'Content-Type':'text/plain;charset=utf-8' },
           body: JSON.stringify(Object.assign({ record:'attendance' }, all[key])) });
       } catch (e){}
