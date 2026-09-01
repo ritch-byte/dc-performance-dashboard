@@ -7250,12 +7250,14 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
   }
   let _schStaged = null;
   function schStage(text, source){
+    if (schLocked()) return;
     const parsed = schParseCsv(text);
     _schStaged = { parsed:parsed, source:source, text:text };
     renderSchedule();
   }
   function schDiscard(){ _schStaged = null; const el = $('schPaste'); if (el) el.value = ''; renderSchedule(); }
   function schCommit(){
+    if (schLocked()) return;
     if (!_schStaged || !_schStaged.parsed.rows.length) return;
     const ym = ($('schTargetMonth') && $('schTargetMonth').value) || localIso(new Date()).slice(0,7);
     const all = schGetAll();
@@ -7267,6 +7269,7 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
     renderSchedule();
   }
   function schDelete(ym){
+    if (schLocked()) return;
     if (!confirm('Remove the ' + schLabel(ym) + ' schedule from this browser?')) return;
     const all = schGetAll(); delete all[ym]; schSaveAll(all);
     if (_schYm === ym) _schYm = '';
@@ -7292,6 +7295,63 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
     return out;
   }
 
+  // Upload lock. Be clear about what this is: the page is static and everything in it runs in
+  // the visitor's browser, so anyone who opens the console can bypass this. It is a deterrent,
+  // not access control. What it actually buys is that a leader browsing the dashboard cannot
+  // upload or delete a schedule by accident, and cannot do it casually on purpose. The passcode
+  // is stored as a SHA-256 digest rather than plain text so it is not simply readable in view
+  // source. Real enforcement would need the write to go through the Apps Script with the check
+  // on that side.
+  const SCH_PASS_HASH = '321ae69822dea378bfd8b4d4078581bfd3473ede24e9c7c48ca9add1699fa8b7';
+  function schLocked(){
+    try { return sessionStorage.getItem('oaSchedUnlocked') !== '1'; } catch (e){ return true; }
+  }
+  async function schDigest(str){
+    try {
+      if (window.crypto && window.crypto.subtle){
+        const buf = await window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+        return Array.from(new Uint8Array(buf)).map(function(b){ return b.toString(16).padStart(2,'0'); }).join('');
+      }
+    } catch (e){}
+    return null;   // no subtle crypto, e.g. an insecure origin
+  }
+  async function schUnlock(){
+    const inp = $('schPass'), msg = $('schPassMsg');
+    const val = inp ? inp.value : '';
+    if (!val) return;
+    const h = await schDigest(val);
+    if (h === null){
+      if (msg){ msg.style.color = '#C00'; msg.textContent = 'This browser will not hash the passcode on an insecure connection. Open the dashboard over https.'; }
+      return;
+    }
+    if (h === SCH_PASS_HASH){
+      try { sessionStorage.setItem('oaSchedUnlocked','1'); } catch (e){}
+      if (inp) inp.value = '';
+      renderSchedule();
+    } else if (msg){
+      msg.style.color = '#C00'; msg.textContent = 'That passcode is not right.';
+    }
+  }
+  function schLock(){ try { sessionStorage.removeItem('oaSchedUnlocked'); } catch (e){} renderSchedule(); }
+  function schLockBar(){
+    const NAVY='#0D1A6E', SLATE='#5B6678', BORDER='var(--border)';
+    if (!schLocked()){
+      return '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:#EEF7F0;border:1px solid #BFE3CC;border-radius:10px;padding:8px 12px;margin-bottom:14px">'
+        + '<span style="font-size:11.5px;color:#0E6B3A;font-weight:700">Editing unlocked</span>'
+        + '<span style="font-size:11px;color:' + SLATE + '">Uploading and removing are available for this tab.</span>'
+        + '<button class="cl-chip" onclick="schLock()">Lock again</button></div>';
+    }
+    return '<div style="background:#fff;border:1px solid ' + BORDER + ';border-radius:10px;padding:10px 13px;margin-bottom:14px">'
+      + '<div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap">'
+        + '<span style="font-size:11.5px;color:' + NAVY + ';font-weight:700">Uploading is restricted</span>'
+        + '<input id="schPass" type="password" placeholder="Passcode" autocomplete="off" onkeydown="if(event.key===' + String.fromCharCode(39) + 'Enter' + String.fromCharCode(39) + '){schUnlock();event.preventDefault();}" style="padding:4px 8px;border:1px solid ' + BORDER + ';border-radius:6px;font-size:11.5px;width:150px">'
+        + '<button class="cl-chip" onclick="schUnlock()">Unlock</button>'
+        + '<span id="schPassMsg" style="font-size:11px"></span>'
+      + '</div>'
+      + '<div style="font-size:10.5px;color:' + SLATE + ';margin-top:6px">Anyone can read the schedule. The passcode only gates uploading and removing, and since this page runs entirely in the browser it deters rather than prevents.</div>'
+      + '</div>';
+  }
+
   function renderSchedule(){
     const el = $('scheduleBody'); if (!el) return;
     if (!_attLoaded && !_attLoading) loadAttendanceData();
@@ -7305,7 +7365,7 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
     for (let i = 0; i < 4; i++){ const d = new Date(now.getFullYear(), now.getMonth() + i, 1); opts.push(localIso(d).slice(0,7)); }
 
     const Q = String.fromCharCode(39);
-    const upload = '<div style="background:#fff;border:1px solid ' + BORDER + ';border-radius:12px;padding:14px 16px;margin-bottom:16px">'
+    const upload = schLocked() ? '' : '<div style="background:#fff;border:1px solid ' + BORDER + ';border-radius:12px;padding:14px 16px;margin-bottom:16px">'
       + '<div style="font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:' + NAVY + '">Upload a schedule</div>'
       + '<div style="font-size:11.5px;color:' + SLATE + ';margin-top:6px;line-height:1.6">A CSV with a header row containing at least <b>Full Name</b>, <b>Team</b>, <b>Shift</b> and <b>Off Day</b>. Batch, Rest Days and Role / Notes are used when present, and a Management / Support block at the end is read separately. Each upload is filed under a month, so a new one never overwrites an old one.</div>'
       + '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px">'
@@ -7319,7 +7379,7 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
 
     // staged preview, shown before anything is stored
     let staged = '';
-    if (_schStaged){
+    if (_schStaged && !schLocked()){
       const P = _schStaged.parsed;
       const unmatched = P.rows.filter(function(r){ return !r.id; });
       staged = '<div style="background:#fff;border:2px solid ' + NAVY + ';border-radius:12px;padding:14px 16px;margin-bottom:16px">'
@@ -7334,7 +7394,7 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
     }
 
     if (!periods.length){
-      el.innerHTML = upload + staged
+      el.innerHTML = schLockBar() + upload + staged
         + '<div style="background:#fff;border:1px solid ' + BORDER + ';border-radius:12px;padding:34px 26px;text-align:center;color:' + SLATE + ';font-size:13px">No schedule uploaded yet.</div>';
       return;
     }
@@ -7346,7 +7406,7 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
       + periods.map(function(m){ return '<option value="' + m + '"' + (m === _schYm ? ' selected' : '') + '>' + schLabel(m) + '</option>'; }).join('')
       + '</select>'
       + '<span style="font-size:11px;color:' + SLATE + '">' + rows.length + ' SDRs &middot; from ' + esc(cur.source || 'upload') + ' &middot; saved ' + new Date(cur.savedAt).toLocaleString() + '</span>'
-      + '<button class="cl-chip" onclick="schDelete(' + Q + _schYm + Q + ')">Remove</button>'
+      + (schLocked() ? '' : '<button class="cl-chip" onclick="schDelete(' + Q + _schYm + Q + ')">Remove</button>')
       + '<span style="font-size:10.5px;color:' + SLATE + '">Stored in this browser only, so it is not shared with other leaders yet.</span>'
       + '</div>';
 
@@ -7409,7 +7469,7 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
             + '</div>')
       + '</div>';
 
-    el.innerHTML = upload + staged + picker + recon + teamCards + mgmtCard;
+    el.innerHTML = schLockBar() + upload + staged + picker + recon + teamCards + mgmtCard;
   }
 
   // ══════════════════════════════════════════════════════════════════
