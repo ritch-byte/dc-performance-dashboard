@@ -15,6 +15,8 @@
  * 4. In the Sheet: File → Share → Publish to web → the "Logs" tab → CSV  (for reads).
  * 5. Same again for the "Attendance" tab once a leader has tagged a day, and give that
  *    CSV link to the dashboard so attendance tags are shared rather than per browser.
+ * 6. Same again for the "Schedule" tab once a schedule has been uploaded, so every leader
+ *    sees the rostered shifts and off days rather than only the person who uploaded it.
  *
  * The dashboard posts to the SAME /exec URL for both logging and AI.
  */
@@ -106,6 +108,27 @@ function doPost(e) {
       if (at.getLastRow() === 0) { at.appendRow(AT_HEADERS); }
       at.appendRow(AT_HEADERS.map(function (h) { return data[h] || ''; }));
       return json_({ ok: true });
+    }
+
+    // ── Floor schedule: route to a separate "Schedule" tab ──
+    // One upload posts every SDR row at once as {record:'schedule', period, uploadedAt,
+    // uploadedBy, rows:[...]}. Rows are appended rather than replaced, so re-uploading a month
+    // leaves the earlier version in place and the dashboard reads whichever upload is newest
+    // for that period. That keeps a history of what the floor was told, which matters when an
+    // appraisal is argued months later.
+    if (data && data.record === 'schedule') {
+      const SH_HEADERS = ['uploadedAt', 'uploadedBy', 'period', 'emp', 'name', 'batch', 'team', 'shift', 'off', 'rest', 'note'];
+      const sss = SpreadsheetApp.getActiveSpreadsheet();
+      let sd = sss.getSheetByName('Schedule');
+      if (!sd) { sd = sss.insertSheet('Schedule'); }
+      if (sd.getLastRow() === 0) { sd.appendRow(SH_HEADERS); }
+      const rows = (data.rows || []).map(function (r) {
+        return [data.uploadedAt || '', data.uploadedBy || '', data.period || '',
+                r.emp || '', r.name || '', r.batch || '', r.team || '',
+                r.shift || '', r.off || '', r.rest || '', r.note || ''];
+      });
+      if (rows.length) { sd.getRange(sd.getLastRow() + 1, 1, rows.length, SH_HEADERS.length).setValues(rows); }
+      return json_({ ok: true, written: rows.length });
     }
 
     // ── Otherwise: append a coaching-log row ──

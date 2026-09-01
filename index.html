@@ -4990,6 +4990,7 @@
       _attSheetRows = parseAttendanceCSV(await res.text());
       attMergeTags();   // a leader's own tags win over the sheet for that person and day
       loadAttTags();    // and the shared tab brings in everyone else's
+      loadSchedules();  // rostered shifts, so every leader sees them and not just the uploader
       _attLoaded = true;
       if ($('attErrorBanner')) $('attErrorBanner').classList.remove('show');
       if ($('attendanceSection').style.display !== 'none') renderAttendance();
@@ -7567,11 +7568,55 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
   const SCH_DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   let _schYm = '';
 
-  function schGetAll(){
+  function schLocal(){
     try { const o = JSON.parse(localStorage.getItem(SCH_KEY) || '{}'); return (o && typeof o === 'object') ? o : {}; }
     catch (e){ return {}; }
   }
   function schSaveAll(o){ try { localStorage.setItem(SCH_KEY, JSON.stringify(o)); return true; } catch (e){ return false; } }
+  const SCH_CSV_URL = '';   // published CSV of the Schedule tab, once it exists
+  async function loadSchedules(){
+    if (!SCH_CSV_URL) return;
+    try {
+      const res = await fetch(SCH_CSV_URL + (SCH_CSV_URL.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now());
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const lines = splitCsvRows((await res.text()).trim());
+      if (lines.length < 2) return;
+      const h = splitLine(lines[0]).map(function(x){ return x.trim().toLowerCase(); });
+      const ix = function(n){ return h.indexOf(n); };
+      const byPeriod = {};
+      for (let i = 1; i < lines.length; i++){
+        const c = splitLine(lines[i]);
+        const period = (c[ix('period')] || '').trim(); if (!/^\d{4}-\d{2}$/.test(period)) continue;
+        const at = (c[ix('uploadedat')] || '').trim();
+        if (!byPeriod[period] || at > byPeriod[period].savedAt){
+          byPeriod[period] = { savedAt:at, source:'shared sheet, uploaded by ' + ((c[ix('uploadedby')]||'').trim() || 'someone'), rows:[], mgmt:[] };
+        }
+        if (at !== byPeriod[period].savedAt) continue;   // an older upload of the same period
+        const name = (c[ix('name')] || '').trim(); if (!name) continue;
+        byPeriod[period].rows.push({
+          emp:(c[ix('emp')]||'').trim(), name:name, batch:(c[ix('batch')]||'').trim(),
+          team:(c[ix('team')]||'').trim(), shift:(c[ix('shift')]||'').trim(),
+          off:(c[ix('off')]||'').trim(), rest:(c[ix('rest')]||'').trim(),
+          note:(c[ix('note')]||'').trim(), id:resolveAgent(name) || null
+        });
+      }
+      _schRemote = byPeriod;
+      if ($('scheduleSection') && $('scheduleSection').style.display !== 'none') renderSchedule();
+      if ($('attendanceSection') && $('attendanceSection').style.display !== 'none') renderAttendance();
+    } catch (err){ /* the shared tab is optional; a locally uploaded schedule still works */ }
+  }
+  // Schedules from the shared tab, merged with anything uploaded in this browser. A schedule
+  // is a snapshot rather than a log, so for each period the newest upload wins; the tab keeps
+  // the older ones so there is a record of what the floor was actually told at the time.
+  let _schRemote = {};
+  function schGetAll(){
+    const out = {}, local = schLocal();
+    Object.keys(_schRemote).forEach(function(k){ out[k] = _schRemote[k]; });
+    Object.keys(local).forEach(function(k){
+      if (!out[k] || String(local[k].savedAt || '') >= String(out[k].savedAt || '')) out[k] = local[k];
+    });
+    return out;
+  }
   function schPeriods(){ return Object.keys(schGetAll()).sort().reverse(); }
   function schLabel(ym){ const p = ym.split('-').map(Number); return new Date(p[0], p[1]-1, 1).toLocaleDateString('en-US',{month:'long',year:'numeric'}); }
 
@@ -7654,6 +7699,16 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
     all[ym] = { savedAt:new Date().toISOString(), source:_schStaged.source,
                 rows:_schStaged.parsed.rows, mgmt:_schStaged.parsed.mgmt };
     if (!schSaveAll(all)){ alert('Could not save the schedule: this browser refused local storage.'); return; }
+    // Send it on, so a schedule is not stranded in the uploader's browser. Without this the
+    // rostered start time and off day only ever appear for whoever did the upload.
+    const post = attTagPostUrl();
+    if (post){
+      try {
+        fetch(post, { method:'POST', mode:'no-cors', headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+          body: JSON.stringify({ record:'schedule', period:ym, uploadedAt:all[ym].savedAt,
+                                 uploadedBy:(_tagWho || ''), rows:all[ym].rows }) });
+      } catch (e){}
+    }
     _schStaged = null; _schYm = ym;
     const el = $('schPaste'); if (el) el.value = '';
     renderSchedule();
@@ -7797,7 +7852,7 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
       + '</select>'
       + '<span style="font-size:11px;color:' + SLATE + '">' + rows.length + ' SDRs &middot; from ' + esc(cur.source || 'upload') + ' &middot; saved ' + new Date(cur.savedAt).toLocaleString() + '</span>'
       + (schLocked() ? '' : '<button class="cl-chip" onclick="schDelete(' + Q + _schYm + Q + ')">Remove</button>')
-      + '<span style="font-size:10.5px;color:' + SLATE + '">Stored in this browser only, so it is not shared with other leaders yet.</span>'
+      + '<span style="font-size:10.5px;color:' + SLATE + '">' + (SCH_CSV_URL ? 'Shared through the Schedule tab, so every leader sees these shifts.' : 'Sent to the Schedule tab on upload. Until that tab is published and its link added here, other leaders will not see it and their Expected in column stays blank.') + '</span>'
       + '</div>';
 
     // one card per team, in the order the file lists them
