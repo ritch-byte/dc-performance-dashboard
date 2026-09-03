@@ -5592,7 +5592,10 @@
         return '<tr style="background:' + (i%2?'#F8FAFD':'#fff') + ';border-top:1px solid ' + BORDER + '">'
           + '<td style="padding:7px 10px;font-size:12.5px;color:' + NAVY + ';white-space:nowrap">' + esc(m.display)
             + (isOff ? ' <span style="background:#EEF0FB;color:' + NAVY + ';font-size:9.5px;font-weight:700;padding:1px 6px;border-radius:5px">rostered off</span>' : '') + '</td>'
-          + '<td style="padding:7px 10px;font-size:11.5px;color:' + SLATE + ';white-space:nowrap">' + (start ? esc(start) : '<span style="color:#C9CEDA">no schedule</span>') + '</td>'
+          // Somebody rostered off is not due in at all. Printing their shift time beside the
+          // rostered-off badge said both at once, and the time is the half a leader reads.
+          + '<td style="padding:7px 10px;font-size:11.5px;color:' + (isOff ? '#1A2DB5' : SLATE) + ';white-space:nowrap">'
+            + (isOff ? 'not due in' : start ? esc(start) : '<span style="color:#C9CEDA">no schedule</span>') + '</td>'
           + '<td style="padding:7px 10px;white-space:nowrap">' + btns + '</td>'
           + '<td style="padding:7px 10px;font-size:11px;white-space:nowrap;color:' + SLATE + '">'
             + (tag ? '<b style="color:' + NAVY + '">tagged</b>' + (tag.taggedBy ? ' by ' + esc(tag.taggedBy) : '') + ' <a href="#" onclick="attTagSet(' + Q + m.id + Q + ',' + Q + _tagDate + Q + ',' + Q + Q + ');return false;" style="color:#C00">clear</a>'
