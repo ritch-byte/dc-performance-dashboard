@@ -1681,6 +1681,7 @@
     $('attDate').value = localIso(new Date());
     loadData();
     loadAttendanceData();
+    startAttPolling();
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else setTimeout(init, 0);
@@ -5485,6 +5486,26 @@
     rawAttRows = kept;
   }
 
+  // Tags reach the sheet in a second, but a leader with the page already open never asked for
+  // them again: loadAttTags ran on page load and on Refresh and nowhere else. Two leaders
+  // tagging the same shift each saw only their own work until one of them reloaded, which is
+  // exactly the situation the shared tab was meant to end. Poll while the page is actually on
+  // screen, and catch up the moment the tab regains focus, since a leader who alt-tabs back is
+  // asking the same question a refresh would.
+  const ATT_POLL_MS = 45000;
+  let _attPollTimer = null;
+  function attPollTick(){
+    if (document.hidden) return;
+    const sec = $('attendanceSection');
+    if (!sec || sec.style.display === 'none') return;
+    loadAttTags();
+  }
+  function startAttPolling(){
+    if (_attPollTimer) return;
+    _attPollTimer = setInterval(attPollTick, ATT_POLL_MS);
+    try { document.addEventListener('visibilitychange', function(){ if (!document.hidden) attPollTick(); }); } catch (e){}
+  }
+
   async function loadAttTags(){
     if (!ATT_TAG_CSV_URL) return;
     try {
@@ -5560,7 +5581,7 @@
       + '</div>'
       + '<div style="font-size:10.5px;color:' + SLATE + ';margin-top:7px;line-height:1.6">'
       + (ATT_TAG_CSV_URL
-          ? 'Tags are shared: each one is written to the Attendance tab and every leader reads the same tab. Re-tagging a day keeps both entries and the newest counts, so there is a record of who changed what. Publishing lags a click by a minute or two, which is why your own tag shows here immediately.'
+          ? 'Tags are shared: each one is written to the Attendance tab and every leader reads the same tab. Re-tagging a day keeps both entries and the newest counts, so there is a record of who changed what. This page re-reads the tab every 45 seconds, so a tag from another leader turns up on its own. Google publishes the tab on a few minutes of delay, so theirs can take that long to arrive even though yours shows the moment you click.'
           : '<b style="color:#C97000">Tags are saved in this browser only</b> until the Attendance tab is published.')
       + ' The expected start time comes from the uploaded schedule, so upload one for the month to see it.</div></div>';
 
