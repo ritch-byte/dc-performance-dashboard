@@ -5229,7 +5229,7 @@
       const id = resolveAgent(r.name); if (!id) continue;
       sheetOf[id + '|' + d] = (r.status || '').trim();
     }
-    const rows = [['Date','Day','Team','SDR','Status','Source','Tagged by','Rostered shift','Rostered off day','Counts as scheduled','Counts as attended']];
+    const rows = [['Date','Day','Team','SDR','Status','Remarks','Source','Tagged by','Rostered shift','Rostered off day','Counts as scheduled','Counts as attended']];
     TEAMS.forEach(function(t){
       t.members.filter(function(x){ return !x.hidden; }).forEach(function(mem){
         dates.forEach(function(d){
@@ -5239,6 +5239,7 @@
           rows.push([
             d, attDow(d), t.name, mem.display,
             status || 'not logged',
+            tag ? (tag.note || '') : '',
             tag ? 'tagged in dashboard' : (sheet ? 'attendance sheet' : 'no record'),
             tag ? (tag.taggedBy || 'not stated') : '',
             sch ? sch.shift : '', sch ? sch.off : '',
@@ -5298,11 +5299,13 @@
         const sch = dateIso ? attSchedFor(m.id, dateIso) : null;
         const isOff = sch && sch.off && sch.off === dow;
         const start = sch ? attStartTime(sch.shift) : '';
+        const remark = (statusMap[m.id] || {}).note || '';
         const note = isOff ? 'rostered off' : (start ? 'due in ' + start : '');
         return '<div style="background:#fff;border:1px solid ' + BORDER + ';border-radius:10px;padding:9px 11px;display:flex;justify-content:space-between;align-items:center;gap:10px">'
           + '<div style="min-width:0">'
             + '<div style="font-size:12.5px;font-weight:700;color:' + NAVY + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(m.display) + '</div>'
             + (note ? '<div style="font-size:10px;color:' + (isOff ? '#1A2DB5' : SLATE) + ';margin-top:2px">' + esc(note) + '</div>' : '')
+            + (remark ? '<div title="' + esc(remark) + '" style="font-size:10px;color:' + NAVY + ';margin-top:3px;white-space:normal;line-height:1.35">' + esc(remark) + '</div>' : '')
           + '</div>'
           + '<span style="flex-shrink:0;border:1px solid ' + sty.bd + ';background:' + sty.bg + ';color:' + sty.fg
             + ';font-size:10px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;padding:3px 8px;border-radius:6px;white-space:nowrap">'
@@ -5495,16 +5498,28 @@
     // A clear is a write, not an absence of one. It has to travel to the sheet and win by
     // timestamp like any other tag, then disappear here, otherwise the shared tab keeps
     // handing the old status back and the clear link looks broken.
-    Object.keys(out).forEach(function(k){ if (out[k] && out[k].cleared) delete out[k]; });
+    // A remark with no status is not a clear though: a leader can write why someone is missing
+    // before deciding what to call it, so only a write that is blank on both counts is a clear.
+    Object.keys(out).forEach(function(k){
+      const t = out[k];
+      if (t && !String(t.status || '').trim() && !String(t.note || '').trim()) delete out[k];
+    });
     return out;
   }
   function attTagGet(id, date){ return attTagsMerged()[id + '|' + date] || null; }
-  function attTagSet(id, date, status){
+  function attTagSet(id, date, status, note){
     const all = attTagsLocal(), key = id + '|' + date;
     const found = scFindMember(id);
+    // A remark passed in is always honoured, including on a day with no status yet, because a
+    // leader often writes why someone is missing before deciding what to call it. Only a clear,
+    // which passes no remark at all, drops both: it means remove my tag, and a remark stranded
+    // on a day with no status is a note about nothing.
+    const prev = attTagGet(id, date);
+    const keptNote = (note !== undefined) ? note
+                   : (status ? (prev ? prev.note || '' : '') : '');
     all[key] = { sdr_id:id, sdr:found ? found.m.display : id, team:found ? found.team.name : '',
-                 date:date, status:status || '', taggedBy:_tagWho || '', at:new Date().toISOString() };
-    if (!status) all[key].cleared = true;
+                 date:date, status:status || '', note:keptNote,
+                 taggedBy:_tagWho || '', at:new Date().toISOString() };
     attTagsSave(all);
     attMergeTags();
     const postUrl = attTagPostUrl();
@@ -5517,6 +5532,22 @@
     }
     renderAttendance();
   }
+  // A remark saved on its own. It keeps whatever status the day already carries, including one
+  // that came from the master sheet rather than from a tag, so writing "stuck in traffic, called
+  // ahead" against someone already marked Late does not quietly un-mark them.
+  function attTagSetNote(id, date, note){
+    const cur = attTagGet(id, date);
+    let status = cur ? cur.status || '' : '';
+    if (!status){
+      for (const r of _attSheetRows){
+        if (normalizeDate(r.rawDate) !== date) continue;
+        if (resolveAgent(r.name) !== id) continue;
+        status = (r.status || '').trim(); break;
+      }
+    }
+    attTagSet(id, date, status, String(note || '').slice(0, 300));
+  }
+
   // Layer tags over the sheet: one row per person per day, the tag winning where both exist.
   // The sheet rows are kept pristine and the merged view rebuilt from them each time, because
   // filtering rawAttRows in place threw the sheet's own row away, so clearing a tag left the
@@ -5526,16 +5557,19 @@
     const tags = attTagsMerged(), keys = Object.keys(tags);
     _attTagCount = keys.length;
     if (!keys.length){ rawAttRows = _attSheetRows.slice(); return; }
+    // Only a tag that actually says something about the day replaces the sheet's own row. A
+    // remark carries no status, and letting one override would blank a day the master sheet had
+    // already recorded, turning a note about a late arrival into a missing attendance record.
     const override = {};
-    keys.forEach(function(k){ override[k] = tags[k]; });
+    keys.forEach(function(k){ if (String(tags[k].status || '').trim()) override[k] = tags[k]; });
     const kept = _attSheetRows.filter(function(r){
       const d = normalizeDate(r.rawDate); if (!d) return true;
       const id = resolveAgent(r.name); if (!id) return true;
       return !override[id + '|' + d];
     });
-    keys.forEach(function(k){
-      const t = tags[k];
-      kept.push({ rawDate:t.date, name:t.sdr, status:t.status, commitment:'', month:'', week:'', team:t.team, schedule:'', _tag:true });
+    Object.keys(override).forEach(function(k){
+      const t = override[k];
+      kept.push({ rawDate:t.date, name:t.sdr, status:t.status, commitment:'', month:'', week:'', team:t.team, schedule:'', note:t.note || '', _tag:true });
     });
     rawAttRows = kept;
   }
@@ -5568,7 +5602,7 @@
       const h = splitLine(lines[0]).map(function(x){ return x.trim().toLowerCase(); });
       const ix = function(n){ return h.indexOf(n); };
       const iAt = ix('at'), iDate = ix('date'), iSdr = ix('sdr'), iId = ix('sdr_id'),
-            iTeam = ix('team'), iStat = ix('status'), iBy = ix('taggedby');
+            iTeam = ix('team'), iStat = ix('status'), iBy = ix('taggedby'), iNote = ix('note');
       const out = {};
       for (let i = 1; i < lines.length; i++){
         const c = splitLine(lines[i]);
@@ -5579,9 +5613,9 @@
         let id = (c[iId] || '').trim();
         if (!id || !scFindMember(id)) id = resolveAgent((c[iSdr] || '').trim());
         if (!id || !scFindMember(id)) continue;               // unknown person, or the test row
+        const note = iNote >= 0 ? (c[iNote] || '').trim() : '';
         const rec = { sdr_id:id, sdr:(c[iSdr]||'').trim(), team:(c[iTeam]||'').trim(),
-                      date:date, status:status, taggedBy:(c[iBy]||'').trim(), at:(c[iAt]||'').trim() };
-        if (!status) rec.cleared = true;
+                      date:date, status:status, note:note, taggedBy:(c[iBy]||'').trim(), at:(c[iAt]||'').trim() };
         const k = id + '|' + date;
         if (!out[k] || String(rec.at) >= String(out[k].at)) out[k] = rec;   // last write wins
       }
@@ -5670,6 +5704,14 @@
           + '<td style="padding:7px 10px;font-size:11.5px;color:' + (isOff ? '#1A2DB5' : SLATE) + ';white-space:nowrap">'
             + (isOff ? 'not due in' : start ? esc(start) : '<span style="color:#C9CEDA">no schedule</span>') + '</td>'
           + '<td style="padding:7px 10px;white-space:nowrap">' + btns + '</td>'
+          // Remarks. Saved on blur and on Enter rather than on every keystroke, so a leader
+          // typing a sentence does not fire a write per letter at a sheet that already throttles.
+          + '<td style="padding:5px 10px">'
+            + '<input value="' + esc(tag ? tag.note || '' : '') + '" maxlength="300" placeholder="add a remark"'
+            + ' onchange="attTagSetNote(' + Q + m.id + Q + ',' + Q + _tagDate + Q + ',this.value)"'
+            + ' onkeydown="if(event.key===' + Q + 'Enter' + Q + ')this.blur()"'
+            + ' style="width:100%;min-width:150px;box-sizing:border-box;border:1px solid ' + BORDER + ';border-radius:6px;'
+            + 'padding:4px 7px;font-size:11.5px;font-family:inherit;color:' + NAVY + '"></td>'
           + '<td style="padding:7px 10px;font-size:11px;white-space:nowrap;color:' + SLATE + '">'
             + (tag ? '<b style="color:' + NAVY + '">tagged</b>' + (tag.taggedBy ? ' by ' + esc(tag.taggedBy) : '') + ' <a href="#" onclick="attTagSet(' + Q + m.id + Q + ',' + Q + _tagDate + Q + ',' + Q + Q + ');return false;" style="color:#C00">clear</a>'
                   : sheet ? 'from the sheet' : 'not recorded')
@@ -5678,7 +5720,7 @@
       body += '<div style="background:#fff;border:1px solid ' + BORDER + ';border-radius:12px;overflow:hidden;margin-bottom:14px">'
         + '<div style="background:' + esc(t.color) + ';padding:9px 14px;color:#fff;font-weight:800;font-size:13px">' + esc(t.name) + '</div>'
         + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:720px"><thead><tr>'
-        + ['SDR','Expected in','Tag','Source'].map(function(x){ return '<th style="padding:7px 10px;background:#F3F5FC;color:' + NAVY + ';font-size:10px;text-transform:uppercase;letter-spacing:.4px;text-align:left">' + x + '</th>'; }).join('')
+        + ['SDR','Expected in','Tag','Remarks','Source'].map(function(x){ return '<th style="padding:7px 10px;background:#F3F5FC;color:' + NAVY + ';font-size:10px;text-transform:uppercase;letter-spacing:.4px;text-align:left">' + x + '</th>'; }).join('')
         + '</tr></thead><tbody>' + rows + '</tbody></table></div></div>';
     });
     container.innerHTML = bar + body;

@@ -101,12 +101,22 @@ function doPost(e) {
     // person and day writes a second row, and the dashboard treats the newest as current.
     // That keeps who changed what, and when, instead of overwriting the earlier call.
     if (data && data.record === 'attendance') {
-      const AT_HEADERS = ['at', 'date', 'sdr', 'sdr_id', 'team', 'status', 'taggedBy'];
+      const AT_HEADERS = ['at', 'date', 'sdr', 'sdr_id', 'team', 'status', 'taggedBy', 'note'];
       const ssa = SpreadsheetApp.getActiveSpreadsheet();
       let at = ssa.getSheetByName('Attendance');
       if (!at) { at = ssa.insertSheet('Attendance'); }
       if (at.getLastRow() === 0) { at.appendRow(AT_HEADERS); }
-      at.appendRow(AT_HEADERS.map(function (h) { return data[h] || ''; }));
+      // The tab predates the note column, so widen the header in place rather than making
+      // someone edit the sheet by hand. Existing rows keep their blank note, which is correct:
+      // nobody wrote one. Written by name, so a future column cannot land in the wrong place.
+      const width = at.getLastColumn();
+      if (width < AT_HEADERS.length) {
+        at.getRange(1, width + 1, 1, AT_HEADERS.length - width)
+          .setValues([AT_HEADERS.slice(width)]);
+      }
+      const head = at.getRange(1, 1, 1, at.getLastColumn()).getValues()[0]
+        .map(function (h) { return String(h || '').trim(); });
+      at.appendRow(head.map(function (h) { return data[h] !== undefined ? data[h] : ''; }));
       return json_({ ok: true });
     }
 
