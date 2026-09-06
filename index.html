@@ -4989,19 +4989,33 @@
   // was said: no heading, no rows, no error. Google stops answering when its published CSVs are
   // being polled hard, which is precisely when a leader is refreshing to see a tag. Give every
   // read a deadline so a stall fails like any other error and surfaces a banner and a retry.
-  const ATT_FETCH_TIMEOUT_MS = 20000;
+  // The stall is not a broken sheet, it is throttling: Google answers a published CSV in about a
+  // second, then every so often replies 307 and leaves the redirect hanging with no body. Measured
+  // here it was one request in five. So a deadline alone was the wrong shape of fix, because it
+  // turned a blip that a second attempt would have sailed through into a dead page and a red
+  // banner. Give each attempt a short deadline and try again, and only give up if the sheet is
+  // genuinely unreachable.
+  const ATT_FETCH_TIMEOUT_MS = 12000;
+  const ATT_FETCH_TRIES = 3;
   async function attFetchCsv(url) {
-    const ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-    const timer = ctl ? setTimeout(function(){ ctl.abort(); }, ATT_FETCH_TIMEOUT_MS) : null;
-    try {
-      const res = await fetch(url, ctl ? { signal: ctl.signal } : undefined);
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      return await res.text();
-    } catch (e) {
-      throw new Error((e && e.name === 'AbortError')
-        ? 'the sheet did not answer within ' + Math.round(ATT_FETCH_TIMEOUT_MS / 1000) + ' seconds'
-        : ((e && e.message) || String(e)));
-    } finally { if (timer) clearTimeout(timer); }
+    let last = '';
+    for (let attempt = 1; attempt <= ATT_FETCH_TRIES; attempt++) {
+      const ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+      const timer = ctl ? setTimeout(function(){ ctl.abort(); }, ATT_FETCH_TIMEOUT_MS) : null;
+      try {
+        const res = await fetch(url, ctl ? { signal: ctl.signal } : undefined);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return await res.text();
+      } catch (e) {
+        last = (e && e.name === 'AbortError')
+          ? 'the sheet stopped responding'
+          : ((e && e.message) || String(e));
+        if (attempt < ATT_FETCH_TRIES) {
+          await new Promise(function(r){ setTimeout(r, 800 * attempt); });
+        }
+      } finally { if (timer) clearTimeout(timer); }
+    }
+    throw new Error(last + ' after ' + ATT_FETCH_TRIES + ' tries');
   }
   function attRetry() {
     _attLoading = false; _attLoaded = false;
@@ -5532,7 +5546,7 @@
   // exactly the situation the shared tab was meant to end. Poll while the page is actually on
   // screen, and catch up the moment the tab regains focus, since a leader who alt-tabs back is
   // asking the same question a refresh would.
-  const ATT_POLL_MS = 45000;
+  const ATT_POLL_MS = 90000;
   let _attPollTimer = null;
   function attPollTick(){
     if (document.hidden) return;
@@ -5619,7 +5633,7 @@
       + '</div>'
       + '<div style="font-size:10.5px;color:' + SLATE + ';margin-top:7px;line-height:1.6">'
       + (ATT_TAG_CSV_URL
-          ? 'Tags are shared: each one is written to the Attendance tab and every leader reads the same tab. Re-tagging a day keeps both entries and the newest counts, so there is a record of who changed what. This page re-reads the tab every 45 seconds, so a tag from another leader turns up on its own. Google publishes the tab on a few minutes of delay, so theirs can take that long to arrive even though yours shows the moment you click.'
+          ? 'Tags are shared: each one is written to the Attendance tab and every leader reads the same tab. Re-tagging a day keeps both entries and the newest counts, so there is a record of who changed what. This page re-reads the tab every 90 seconds, so a tag from another leader turns up on its own. Google publishes the tab on a few minutes of delay, so theirs can take that long to arrive even though yours shows the moment you click.'
           : '<b style="color:#C97000">Tags are saved in this browser only</b> until the Attendance tab is published.')
       + ' The expected start time comes from the uploaded schedule, so upload one for the month to see it.</div></div>';
 
