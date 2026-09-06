@@ -2163,7 +2163,9 @@
     if (page === 'ack')        renderAckTracker();
     if (page === 'reports')    { buildReportMonthSelect(); renderReports(); }
     if (page === 'sheet')      { buildSheetWeekSelect(); renderSheet(); if (!_attLoaded && !_attLoading) loadAttendanceData(); }
-    if (page === 'attendance') { if (!_attLoaded) loadAttendanceData(); else renderAttendance(); }
+    // Render either way. When the data is not in yet this paints the loading or failed state,
+    // which is the difference between a page that is working on it and a blank white rectangle.
+    if (page === 'attendance') { if (!_attLoaded && !_attLoading) loadAttendanceData(); renderAttendance(); }
     if (page === 'coaching')   clInit();
     if (page === 'tracker')    { buildTrackMonthSelect(); loadCoachingLogs(false); }
     if (page === 'dcmon')      dcmonInit();
@@ -4982,13 +4984,35 @@
     }).filter(r => r.rawDate && r.name);
   }
 
+  // A request that never answers used to wedge this page for good. _attLoading stayed true,
+  // every later click returned at the guard on the first line, and nothing was drawn and nothing
+  // was said: no heading, no rows, no error. Google stops answering when its published CSVs are
+  // being polled hard, which is precisely when a leader is refreshing to see a tag. Give every
+  // read a deadline so a stall fails like any other error and surfaces a banner and a retry.
+  const ATT_FETCH_TIMEOUT_MS = 20000;
+  async function attFetchCsv(url) {
+    const ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    const timer = ctl ? setTimeout(function(){ ctl.abort(); }, ATT_FETCH_TIMEOUT_MS) : null;
+    try {
+      const res = await fetch(url, ctl ? { signal: ctl.signal } : undefined);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return await res.text();
+    } catch (e) {
+      throw new Error((e && e.name === 'AbortError')
+        ? 'the sheet did not answer within ' + Math.round(ATT_FETCH_TIMEOUT_MS / 1000) + ' seconds'
+        : ((e && e.message) || String(e)));
+    } finally { if (timer) clearTimeout(timer); }
+  }
+  function attRetry() {
+    _attLoading = false; _attLoaded = false;
+    loadAttendanceData();
+  }
+
   async function loadAttendanceData() {
     if (_attLoading) return;
     _attLoading = true;
     try {
-      const res = await fetch(ATTENDANCE_CSV_URL + '&t=' + Date.now());
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      _attSheetRows = parseAttendanceCSV(await res.text());
+      _attSheetRows = parseAttendanceCSV(await attFetchCsv(ATTENDANCE_CSV_URL + '&t=' + Date.now()));
       attMergeTags();   // a leader's own tags win over the sheet for that person and day
       loadAttTags();    // and the shared tab brings in everyone else's
       loadSchedules();  // rostered shifts, so every leader sees them and not just the uploader
@@ -5010,6 +5034,12 @@
       if ($('attErrorBanner')) {
         $('attErrorBanner').textContent = '⚠ Attendance data failed to load: ' + err.message;
         $('attErrorBanner').classList.add('show');
+      }
+      if ($('attContainer') && $('attendanceSection') && $('attendanceSection').style.display !== 'none') {
+        $('attContainer').innerHTML = '<p style="padding:16px 2px;font-size:12.5px;color:#5B6678">'
+          + 'Could not load attendance: ' + esc(err.message) + '. '
+          + '<button onclick="attRetry()" style="color:var(--blue);background:none;border:none;'
+          + 'cursor:pointer;font-size:12.5px;text-decoration:underline;padding:0">Try again</button></p>';
       }
       if (_profileMember) {
         const el = $('profileAttContent');
@@ -5105,7 +5135,17 @@
   }
 
   function renderAttendance() {
-    if (!_attLoaded) return;
+    // Returning silently left an empty white page that looked like a floor with nobody on it.
+    // Say which of the two it is, and give a way out that does not need a browser reload.
+    if (!_attLoaded) {
+      const c0 = $('attContainer');
+      if (c0) c0.innerHTML = _attLoading
+        ? '<p style="padding:16px 2px;font-size:12.5px;color:#5B6678">Loading attendance…</p>'
+        : '<p style="padding:16px 2px;font-size:12.5px;color:#5B6678">Attendance has not loaded. '
+          + '<button onclick="attRetry()" style="color:var(--blue);background:none;border:none;'
+          + 'cursor:pointer;font-size:12.5px;text-decoration:underline;padding:0">Try again</button></p>';
+      return;
+    }
     const c = $('attContainer');
     c.innerHTML = '';
     if (attView === 'daily') {
@@ -5509,9 +5549,7 @@
   async function loadAttTags(){
     if (!ATT_TAG_CSV_URL) return;
     try {
-      const res = await fetch(ATT_TAG_CSV_URL + '&t=' + Date.now());
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const lines = splitCsvRows((await res.text()).trim());
+      const lines = splitCsvRows((await attFetchCsv(ATT_TAG_CSV_URL + '&t=' + Date.now())).trim());
       if (lines.length < 2) { _attRemoteTags = {}; return; }
       const h = splitLine(lines[0]).map(function(x){ return x.trim().toLowerCase(); });
       const ix = function(n){ return h.indexOf(n); };
@@ -7610,9 +7648,7 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
   async function loadSchedules(){
     if (!SCH_CSV_URL) return;
     try {
-      const res = await fetch(SCH_CSV_URL + (SCH_CSV_URL.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now());
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const lines = splitCsvRows((await res.text()).trim());
+      const lines = splitCsvRows((await attFetchCsv(SCH_CSV_URL + (SCH_CSV_URL.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now())).trim());
       if (lines.length < 2) return;
       const h = splitLine(lines[0]).map(function(x){ return x.trim().toLowerCase(); });
       const ix = function(n){ return h.indexOf(n); };
