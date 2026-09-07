@@ -33,6 +33,14 @@
        padding:7px 14px;border-radius:8px;cursor:pointer}
   .btn:hover{background:#EEF1FF}
 
+  /* ── view tabs ── */
+  .tabbar{background:var(--navy)}
+  .tabinner{max-width:1180px;margin:0 auto;padding:0 18px;display:flex;gap:2px}
+  .tab{background:none;border:none;border-bottom:3px solid transparent;color:rgba(255,255,255,.62);
+       font-size:13px;font-weight:700;padding:12px 16px;cursor:pointer;font-family:inherit}
+  .tab:hover{color:#fff}
+  .tab.on{color:#fff;border-bottom-color:var(--pink)}
+
   /* ── period bar ── */
   .periodbar{background:#fff;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:20}
   .periodinner{max-width:1180px;margin:0 auto;padding:10px 18px;display:flex;gap:8px;
@@ -148,7 +156,14 @@
   </div>
 </header>
 
-<div class="periodbar">
+<div class="tabbar">
+  <div class="tabinner">
+    <button class="tab on" id="tabPerf"  onclick="setView('perf')">Performance</button>
+    <button class="tab"    id="tabParts" onclick="setView('parts')">Source partners</button>
+  </div>
+</div>
+
+<div class="periodbar" id="periodBar">
   <div class="periodinner">
     <button class="pbtn on" id="pbMonth" onclick="setPeriod('month')">This month</button>
     <button class="pbtn"    id="pbWeek"  onclick="setPeriod('week')">This week</button>
@@ -161,10 +176,8 @@
 <div class="wrap">
   <div class="banner" id="banner"></div>
 
+  <div id="viewPerf">
   <div class="floor" id="floor"></div>
-
-  <h2>Source partners — where to book</h2>
-  <div id="partners"></div>
 
   <h2>Team standings</h2>
   <div class="teams" id="teams"></div>
@@ -176,6 +189,12 @@
   <div class="trend" id="trend"></div>
 
   <p class="note" id="method"></p>
+  </div>
+
+  <div id="viewParts" style="display:none">
+    <h2>Partner fulfilment — where to book</h2>
+    <div id="partners"></div>
+  </div>
 </div>
 
 <footer>
@@ -496,6 +515,16 @@
   function fmtShort(iso) {
     const p = iso.split('-').map(Number);
     return new Date(p[0], p[1] - 1, p[2]).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+
+  let _view = 'perf';
+  function setView(v) {
+    _view = v;
+    $('tabPerf').classList.toggle('on',  v === 'perf');
+    $('tabParts').classList.toggle('on', v === 'parts');
+    $('viewPerf').style.display  = v === 'perf'  ? '' : 'none';
+    $('viewParts').style.display = v === 'parts' ? '' : 'none';
+    $('periodBar').style.display = v === 'perf'  ? '' : 'none';
   }
 
   function setPeriod(p) {
@@ -858,6 +887,7 @@
 
   // ── Go ───────────────────────────────────────────────────────────────────
   function boot() {
+    setView('perf');   // set it in code rather than trusting the inline style alone
     loadAll();
     setInterval(function () { if (!document.hidden) loadAll(); }, REFRESH_MS);
   }
