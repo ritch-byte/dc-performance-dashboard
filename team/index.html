@@ -1097,7 +1097,7 @@
   //
   // Assigning posts to a script that is deliberately not the coaching tracker. That one relays
   // to the Anthropic API, and this URL ships inside a page the whole floor can open.
-  const DCA_CSV_URL  = '';   // published CSV of the "DC Assignments" tab
+  const DCA_CSV_URL  = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRuS9DSz6faT_IUDKyHdf-gwNpuqETpeD9GtT5Y0BJ6XitofvuB869TjK_NksUcVTsik7u7_dvQhPwS/pub?gid=1198498882&single=true&output=csv';   // published "DC Assignments" tab
   const DCA_POST_URL = 'https://script.google.com/macros/s/AKfycbwzE0TaBEFbGwqkp9KMUQ3cBH3RLaDUdDNJ6anDKLYOvaAmujG8XIcA6Ap394-RdJ_vuQ/exec';   // DC Assignment web app
   // SHA-256 of the passcode, for gating the controls. The real check is on the script side,
   // because anyone can read this file and this hash only decides what the page draws.
@@ -1111,6 +1111,19 @@
     return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
+  // The script writes 2026-09-07T06:00, but Sheets recognises that as a datetime and republishes
+  // it in its own format: "2026-09-07 6:00", space for the T and no leading zero. Everything
+  // downstream slices this string at fixed offsets, so it is normalised once here rather than
+  // being guessed at in five places. Written tolerantly because the exact rendering depends on
+  // the sheet's locale, which is not ours to rely on.
+  function dcaNormIso(v) {
+    const m = String(v || '').trim()
+      .match(/^(\d{4})-(\d{1,2})-(\d{1,2})[T ](\d{1,2}):(\d{2})/);
+    if (!m) return '';
+    const p2 = n => String(n).padStart(2, '0');
+    return m[1] + '-' + p2(m[2]) + '-' + p2(m[3]) + 'T' + p2(m[4]) + ':' + m[5];
+  }
+
   async function loadDcAssign() {
     if (!DCA_CSV_URL) { renderDcAssign(); return; }
     try {
@@ -1121,14 +1134,14 @@
       const out = [];
       for (let i = 1; i < lines.length; i++) {
         const c = splitLine(lines[i]);
-        const start = (c[ix('start')] || '').trim();
+        const start = dcaNormIso(c[ix('start')]);
         if (!start) continue;
         out.push({
           id: (c[ix('eventid')] || '').trim(),
           cal: (c[ix('calendar')] || '').trim(),
           partner: (c[ix('partner')] || '').trim(),
           sdrEmail: (c[ix('sdremail')] || '').trim(),
-          start: start, end: (c[ix('end')] || '').trim(),
+          start: start, end: dcaNormIso(c[ix('end')]),
           mins: Number(c[ix('durationmin')] || 0) || 0,
           to: (c[ix('assignedto')] || '').trim(),
           by: (c[ix('assignedby')] || '').trim()
