@@ -91,17 +91,6 @@
   .rteam{font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;flex-shrink:0}
   .rval{font-size:13px;font-weight:800;flex-shrink:0;min-width:52px;text-align:right}
 
-  /* ── my numbers ── */
-  .me{background:var(--card);border:1px solid var(--border);border-radius:13px;padding:16px 18px}
-  .mepick{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
-  .mepick select{min-width:236px;padding:8px 11px;font-size:13px}
-  .megrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:15px}
-  .mecell{border:1px solid var(--border);border-radius:11px;padding:13px 14px}
-  .menum{font-size:25px;font-weight:800;letter-spacing:-.4px}
-  .melbl{font-size:10.5px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;
-         color:var(--slate);margin-top:2px}
-  .mesub{font-size:11px;color:var(--slate);margin-top:4px;line-height:1.45}
-
   /* ── trend ── */
   .trend{background:var(--card);border:1px solid var(--border);border-radius:13px;padding:16px 18px}
   .bars{display:flex;align-items:flex-end;gap:5px;height:132px;margin-top:6px}
@@ -158,9 +147,6 @@
 
   <h2>Recognition</h2>
   <div class="boards" id="boards"></div>
-
-  <h2>Your numbers</h2>
-  <div class="me" id="me"></div>
 
   <h2>Discovery calls booked</h2>
   <div class="trend" id="trend"></div>
@@ -399,7 +385,7 @@
   const FETCH_TRIES    = 3;
   const REFRESH_MS     = 300000;
 
-  let rawRows = [], _period = 'month', _pickYm = '', _me = '';
+  let rawRows = [], _period = 'month', _pickYm = '';
 
   const $ = id => document.getElementById(id);
 
@@ -431,7 +417,6 @@
       $('stamp').textContent = 'Updated ' + new Date().toLocaleTimeString('en-US',
         { hour: 'numeric', minute: '2-digit' });
       buildMonthPick();
-      buildMePick();
       renderAll();
     } catch (err) {
       $('banner').textContent = 'Could not load the booking sheet: ' + err.message +
@@ -553,7 +538,6 @@
     renderFloor(t, dates, target);
     renderTeams(t, target);
     renderBoards(t);
-    renderMe(t, target, label);
     renderTrend(t, dates);
     $('method').innerHTML =
       'How these are counted: one discovery call per partner on a booking, credited to the SDR named on the row. '
@@ -669,67 +653,6 @@
       + '<div class="rval"' + (color ? ' style="color:' + color + '"' : '') + '>' + esc(val) + '</div></div>';
   }
 
-  function buildMePick() {
-    const sel = $('mePick');
-    if (!sel || sel.options.length) return;
-    const opts = sdrs().sort((a, b) => a.m.display.localeCompare(b.m.display))
-      .map(p => '<option value="' + esc(p.m.id) + '">' + esc(p.m.display) + ' · ' + esc(p.team.name) + '</option>');
-    sel.innerHTML = '<option value="">Choose your name…</option>' + opts.join('');
-    if (_me) sel.value = _me;
-  }
-
-  // Everyone can see their own standing against the floor and their team without being ranked
-  // in public. The comparison is to the averages and to the top figure, not to a position.
-  function renderMe(t, target, label) {
-    if (!$('mePick')) {
-      $('me').innerHTML = '<div class="mepick">'
-        + '<select id="mePick" onchange="_me=this.value;renderAll()"></select>'
-        + '<span class="tiny muted">Your pick is remembered on this device only.</span></div>'
-        + '<div id="meBody"></div>';
-      buildMePick();
-      const saved = (function(){ try { return localStorage.getItem('oaTeamMe') || ''; } catch(e){ return ''; } })();
-      if (saved && !_me) { _me = saved; $('mePick').value = saved; }
-    }
-    try { if (_me) localStorage.setItem('oaTeamMe', _me); } catch (e) {}
-
-    const body = $('meBody');
-    if (!_me) {
-      body.innerHTML = '<div class="empty">Pick your name to see your figures for ' + esc(label) + '.</div>';
-      return;
-    }
-    const people = sdrs();
-    const mine = people.find(p => p.m.id === _me);
-    if (!mine) { body.innerHTML = '<div class="empty">That name is not on the current roster.</div>'; return; }
-    const v = t.per[_me] || { dc: 0, yes: 0, held: 0 };
-    const su = v.held >= SHOWUP_MIN ? pct(v.yes, v.held) : null;
-
-    const teamMem = mine.team.members.filter(m => !m.hidden);
-    const teamDc = teamMem.reduce((a, m) => a + ((t.per[m.id] || {}).dc || 0), 0);
-    const teamAvg = teamMem.length ? teamDc / teamMem.length : 0;
-    const floorDc = people.reduce((a, p) => a + ((t.per[p.m.id] || {}).dc || 0), 0);
-    const floorAvg = people.length ? floorDc / people.length : 0;
-    const topDc = Math.max(0, ...people.map(p => (t.per[p.m.id] || {}).dc || 0));
-    const prog = pct(v.dc, target);
-
-    body.innerHTML = '<div class="megrid">'
-      + cell(v.dc, 'DCs booked', 'Team average ' + teamAvg.toFixed(1) + ' · floor average ' + floorAvg.toFixed(1))
-      + cell((prog === null ? '—' : prog + '%'), 'of your target',
-             v.dc + ' of ' + target + (v.dc >= target ? ' · target met' : ' · ' + (target - v.dc) + ' to go'),
-             rateColor(prog, 100))
-      + cell(su === null ? '—' : su + '%', 'showed up',
-             v.held >= SHOWUP_MIN ? v.yes + ' of ' + v.held + ' held · pass mark ' + SHOWUP_GOAL + '%'
-                                  : 'needs ' + SHOWUP_MIN + ' held meetings, you have ' + v.held,
-             rateColor(su, SHOWUP_GOAL))
-      + cell(topDc, 'top booker this period',
-             v.dc >= topDc && topDc > 0 ? 'that is you' : (topDc - v.dc) + ' ahead of you')
-      + '</div>';
-  }
-  function cell(num, lbl, sub, color) {
-    return '<div class="mecell"><div class="menum"' + (color ? ' style="color:' + color + '"' : '') + '>'
-      + esc(String(num)) + '</div><div class="melbl">' + esc(lbl) + '</div>'
-      + '<div class="mesub">' + esc(sub) + '</div></div>';
-  }
-
   function renderTrend(t, dates) {
     if (!dates.length) { $('trend').innerHTML = '<div class="empty">No days in this period yet.</div>'; return; }
     const days = dates.slice(-31);
@@ -752,7 +675,6 @@
 
   // ── Go ───────────────────────────────────────────────────────────────────
   function boot() {
-    renderMe({ per: {} }, MONTHLY_TARGET, periodDates().label);   // paints the picker before data arrives
     loadAll();
     setInterval(function () { if (!document.hidden) loadAll(); }, REFRESH_MS);
   }
