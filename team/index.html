@@ -120,6 +120,20 @@
   .sptable .spn{font-weight:600;white-space:nowrap;max-width:230px;overflow:hidden;text-overflow:ellipsis}
   .minibar{height:6px;border-radius:3px;background:#EEF0F5;overflow:hidden;min-width:88px}
 
+  /* ── today's priority ── */
+  .dplist{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:0}
+  .dp{display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid #F0F2F6}
+  .dp.first{background:#FBFCFF}
+  .dprank{width:26px;height:26px;border-radius:50%;background:var(--navy);color:#fff;
+          font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .dp.first .dprank{background:var(--pink)}
+  .dpmid{flex:1;min-width:0}
+  .dpname{font-size:13.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dpmeta{font-size:10.5px;color:var(--slate);margin-top:2px}
+  .dpnum{flex-shrink:0;text-align:right;line-height:1.1}
+  .dpnum b{display:block;font-size:20px;font-weight:800;color:var(--navy)}
+  .dpnum span{font-size:9.5px;color:var(--slate);text-transform:uppercase;letter-spacing:.4px}
+
   /* ── trend ── */
   .trend{background:var(--card);border:1px solid var(--border);border-radius:13px;padding:16px 18px}
   .bars{display:flex;align-items:flex-end;gap:5px;height:132px;margin-top:6px}
@@ -782,6 +796,97 @@
 
   function setSpCycle(i) { _spCycle = Number(i); renderPartners(); }
 
+  // ── Today's priority ─────────────────────────────────────────────────────
+  // The tracker has no daily-priority column, so this is derived rather than read: what a
+  // partner still owes, spread over the working days left in the cycle. A gap of 74 with three
+  // weeks to run is a different instruction from the same gap with two days to run, and a
+  // standing list sorted by size alone cannot tell a rep which of those they are looking at.
+  //
+  // Cycles are assumed to run the calendar month their title names, which is what Cycle 15
+  // (August) and Cycle 1 (September) have done. If a cycle ever runs to different dates this is
+  // the line to change.
+  const SP_MONTHS = ['january','february','march','april','may','june','july','august',
+                     'september','october','november','december'];
+  function spCycleMonth(title) {
+    const m = String(title || '').match(/\(([A-Za-z]+)\)/);
+    if (!m) return null;
+    const i = SP_MONTHS.indexOf(m[1].toLowerCase());
+    if (i < 0) return null;
+    const now = new Date();
+    // A cycle named for a month later than this one belongs to the year just gone, which keeps
+    // December right when read in January.
+    const y = (i > now.getMonth() + 1) ? now.getFullYear() - 1 : now.getFullYear();
+    return { y: y, m: i };
+  }
+  function spDaysLeft(title) {
+    const cm = spCycleMonth(title);
+    if (!cm) return null;
+    const now = new Date(), today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const last = new Date(cm.y, cm.m + 1, 0);
+    if (last < today) return 0;                       // the cycle has closed
+    let d = new Date(cm.y, cm.m, 1);
+    if (d < today) d = new Date(today);
+    let n = 0;
+    while (d <= last) {
+      const dow = d.getDay();
+      if (dow !== 0 && dow !== 6) n++;
+      d.setDate(d.getDate() + 1);
+    }
+    return n;
+  }
+
+  function renderDaily(cyc, rows) {
+    const left = spDaysLeft(cyc.title);
+    const today = new Date().toLocaleDateString('en-US',
+      { weekday: 'long', month: 'long', day: 'numeric' });
+
+    if (left === 0) {
+      return '<div class="board" style="margin-bottom:12px"><div class="boardhead">'
+        + '<div class="boardtitle">Today’s priority</div>'
+        + '<div class="boardsub">Cycle ' + esc(cyc.title) + ' has closed, so there is nothing to '
+        + 'chase against it. Switch to the current cycle.</div></div></div>';
+    }
+
+    // Rank by the daily rate a partner needs, not by the raw gap. Partners with nothing booked
+    // at all are shown as such, because a big gap with a full pipeline and a big gap with an
+    // empty one need different work today.
+    const list = rows.filter(r => r.needed > 0)
+      .map(r => ({ r: r, perDay: left ? Math.ceil(r.needed / left) : r.needed }))
+      .sort((a, b) => b.perDay - a.perDay || b.r.needed - a.r.needed)
+      .slice(0, 5);
+
+    if (!list.length) {
+      return '<div class="board" style="margin-bottom:12px"><div class="boardhead">'
+        + '<div class="boardtitle">Today’s priority</div>'
+        + '<div class="boardsub">Every partner is at target for this cycle. Nothing is behind.</div>'
+        + '</div></div>';
+    }
+
+    const need = list.reduce((a, x) => a + x.perDay, 0);
+    const cards = list.map((x, i) => {
+      const r = x.r;
+      return '<div class="dp' + (i === 0 ? ' first' : '') + '">'
+        + '<div class="dprank">' + (i + 1) + '</div>'
+        + '<div class="dpmid">'
+          + '<div class="dpname">' + esc(r.name) + '</div>'
+          + '<div class="dpmeta">' + r.needed + ' still owed'
+          + (r.scheduled ? ' · ' + r.scheduled + ' already booked and waiting'
+                         : ' · <b style="color:var(--red)">nothing booked yet</b>') + '</div>'
+        + '</div>'
+        + '<div class="dpnum"><b>' + x.perDay + '</b><span>a day</span></div>'
+        + '</div>';
+    }).join('');
+
+    return '<div class="board" style="margin-bottom:12px">'
+      + '<div class="boardhead">'
+      + '<div class="boardtitle">Today’s priority — ' + esc(today) + '</div>'
+      + '<div class="boardsub">' + left + ' working day' + (left === 1 ? '' : 's')
+      + ' left in cycle ' + esc(cyc.title) + '. These five need ' + need
+      + ' successful meetings a day between them to land on target. Ranked by that daily rate, '
+      + 'not by the size of the gap.</div></div>'
+      + '<div class="dplist">' + cards + '</div></div>';
+  }
+
   function renderPartners() {
     const host = $('partners');
     if (!host) return;
@@ -852,7 +957,8 @@
     }).join('');
 
     host.innerHTML =
-      '<div class="card" style="padding:15px 17px;margin-bottom:12px">'
+      renderDaily(cyc, rows)
+      + '<div class="card" style="padding:15px 17px;margin-bottom:12px">'
       + '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
       + '<div><div class="boardtitle">Cycle ' + esc(cyc.title) + '</div>'
       + '<div class="boardsub">' + totSuccess + ' of ' + totTarget + ' meetings delivered · '
