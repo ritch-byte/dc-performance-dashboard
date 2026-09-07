@@ -194,13 +194,13 @@
 
 <div class="tabbar">
   <div class="tabinner">
-    <button class="tab on" id="tabPerf"  onclick="setView('perf')">Performance</button>
+    <button class="tab on" id="tabDca"   onclick="setView('dca')">DC assignments</button>
+    <button class="tab"    id="tabPerf"  onclick="setView('perf')">Performance</button>
     <button class="tab"    id="tabParts" onclick="setView('parts')">Source partners</button>
-    <button class="tab"    id="tabDca"   onclick="setView('dca')">DC assignments</button>
   </div>
 </div>
 
-<div class="periodbar" id="periodBar">
+<div class="periodbar" id="periodBar" style="display:none">
   <div class="periodinner">
     <button class="pbtn on" id="pbMonth" onclick="setPeriod('month')">This month</button>
     <button class="pbtn"    id="pbWeek"  onclick="setPeriod('week')">This week</button>
@@ -213,7 +213,7 @@
 <div class="wrap">
   <div class="banner" id="banner"></div>
 
-  <div id="viewPerf">
+  <div id="viewPerf" style="display:none">
   <div class="floor" id="floor"></div>
 
   <h2>Team standings</h2>
@@ -228,7 +228,7 @@
   <p class="note" id="method"></p>
   </div>
 
-  <div id="viewDca" style="display:none">
+  <div id="viewDca">
     <h2>DC assignments — upcoming meetings</h2>
     <div id="dcassign"></div>
   </div>
@@ -1104,7 +1104,7 @@
   const DCA_PASS_HASH = 'fed5e6c7d987981b00e0c8ce3f8b6ee59d4eacfb3e45b05b750b952ba6c6e81f';
   const DCA_DAYS = 14;
 
-  let dcaRows = [], dcaError = '', _dcaUnlocked = false, _dcaWho = '', _dcaBusy = '';
+  let dcaRows = [], dcaError = '', _dcaLoaded = false, _dcaUnlocked = false, _dcaWho = '', _dcaBusy = '';
 
   async function sha256Hex(str) {
     const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
@@ -1152,6 +1152,7 @@
     } catch (err) {
       dcaError = err.message;
     }
+    _dcaLoaded = true;
     renderDcAssign();
   }
 
@@ -1350,6 +1351,10 @@
         + 'are in, meetings appear here on their own.</div></div>';
       return;
     }
+    if (!_dcaLoaded) {
+      host.innerHTML = '<div class="card"><div class="empty">Loading meetings…</div></div>';
+      return;
+    }
     if (dcaError) {
       host.innerHTML = '<div class="card"><div class="empty">Could not load assignments: '
         + esc(dcaError) + '.</div></div>';
@@ -1438,7 +1443,7 @@
 
   // ── Go ───────────────────────────────────────────────────────────────────
   function boot() {
-    setView('perf');   // set it in code rather than trusting the inline style alone
+    setView('dca');   // set it in code rather than trusting the inline style alone
     try { _dcaUnlocked = !!sessionStorage.getItem('oaDcaPass'); } catch (e) {}
     loadAll();
     setInterval(function () { if (!document.hidden) loadAll(); }, REFRESH_MS);
