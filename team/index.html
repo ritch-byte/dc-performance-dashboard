@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SD Outbound — Team Dashboard</title>
+<style>
+  :root{
+    --navy:#0C1F42; --blue:#1A2DB5; --pink:#FF2E87;
+    --slate:#5B6678; --mute:#9AA3B2; --border:#E2E5EC;
+    --bg:#F4F6FB; --card:#fff;
+    --green:#0E7A45; --greenbg:#E9F7EF; --greenbd:#B7E3C8;
+    --amber:#B45309; --amberbg:#FFF4E5; --amberbd:#FBD9A5;
+    --red:#C00000; --redbg:#FDECEC;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--navy);
+       font:14px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif}
+  a{color:var(--blue)}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 18px 56px}
+
+  /* ── header ── */
+  header{background:linear-gradient(90deg,var(--blue) 0%,#2A3FD8 100%);color:#fff;padding:0 0 1px}
+  .hbar{max-width:1180px;margin:0 auto;padding:16px 18px;display:flex;align-items:center;
+        gap:14px;flex-wrap:wrap}
+  .logo{background:var(--pink);color:#fff;font-weight:900;font-size:13px;letter-spacing:.5px;
+        padding:7px 11px;border-radius:8px}
+  .htitle{font-size:17px;font-weight:800;letter-spacing:.2px}
+  .hsub{font-size:11.5px;opacity:.85;font-weight:500}
+  .hspace{flex:1}
+  .stamp{background:rgba(255,255,255,.16);font-size:11px;font-weight:600;padding:5px 11px;border-radius:20px}
+  .btn{background:#fff;color:var(--blue);border:none;font-size:12px;font-weight:700;
+       padding:7px 14px;border-radius:8px;cursor:pointer}
+  .btn:hover{background:#EEF1FF}
+
+  /* ── period bar ── */
+  .periodbar{background:#fff;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:20}
+  .periodinner{max-width:1180px;margin:0 auto;padding:10px 18px;display:flex;gap:8px;
+               align-items:center;flex-wrap:wrap}
+  .pbtn{background:#fff;border:1px solid var(--border);color:var(--slate);font-size:12px;
+        font-weight:700;padding:6px 14px;border-radius:8px;cursor:pointer;font-family:inherit}
+  .pbtn.on{background:var(--navy);border-color:var(--navy);color:#fff}
+  select{border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;
+         font-family:inherit;color:var(--navy);background:#fff}
+  .plabel{font-size:12px;color:var(--slate);margin-left:2px}
+
+  /* ── generic ── */
+  h2{font-size:12px;font-weight:800;letter-spacing:.7px;text-transform:uppercase;
+     color:var(--slate);margin:26px 0 11px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:13px}
+  .muted{color:var(--slate)}
+  .tiny{font-size:11px}
+  .note{font-size:11.5px;color:var(--slate);line-height:1.55;margin:8px 2px 0}
+
+  /* ── floor summary ── */
+  .floor{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:12px;margin-top:18px}
+  .stat{background:var(--card);border:1px solid var(--border);border-radius:13px;padding:15px 16px}
+  .statnum{font-size:30px;font-weight:800;letter-spacing:-.5px;line-height:1.1}
+  .statlbl{font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;
+           color:var(--slate);margin-top:3px}
+  .statsub{font-size:11.5px;color:var(--slate);margin-top:5px}
+
+  /* ── teams ── */
+  .teams{display:grid;grid-template-columns:repeat(auto-fit,minmax(258px,1fr));gap:12px}
+  .team{background:var(--card);border:1px solid var(--border);border-radius:13px;overflow:hidden}
+  .teamhead{padding:11px 15px;color:#fff;display:flex;justify-content:space-between;align-items:center}
+  .teamname{font-weight:800;font-size:13.5px}
+  .teamdc{font-size:12px;font-weight:700}
+  .teambody{padding:13px 15px}
+  .bar{height:7px;border-radius:4px;background:#EEF0F5;overflow:hidden;margin:9px 0 7px}
+  .barfill{height:100%;border-radius:4px}
+  .kv{display:flex;justify-content:space-between;font-size:11.5px;color:var(--slate);
+      padding:3px 0}
+  .kv b{color:var(--navy);font-weight:700}
+
+  /* ── leaderboards ── */
+  .boards{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:12px}
+  .board{background:var(--card);border:1px solid var(--border);border-radius:13px;overflow:hidden}
+  .boardhead{padding:12px 16px;border-bottom:1px solid var(--border)}
+  .boardtitle{font-size:13.5px;font-weight:800}
+  .boardsub{font-size:11px;color:var(--slate);margin-top:2px;line-height:1.45}
+  .row{display:flex;align-items:center;gap:11px;padding:9px 16px;border-top:1px solid #F0F2F6}
+  .row:first-of-type{border-top:none}
+  .rank{width:23px;height:23px;border-radius:7px;background:#EEF0F5;color:var(--slate);
+        font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .rank.g1{background:#FFF3C4;color:#8A6100}
+  .rank.g2{background:#EDEFF3;color:#4A5462}
+  .rank.g3{background:#F7E3D0;color:#8A5320}
+  .rname{flex:1;min-width:0;font-size:13px;font-weight:600;white-space:nowrap;
+         overflow:hidden;text-overflow:ellipsis}
+  .rteam{font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;flex-shrink:0}
+  .rval{font-size:13px;font-weight:800;flex-shrink:0;min-width:52px;text-align:right}
+
+  /* ── my numbers ── */
+  .me{background:var(--card);border:1px solid var(--border);border-radius:13px;padding:16px 18px}
+  .mepick{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+  .mepick select{min-width:236px;padding:8px 11px;font-size:13px}
+  .megrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:15px}
+  .mecell{border:1px solid var(--border);border-radius:11px;padding:13px 14px}
+  .menum{font-size:25px;font-weight:800;letter-spacing:-.4px}
+  .melbl{font-size:10.5px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;
+         color:var(--slate);margin-top:2px}
+  .mesub{font-size:11px;color:var(--slate);margin-top:4px;line-height:1.45}
+
+  /* ── trend ── */
+  .trend{background:var(--card);border:1px solid var(--border);border-radius:13px;padding:16px 18px}
+  .bars{display:flex;align-items:flex-end;gap:5px;height:132px;margin-top:6px}
+  .col{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:4px;min-width:0}
+  .colbar{width:100%;border-radius:4px 4px 0 0;background:var(--blue);min-height:2px}
+  .colcap{font-size:9.5px;color:var(--mute);white-space:nowrap}
+  .colval{font-size:10px;font-weight:800;color:var(--navy)}
+
+  .empty{padding:22px 16px;text-align:center;color:var(--slate);font-size:12.5px}
+  .banner{background:var(--redbg);border-left:3px solid var(--red);color:var(--red);
+          padding:11px 15px;border-radius:8px;font-size:12.5px;margin-top:16px;display:none}
+  .banner.show{display:block}
+  footer{max-width:1180px;margin:0 auto;padding:26px 18px 40px;color:var(--mute);
+         font-size:11px;line-height:1.6}
+
+  @media (max-width:640px){
+    .statnum{font-size:25px} .htitle{font-size:15px}
+    .colcap{display:none}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hbar">
+    <span class="logo">OA</span>
+    <div>
+      <div class="htitle">SD Outbound — Team Dashboard</div>
+      <div class="hsub">Discovery calls booked and how many showed up</div>
+    </div>
+    <div class="hspace"></div>
+    <span class="stamp" id="stamp">Loading…</span>
+    <button class="btn" onclick="loadAll()">Refresh</button>
+  </div>
+</header>
+
+<div class="periodbar">
+  <div class="periodinner">
+    <button class="pbtn on" id="pbMonth" onclick="setPeriod('month')">This month</button>
+    <button class="pbtn"    id="pbWeek"  onclick="setPeriod('week')">This week</button>
+    <button class="pbtn"    id="pbPrev"  onclick="setPeriod('prev')">Last month</button>
+    <select id="monthPick" onchange="setPeriod('pick')"></select>
+    <span class="plabel" id="periodLabel"></span>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="banner" id="banner"></div>
+
+  <div class="floor" id="floor"></div>
+
+  <h2>Team standings</h2>
+  <div class="teams" id="teams"></div>
+
+  <h2>Recognition</h2>
+  <div class="boards" id="boards"></div>
+
+  <h2>Your numbers</h2>
+  <div class="me" id="me"></div>
+
+  <h2>Discovery calls booked</h2>
+  <div class="trend" id="trend"></div>
+
+  <p class="note" id="method"></p>
+</div>
+
+<footer>
+  Outsource Accelerator · SD Outbound. Figures come from the DC booking sheet and refresh
+  automatically. If a booking of yours is missing or credited to someone else, tell your team
+  leader — the fix is in the sheet, not here.
+</footer>
+
+<script>
+  const TEAMS = [
+    {
+      id: 'dijumhon', name: 'JumHon', color: '#1A2DB5',  // 9PM-8AM (4x11) · TL Jumar · SMEs Diana, Alvin B
+      members: [
+        { id: 'anos',          display: 'Marc Anos',             ln: 'anos' },
+        { id: 'demayo',        display: 'Devi Demayo',           ln: 'demayo' },
+        { id: 'saminado',      display: 'Jervin Saminado',       ln: 'saminado' },
+        { id: 'verastigue',    display: 'Bedier Verastigue',     ln: 'verastigue' },
+        { id: 'velasco',       display: 'Edward Velasco',        ln: 'velasco' },
+        { id: 'petras',        display: 'Art Joseph Petras',     ln: 'petras' },
+        { id: 'fortez',        display: 'Charlie Fortez',        ln: 'fortez' },
+        { id: 'ramirez',       display: 'Mark Lauren Ramirez',   ln: 'ramirez', hidden: true },
+        { id: 'sarmiento_j',   display: 'Julius Sarmiento',      ln: 'sarmiento', fn: 'julius' },
+        { id: 'arespacochaga', display: 'Mervin Arespacochaga',  ln: 'arespacochaga', hidden: true },
+        { id: 'aurelio',       display: 'Raymond Aurelio',       ln: 'aurelio' },
+        { id: 'ronquillo',     display: 'Joremie Ronquillo',     ln: 'ronquillo', hidden: true },
+        { id: 'cajayon',       display: 'Bryan Cajayon',         ln: 'cajayon', hidden: true },
+        { id: 'sanchez',       display: 'Maria Angelica Sanchez',ln: 'sanchez', hidden: true },
+        { id: 'caro',          display: 'Armi Caro',             ln: 'caro', hidden: true },
+        { id: 'elago',         display: 'Ednyl Chloe Elago',     ln: 'elago', hidden: true },
+        { id: 'arana',         display: 'Marvin Arana',          ln: 'arana', hidden: true },
+        { id: 'diaz',          display: 'Sheilla Diaz',          ln: 'diaz', hidden: true },
+      ]
+    },
+    {
+      id: 'meloace', name: 'MeloAce', color: '#059669',  // 10PM-9AM (4x11) · TL Angelica · SME Alvin Melo
+      members: [
+        { id: 'silang',     display: 'Gian Carlo Silang',     ln: 'silang' },
+        { id: 'galoso',     display: 'Lawrence Galoso',       ln: 'galoso' },
+        { id: 'silva',      display: 'Godwin Silva',          ln: 'silva' },
+        { id: 'bautista',   display: 'Samara Bautista',       ln: 'bautista' },
+        { id: 'baliuag',    display: 'Charlon Baliuag',       ln: 'baliuag' },
+        { id: 'malavega',   display: 'Jose Carlos Malavega',  ln: 'malavega' },
+        { id: 'villaruel',  display: 'Lance Villaruel',       ln: 'villaruel' },
+        { id: 'cubol',      display: 'Jesley Cubol',          ln: 'cubol' },
+        { id: 'monticarlo', display: 'John Vic Monticarlo',   ln: 'monticarlo', hidden: true },
+        { id: 'aridi',      display: 'Hadi Aridi',            ln: 'aridi', hidden: true },
+        { id: 'ramos_j',    display: 'Jennifer Ramos',        ln: 'ramos',   fn: 'jennifer' },
+        { id: 'cardell',    display: 'Donald Cardell',        ln: 'cardell', hidden: true },
+        { id: 'tormon',     display: 'Michael Anthony Tormon',ln: 'tormon', hidden: true },
+        { id: 'jerusalem',  display: 'Danilo Jerusalem',      ln: 'jerusalem' },
+      ]
+    },
+    {
+      id: 'ev', name: 'DEV', color: '#d97706',  // 11PM-10AM (4x11) · TL Jonathan · SME Vincent
+      members: [
+        { id: 'catolico',   display: 'Pedro Catolico',        ln: 'catolico' },
+        { id: 'tupaz',      display: 'Rommel Tupaz',          ln: 'tupaz' },
+        { id: 'lavares',    display: 'Gian Lavares',          ln: 'lavares', hidden: true },
+        { id: 'arcena',     display: 'Charlito Arcena',       ln: 'arcena' },
+        { id: 'benjamin',   display: 'Russell Benjamin',      ln: 'benjamin' },
+        { id: 'susana',     display: 'John Christian Susana', ln: 'susana', hidden: true },
+        { id: 'tungol',     display: 'Lorenzo Luiz Tungol',   ln: 'tungol' },
+        { id: 'magtalas',   display: 'Ayesha Magtalas',       ln: 'magtalas' },
+        { id: 'balbido',    display: 'Justine Balbido',       ln: 'balbido' },
+        { id: 'decastro',   display: 'Catherine de Castro',   ln: 'castro',  ln2: 'de castro' },
+        { id: 'caguimbal',  display: 'Divinamor Caguimbal',   ln: 'caguimbal', hidden: true },
+        { id: 'ramos_i',    display: 'Ma. Isabel Ramos',      ln: 'ramos',   fn: 'isabel', hidden: true },
+        { id: 'tiu',        display: 'Regine Theresa Tiu',    ln: 'tiu' },
+      ]
+    },
+    {
+      id: 'bridge', name: 'Bridge', color: '#0891b2',  // 10AM-9PM daytime coverage · TL Angelica
+      members: [
+        { id: 'rampas',     display: 'Desiree Rampas',        ln: 'rampas', hidden: true },
+        { id: 'bascos',     display: 'Jessica Bascos',        ln: 'bascos' },
+        { id: 'jaraula',    display: 'Jezza Jezreel Jaraula', ln: 'jaraula' },
+      ]
+    },
+    {
+      id: 'poc', name: 'POC TEAM', color: '#7c3aed',
+      members: [
+        { id: 'tanate',   display: 'Angelica Tanate',  ln: 'tanate' },
+        { id: 'gadier',   display: 'Vincent Gadier',   ln: 'gadier' },
+        { id: 'bayhon',   display: 'Alvin Bayhon',     ln: 'bayhon' },
+        { id: 'jumar',    display: 'Jumar Vere',       ln: 'vere'   },
+        { id: 'vosotros', display: 'Diana Vosotros',   ln: 'vosotros' },
+        { id: 'melo',     display: 'Alvin Melo',       ln: 'melo' },
+      ]
+    }
+  ];
+
+  const LN_MAP = {}, LN2_MAP = {};
+
+  for (const team of TEAMS) {
+    for (const m of team.members) {
+      (LN_MAP[m.ln] = LN_MAP[m.ln] || []).push({ m, team });
+      if (m.ln2) (LN2_MAP[m.ln2] = LN2_MAP[m.ln2] || []).push({ m, team });
+    }
+  }
+  // Aliases for names that appear differently across sheets
+  const LN_ALIASES = { 'fernandez': 'tapiador', 'samara': 'bautista', 'devi': 'demayo', 'summer': 'silang', 'chin': 'garcia', 'cardel': 'cardell' };
+  for (const [alias, targetLn] of Object.entries(LN_ALIASES)) {
+    if (LN_MAP[targetLn] && !LN_MAP[alias]) LN_MAP[alias] = LN_MAP[targetLn];
+  }
+
+  const _NAME_SUFFIX = { 'jr':1,'jr.':1,'sr':1,'sr.':1,'ii':1,'iii':1,'iv':1,'v':1 };
+
+  function resolveAgent(rawName) {
+    // Strip a trailing " - nickname" (e.g. "Glen Jerick San Jose - Glen") and drop
+    // generational suffixes (Jr./Sr./III) so the real surname is the last token.
+    const clean = String(rawName || '').trim().toLowerCase().replace(/\s+-\s+.*$/, '');
+    const parts = clean.split(/\s+/).filter(Boolean);
+    while (parts.length > 1 && _NAME_SUFFIX[parts[parts.length-1]]) parts.pop();
+    if (!parts.length) return null;
+    if (parts.length >= 3) {
+      const tw = parts[parts.length-2] + ' ' + parts[parts.length-1];
+      if (LN2_MAP[tw]?.length) return LN2_MAP[tw][0].m.id;
+    }
+    const ln = parts[parts.length-1];
+    const hits = LN_MAP[ln] || [];
+    if (!hits.length) return null;
+    if (hits.length === 1) return hits[0].m.id;
+    // Match the disambiguating first name against ANY given-name token, not just the first one:
+    // the sheet writes "Ma Isabel Ramos" and "Ma. Isabel Casino Ramos", where the distinguishing
+    // name is the second token. Comparing only parts[0] fell through to whichever member happened
+    // to come first in TEAMS, which silently credited her rows to the other Ramos.
+    const given = parts.slice(0, -1);
+    const exact = hits.find(c => c.m.fn && given.includes(c.m.fn));
+    return exact ? exact.m.id : hits[0].m.id;
+  }
+
+  function normalizeDate(raw) {
+    if (!raw) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+    if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(raw)) {
+      const [m,d,y] = raw.split('/');
+      return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+    }
+    // Handle "27-May" or "27-May-2026" (Google Sheets DD-Mon format)
+    const MON = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+    const m = raw.match(/^(\d{1,2})-([A-Za-z]{3})(?:-(\d{4}))?$/);
+    if (m) {
+      const mo = MON[m[2].toLowerCase()];
+      if (mo) {
+        const yr = m[3] || new Date().getFullYear();
+        return `${yr}-${String(mo).padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+      }
+    }
+    return null;
+  }
+
+  function splitLine(line) {
+    const cols=[]; let cur='', inQ=false;
+    for (const ch of line) {
+      if (ch==='"') inQ=!inQ;
+      else if (ch===',' && !inQ) { cols.push(cur.trim()); cur=''; }
+      else cur+=ch;
+    }
+    cols.push(cur.trim()); return cols;
+  }
+
+  function splitCsvRows(text) {
+    const rows = []; let cur = '', inQ = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (ch === '"') {
+        if (inQ && text[i+1] === '"') { cur += '""'; i++; continue; }   // escaped quote
+        inQ = !inQ; cur += ch; continue;
+      }
+      if (ch === '\n' && !inQ) { rows.push(cur.replace(/\r$/, '')); cur = ''; continue; }
+      cur += ch;
+    }
+    rows.push(cur.replace(/\r$/, ''));
+    return rows.filter(r => r.trim() !== '');
+  }
+
+  function parseCSV(text) {
+    const lines = splitCsvRows(text.trim());
+    if (lines.length < 2) return [];
+    const hdrs = splitLine(lines[0]).map(h => h.trim().toLowerCase());
+    const exact = name => { const i = hdrs.indexOf(name); return i >= 0 ? i : null; };
+    const sp1sIdx = exact('sp 1 status') ?? exact('sp1 status');
+    const sp2sIdx = exact('sp 2 status') ?? exact('sp2 status');
+    const statusIdx = exact('status');   // present only in the newer sheet layout
+
+    // The sheet gained VOUCHER EMAIL + STATUS columns (Aug 2026). The partner names
+    // shifted into the columns still *headed* "SP n Status", and show-up moved to a
+    // single row-level STATUS. Detect that layout instead of trusting fixed positions:
+    // a bare "status" header means partner names sit under the "SP n Status" headers.
+    const rowStatusLayout = statusIdx !== null;
+    const sp1Idx = rowStatusLayout ? sp1sIdx : (exact('sp1') ?? exact('sp 1') ?? 2);
+    const sp2Idx = rowStatusLayout ? sp2sIdx : (exact('sp2') ?? exact('sp 2') ?? 3);
+    const cell = (c, i) => (i === null || i === undefined ? '' : (c[i] || '').trim());
+
+    return lines.slice(1).map(line => {
+      const c = splitLine(line);
+      const sp1 = cell(c, sp1Idx), sp2 = cell(c, sp2Idx);
+      // One status per row now, so it applies to each partner meeting that exists.
+      // Gate on the SP being filled, or a blank SP would inherit a status and be
+      // counted as a discovery call that happened.
+      const rowStatus = rowStatusLayout ? cell(c, statusIdx).toLowerCase() : null;
+      return {
+        rawDate:   cell(c, 0),
+        agent:     cell(c, 1),
+        sp1, sp2,
+        sp1status: rowStatusLayout ? (sp1 ? rowStatus : '') : cell(c, sp1sIdx).toLowerCase(),
+        sp2status: rowStatusLayout ? (sp2 ? rowStatus : '') : cell(c, sp2sIdx).toLowerCase(),
+      };
+    }).filter(r => r.rawDate && r.agent);
+  }
+
+  function localIso(dt) {
+    return dt.getFullYear() + '-' +
+      String(dt.getMonth()+1).padStart(2,'0') + '-' +
+      String(dt.getDate()).padStart(2,'0');
+  }
+
+  function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  // ── Data ─────────────────────────────────────────────────────────────────
+  // The same booking sheet the leaders' dashboard reads, so a number here and a number there
+  // can never disagree. Nothing else is loaded: no attendance feed, no coaching log, no
+  // scorecards. This page is for the floor, and those are between a rep and their leader.
+  const DC_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSisLiJWdncrB-dDPNI0JGqSTbBQl5n5OAel1Epyr7DAsonyVAa6HSFCVXdA4_uMTbnBgGawkyX6DYh/pub?gid=0&single=true&output=csv';
+  const MONTHLY_TARGET = 40;   // DCs per rep per month
+  const WEEKLY_TARGET  = 10;
+  const SHOWUP_GOAL    = 80;   // %, the passing mark used in appraisals
+  const TOP_N          = 8;
+  const SHOWUP_MIN     = 5;    // held DCs before a show-up rate means anything
+  const FETCH_TIMEOUT  = 12000;
+  const FETCH_TRIES    = 3;
+  const REFRESH_MS     = 300000;
+
+  let rawRows = [], _period = 'month', _pickYm = '', _me = '';
+
+  const $ = id => document.getElementById(id);
+
+  // Reads get a deadline and a retry: the published sheet answers in about a second and then
+  // occasionally replies 307 and leaves it hanging, which would otherwise show the floor an
+  // empty dashboard and have them believe nobody booked anything.
+  async function fetchCsv(url) {
+    let last = '';
+    for (let i = 1; i <= FETCH_TRIES; i++) {
+      const ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+      const timer = ctl ? setTimeout(() => ctl.abort(), FETCH_TIMEOUT) : null;
+      try {
+        const res = await fetch(url, ctl ? { signal: ctl.signal } : undefined);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return await res.text();
+      } catch (e) {
+        last = (e && e.name === 'AbortError') ? 'the sheet stopped responding'
+                                              : ((e && e.message) || String(e));
+        if (i < FETCH_TRIES) await new Promise(r => setTimeout(r, 800 * i));
+      } finally { if (timer) clearTimeout(timer); }
+    }
+    throw new Error(last + ' after ' + FETCH_TRIES + ' tries');
+  }
+
+  async function loadAll() {
+    try {
+      rawRows = parseCSV(await fetchCsv(DC_CSV_URL + '&t=' + Date.now()));
+      $('banner').classList.remove('show');
+      $('stamp').textContent = 'Updated ' + new Date().toLocaleTimeString('en-US',
+        { hour: 'numeric', minute: '2-digit' });
+      buildMonthPick();
+      buildMePick();
+      renderAll();
+    } catch (err) {
+      $('banner').textContent = 'Could not load the booking sheet: ' + err.message +
+        '. It usually clears on its own — press Refresh in a moment.';
+      $('banner').classList.add('show');
+      $('stamp').textContent = 'Not updated';
+    }
+  }
+
+  // ── The roster this page speaks for ──────────────────────────────────────
+  // POC TEAM are the leaders and SMEs, not SDRs, so they are not ranked against the floor.
+  // Hidden members have left; their historical bookings still resolve, they just do not appear.
+  function sdrs() {
+    const out = [];
+    TEAMS.filter(t => t.id !== 'poc').forEach(t =>
+      t.members.filter(m => !m.hidden).forEach(m => out.push({ m, team: t })));
+    return out;
+  }
+  function teamsList() { return TEAMS.filter(t => t.id !== 'poc'); }
+
+  // ── Period ───────────────────────────────────────────────────────────────
+  function ymOf(iso) { return iso.slice(0, 7); }
+  function todayIso() { return localIso(new Date()); }
+
+  function periodDates() {
+    const today = todayIso();
+    if (_period === 'week') {
+      // Monday to today
+      const d = new Date(); const dow = (d.getDay() + 6) % 7;
+      const mon = new Date(d); mon.setDate(d.getDate() - dow);
+      const out = []; const cur = new Date(mon);
+      while (localIso(cur) <= today) { out.push(localIso(cur)); cur.setDate(cur.getDate() + 1); }
+      return { dates: out, label: 'Week of ' + fmtShort(localIso(mon)), target: WEEKLY_TARGET };
+    }
+    let ym;
+    if (_period === 'month')      ym = ymOf(today);
+    else if (_period === 'prev')  { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1); ym = localIso(d).slice(0, 7); }
+    else                          ym = _pickYm || ymOf(today);
+    const [y, m] = ym.split('-').map(Number);
+    const last = new Date(y, m, 0).getDate();
+    const out = [];
+    for (let d = 1; d <= last; d++) {
+      const iso = localIso(new Date(y, m - 1, d));
+      if (iso > today) break;
+      out.push(iso);
+    }
+    return { dates: out, ym,
+             label: new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+             target: MONTHLY_TARGET };
+  }
+
+  function fmtShort(iso) {
+    const p = iso.split('-').map(Number);
+    return new Date(p[0], p[1] - 1, p[2]).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+
+  function setPeriod(p) {
+    _period = p;
+    ['Month', 'Week', 'Prev'].forEach(k =>
+      $('pb' + k).classList.toggle('on', p === k.toLowerCase()));
+    if (p === 'pick') _pickYm = $('monthPick').value;
+    else $('monthPick').value = '';
+    renderAll();
+  }
+
+  function buildMonthPick() {
+    const sel = $('monthPick');
+    if (sel.options.length) return;
+    const seen = {};
+    rawRows.forEach(r => { const d = normalizeDate(r.rawDate); if (d) seen[ymOf(d)] = 1; });
+    const months = Object.keys(seen).filter(m => m >= '2026-01' && m <= ymOf(todayIso())).sort().reverse();
+    sel.innerHTML = '<option value="">Pick a month…</option>' + months.map(m => {
+      const [y, mm] = m.split('-').map(Number);
+      return '<option value="' + m + '">' +
+        new Date(y, mm - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) + '</option>';
+    }).join('');
+  }
+
+  // ── Tally ────────────────────────────────────────────────────────────────
+  // A row can carry two partner meetings, so a booking is counted per partner present, and a
+  // meeting only counts toward show-up once it has actually happened or been cancelled.
+  // Bookings still sitting in the future are neither a win nor a loss and are left out of the
+  // rate, which is why a fresh month can show plenty of DCs and no show-up figure at all.
+  function tally(dates) {
+    const set = {}; dates.forEach(d => set[d] = 1);
+    // Only the SDRs this page speaks for. Counting everyone would make the day columns add up to
+    // more than the floor total above them, and a chart that disagrees with the number beside it
+    // is worse than no chart.
+    const mine = {}; sdrs().forEach(p => mine[p.m.id] = 1);
+    const per = {}, byDay = {};
+    dates.forEach(d => byDay[d] = 0);
+    for (const row of rawRows) {
+      const d = normalizeDate(row.rawDate);
+      if (!d || !set[d]) continue;
+      const id = resolveAgent(row.agent);
+      if (!id || !mine[id]) continue;
+      if (!per[id]) per[id] = { dc: 0, yes: 0, held: 0 };
+      if (row.sp1) { per[id].dc++; byDay[d]++; }
+      if (row.sp2) { per[id].dc++; byDay[d]++; }
+      for (const st of [row.sp1status, row.sp2status]) {
+        if (st === 'yes') { per[id].yes++; per[id].held++; }
+        else if (st === 'no' || st === 'cancelled') { per[id].held++; }
+      }
+    }
+    return { per, byDay };
+  }
+
+  function pct(a, b) { return b ? Math.round(a / b * 100) : null; }
+  function rateColor(p, goal) {
+    if (p === null) return 'var(--mute)';
+    return p >= goal ? 'var(--green)' : p >= goal - 15 ? 'var(--amber)' : 'var(--red)';
+  }
+
+  // ── Render ───────────────────────────────────────────────────────────────
+  function renderAll() {
+    const { dates, label, target } = periodDates();
+    $('periodLabel').textContent = label + ' · ' + dates.length + (dates.length === 1 ? ' day' : ' days') + ' so far';
+    const t = tally(dates);
+    renderFloor(t, dates, target);
+    renderTeams(t, target);
+    renderBoards(t);
+    renderMe(t, target, label);
+    renderTrend(t, dates);
+    $('method').innerHTML =
+      'How these are counted: one discovery call per partner on a booking, credited to the SDR named on the row. '
+      + 'Show-up is the share of meetings that actually happened out of those that have already come round — '
+      + 'meetings still in the future are not counted either way, so early in a month the rate can be blank. '
+      + 'The passing mark is ' + SHOWUP_GOAL + '%, and a rate is only shown once someone has '
+      + SHOWUP_MIN + ' meetings behind them, because two out of two is not a track record.';
+  }
+
+  // Business days done against business days in the whole period. Seven days into a month, "3% of
+  // target" on its own reads like a floor that is failing rather than a floor that has barely
+  // started, and the difference matters to thirty people reading it.
+  function elapsedPct(dates) {
+    const biz = list => list.filter(d => {
+      const p = d.split('-').map(Number), dow = new Date(p[0], p[1] - 1, p[2]).getDay();
+      return dow !== 0 && dow !== 6;
+    }).length;
+    if (_period === 'week') return pct(biz(dates), 5);
+    if (!dates.length) return null;
+    const [y, m] = dates[0].split('-').map(Number);
+    const last = new Date(y, m, 0).getDate(), all = [];
+    for (let d = 1; d <= last; d++) all.push(localIso(new Date(y, m - 1, d)));
+    return pct(biz(dates), biz(all));
+  }
+
+  function renderFloor(t, dates, target) {
+    const people = sdrs();
+    const ids = people.map(p => p.m.id);
+    let dc = 0, yes = 0, held = 0, booked = 0;
+    ids.forEach(id => { const v = t.per[id]; if (v) { dc += v.dc; yes += v.yes; held += v.held; if (v.dc) booked++; } });
+    const su = pct(yes, held);
+    const teamTarget = target * people.length;
+    const prog = pct(dc, teamTarget);
+    const el = elapsedPct(dates);
+    $('floor').innerHTML =
+      stat(dc, 'DCs booked', people.length + ' SDRs on the floor')
+      + stat(prog === null ? '—' : prog + '%', 'of target',
+             dc + ' of ' + teamTarget + ' (' + target + ' each)'
+             + (el !== null && el < 100 ? ' · ' + el + '% of the period gone' : ''),
+             rateColor(prog, el === null || el >= 100 ? 100 : el))
+      + stat(su === null ? '—' : su + '%', 'showed up',
+             held ? yes + ' of ' + held + ' meetings held' : 'no meetings have come round yet',
+             rateColor(su, SHOWUP_GOAL))
+      + stat(booked, 'booked at least one', booked < people.length
+             ? (people.length - booked) + ' yet to get on the board' : 'everybody is on the board');
+  }
+  function stat(num, lbl, sub, color) {
+    return '<div class="stat"><div class="statnum"' + (color ? ' style="color:' + color + '"' : '') + '>'
+      + esc(String(num)) + '</div><div class="statlbl">' + esc(lbl) + '</div>'
+      + '<div class="statsub">' + esc(sub) + '</div></div>';
+  }
+
+  function renderTeams(t, target) {
+    const html = teamsList().map(team => {
+      const mem = team.members.filter(m => !m.hidden);
+      if (!mem.length) return '';
+      let dc = 0, yes = 0, held = 0;
+      mem.forEach(m => { const v = t.per[m.id]; if (v) { dc += v.dc; yes += v.yes; held += v.held; } });
+      const goal = target * mem.length;
+      const prog = pct(dc, goal), su = pct(yes, held);
+      const per = mem.length ? (dc / mem.length).toFixed(1) : '0';
+      return '<div class="team">'
+        + '<div class="teamhead" style="background:' + esc(team.color) + '">'
+        + '<span class="teamname">' + esc(team.name) + '</span>'
+        + '<span class="teamdc">' + dc + ' DCs</span></div>'
+        + '<div class="teambody">'
+        + '<div class="bar"><div class="barfill" style="width:' + Math.min(100, prog || 0) + '%;background:'
+        + esc(team.color) + '"></div></div>'
+        + '<div class="kv"><span>Against target</span><b>' + (prog === null ? '—' : prog + '%')
+        + '</b></div>'
+        + '<div class="kv"><span>Per head</span><b>' + per + ' DCs</b></div>'
+        + '<div class="kv"><span>Showed up</span><b style="color:' + rateColor(su, SHOWUP_GOAL) + '">'
+        + (su === null ? 'not yet' : su + '%') + '</b></div>'
+        + '<div class="kv"><span>SDRs</span><b>' + mem.length + '</b></div>'
+        + '</div></div>';
+    }).join('');
+    $('teams').innerHTML = html || '<div class="empty">No teams to show.</div>';
+  }
+
+  // Top performers only. There is no bottom of this table by design: a public ranking of who is
+  // last is a conversation for a team leader in private, not a wall chart.
+  function renderBoards(t) {
+    const people = sdrs();
+    const dcList = people.map(p => ({ p, v: (t.per[p.m.id] || {}).dc || 0 }))
+      .filter(x => x.v > 0).sort((a, b) => b.v - a.v).slice(0, TOP_N);
+
+    const suList = people.map(p => {
+      const v = t.per[p.m.id] || { yes: 0, held: 0 };
+      return { p, held: v.held, rate: v.held >= SHOWUP_MIN ? v.yes / v.held : null, yes: v.yes };
+    }).filter(x => x.rate !== null).sort((a, b) => b.rate - a.rate).slice(0, TOP_N);
+
+    $('boards').innerHTML =
+      board('Most discovery calls booked', 'The top ' + TOP_N + ' this period.',
+            dcList.map((x, i) => rowHtml(i, x.p, x.v + '')),
+            'Nobody has booked yet this period.')
+      + board('Best show-up rate',
+              'Of the meetings that have come round. Needs ' + SHOWUP_MIN + ' or more before it counts.',
+              suList.map((x, i) => rowHtml(i, x.p, Math.round(x.rate * 100) + '%',
+                         rateColor(Math.round(x.rate * 100), SHOWUP_GOAL))),
+              'No one has ' + SHOWUP_MIN + ' meetings behind them yet this period.');
+  }
+  function board(title, sub, rows, emptyMsg) {
+    return '<div class="board"><div class="boardhead"><div class="boardtitle">' + esc(title) + '</div>'
+      + '<div class="boardsub">' + esc(sub) + '</div></div>'
+      + (rows.length ? rows.join('') : '<div class="empty">' + esc(emptyMsg) + '</div>') + '</div>';
+  }
+  function rowHtml(i, p, val, color) {
+    const g = i === 0 ? ' g1' : i === 1 ? ' g2' : i === 2 ? ' g3' : '';
+    return '<div class="row"><div class="rank' + g + '">' + (i + 1) + '</div>'
+      + '<div class="rname">' + esc(p.m.display) + '</div>'
+      + '<span class="rteam" style="background:' + esc(p.team.color) + '22;color:' + esc(p.team.color) + '">'
+      + esc(p.team.name) + '</span>'
+      + '<div class="rval"' + (color ? ' style="color:' + color + '"' : '') + '>' + esc(val) + '</div></div>';
+  }
+
+  function buildMePick() {
+    const sel = $('mePick');
+    if (!sel || sel.options.length) return;
+    const opts = sdrs().sort((a, b) => a.m.display.localeCompare(b.m.display))
+      .map(p => '<option value="' + esc(p.m.id) + '">' + esc(p.m.display) + ' · ' + esc(p.team.name) + '</option>');
+    sel.innerHTML = '<option value="">Choose your name…</option>' + opts.join('');
+    if (_me) sel.value = _me;
+  }
+
+  // Everyone can see their own standing against the floor and their team without being ranked
+  // in public. The comparison is to the averages and to the top figure, not to a position.
+  function renderMe(t, target, label) {
+    if (!$('mePick')) {
+      $('me').innerHTML = '<div class="mepick">'
+        + '<select id="mePick" onchange="_me=this.value;renderAll()"></select>'
+        + '<span class="tiny muted">Your pick is remembered on this device only.</span></div>'
+        + '<div id="meBody"></div>';
+      buildMePick();
+      const saved = (function(){ try { return localStorage.getItem('oaTeamMe') || ''; } catch(e){ return ''; } })();
+      if (saved && !_me) { _me = saved; $('mePick').value = saved; }
+    }
+    try { if (_me) localStorage.setItem('oaTeamMe', _me); } catch (e) {}
+
+    const body = $('meBody');
+    if (!_me) {
+      body.innerHTML = '<div class="empty">Pick your name to see your figures for ' + esc(label) + '.</div>';
+      return;
+    }
+    const people = sdrs();
+    const mine = people.find(p => p.m.id === _me);
+    if (!mine) { body.innerHTML = '<div class="empty">That name is not on the current roster.</div>'; return; }
+    const v = t.per[_me] || { dc: 0, yes: 0, held: 0 };
+    const su = v.held >= SHOWUP_MIN ? pct(v.yes, v.held) : null;
+
+    const teamMem = mine.team.members.filter(m => !m.hidden);
+    const teamDc = teamMem.reduce((a, m) => a + ((t.per[m.id] || {}).dc || 0), 0);
+    const teamAvg = teamMem.length ? teamDc / teamMem.length : 0;
+    const floorDc = people.reduce((a, p) => a + ((t.per[p.m.id] || {}).dc || 0), 0);
+    const floorAvg = people.length ? floorDc / people.length : 0;
+    const topDc = Math.max(0, ...people.map(p => (t.per[p.m.id] || {}).dc || 0));
+    const prog = pct(v.dc, target);
+
+    body.innerHTML = '<div class="megrid">'
+      + cell(v.dc, 'DCs booked', 'Team average ' + teamAvg.toFixed(1) + ' · floor average ' + floorAvg.toFixed(1))
+      + cell((prog === null ? '—' : prog + '%'), 'of your target',
+             v.dc + ' of ' + target + (v.dc >= target ? ' · target met' : ' · ' + (target - v.dc) + ' to go'),
+             rateColor(prog, 100))
+      + cell(su === null ? '—' : su + '%', 'showed up',
+             v.held >= SHOWUP_MIN ? v.yes + ' of ' + v.held + ' held · pass mark ' + SHOWUP_GOAL + '%'
+                                  : 'needs ' + SHOWUP_MIN + ' held meetings, you have ' + v.held,
+             rateColor(su, SHOWUP_GOAL))
+      + cell(topDc, 'top booker this period',
+             v.dc >= topDc && topDc > 0 ? 'that is you' : (topDc - v.dc) + ' ahead of you')
+      + '</div>';
+  }
+  function cell(num, lbl, sub, color) {
+    return '<div class="mecell"><div class="menum"' + (color ? ' style="color:' + color + '"' : '') + '>'
+      + esc(String(num)) + '</div><div class="melbl">' + esc(lbl) + '</div>'
+      + '<div class="mesub">' + esc(sub) + '</div></div>';
+  }
+
+  function renderTrend(t, dates) {
+    if (!dates.length) { $('trend').innerHTML = '<div class="empty">No days in this period yet.</div>'; return; }
+    const days = dates.slice(-31);
+    const max = Math.max(1, ...days.map(d => t.byDay[d] || 0));
+    const bars = days.map(d => {
+      const n = t.byDay[d] || 0;
+      const p = d.split('-').map(Number);
+      const dt = new Date(p[0], p[1] - 1, p[2]);
+      const weekend = dt.getDay() === 0 || dt.getDay() === 6;
+      return '<div class="col" title="' + esc(fmtShort(d) + ' · ' + n + ' DC' + (n === 1 ? '' : 's')) + '">'
+        + '<div class="colval">' + (n || '') + '</div>'
+        + '<div class="colbar" style="height:' + Math.round(n / max * 104) + 'px;background:'
+        + (weekend ? '#C9CEDA' : 'var(--blue)') + '"></div>'
+        + '<div class="colcap">' + dt.getDate() + '</div></div>';
+    }).join('');
+    const total = days.reduce((a, d) => a + (t.byDay[d] || 0), 0);
+    $('trend').innerHTML = '<div class="tiny muted">' + total + ' DCs across '
+      + days.length + ' days · grey columns are weekends</div><div class="bars">' + bars + '</div>';
+  }
+
+  // ── Go ───────────────────────────────────────────────────────────────────
+  function boot() {
+    renderMe({ per: {} }, MONTHLY_TARGET, periodDates().label);   // paints the picker before data arrives
+    loadAll();
+    setInterval(function () { if (!document.hidden) loadAll(); }, REFRESH_MS);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else setTimeout(boot, 0);
+</script>
+</body>
+</html>
