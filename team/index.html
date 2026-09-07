@@ -898,8 +898,8 @@
           + '<div class="dpmeta">'
             + '<b>' + r.successful + ' of ' + r.target + '</b> meetings done · '
             + (r.scheduled
-                ? r.scheduled + ' booked, waiting to happen'
-                : '<b style="color:var(--red)">0 booked so far</b>')
+                ? r.scheduled + ' scheduled ahead'
+                : '<b style="color:var(--red)">nothing scheduled ahead</b>')
           + '</div>'
         + '</div>'
         + '<div class="dpnum">'
@@ -921,7 +921,8 @@
       + ', worst ' + DP_PER_CYCLE + ' from each. '
       + (bits.length ? bits.join(', and ') + '. ' : '')
       + 'The big number on each row is how many meetings still need booking for that partner. '
-      + 'Meetings already booked do not count until they actually happen.</div></div>'
+      + 'Scheduled ahead means already set but not yet held, so it does not count towards the target '
+      + 'until it happens.</div></div>'
       + '<div class="dplist">' + cards + '</div></div>';
   }
 
@@ -971,7 +972,7 @@
         + '<div class="sprank' + (i < 3 ? ' hot' : '') + '">' + r.needed + '</div>'
         + '<div class="spmid"><div class="spname">' + esc(r.name) + '</div>'
         + '<div class="spmeta">' + r.successful + ' of ' + r.target + ' done'
-        + (r.scheduled ? ' · ' + r.scheduled + ' booked and waiting' : ' · nothing booked yet')
+        + (r.scheduled ? ' · ' + r.scheduled + ' scheduled ahead' : ' · nothing scheduled ahead')
         + '</div></div>'
         + '<div class="sprate" style="color:' + rateColor(pctv, 100) + '">'
         + (pctv === null ? '—' : pctv + '%') + '</div></div>';
@@ -1000,7 +1001,7 @@
       + '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
       + '<div><div class="boardtitle">Cycle ' + esc(cyc.title) + '</div>'
       + '<div class="boardsub">' + totSuccess + ' of ' + totTarget + ' meetings delivered · '
-      + totNeeded + ' still needed · ' + totSched + ' booked and waiting to happen</div></div>'
+      + totNeeded + ' still needed · ' + totSched + ' scheduled and yet to happen</div></div>'
       + picker + '</div>'
       + '<div class="bar" style="margin-top:12px"><div class="barfill" style="width:' + Math.min(100, rate)
       + '%;background:' + (rate >= 100 ? 'var(--green)' : rate >= 50 ? 'var(--amber)' : 'var(--blue)')
@@ -1019,12 +1020,13 @@
 
       + '<div class="board">'
       + '<div class="boardhead"><div class="boardtitle">Every partner this cycle</div>'
-      + '<div class="boardsub">Booked and waiting means a meeting is set but has not happened yet, so it '
-      + 'does not count towards the target until it does.'
+      + '<div class="boardsub">Scheduled means a meeting is set but has not happened yet, so it does not '
+      + 'count towards the target until it does. A meeting that has happened leaves this column and '
+      + 'lands in Done, so a partner can show nothing scheduled and still have meetings behind it.'
       + (done.length ? ' ' + done.length + ' partner' + (done.length === 1 ? ' is' : 's are') + ' already there.' : '')
       + '</div></div>'
       + '<div class="tablewrap"><table class="sptable"><thead><tr>'
-      + ['Partner', 'Target', 'Booked', 'Done', 'Needed', '', 'Rate']
+      + ['Partner', 'Target', 'Scheduled', 'Done', 'Needed', '', 'Rate']
           .map(h => '<th' + (h && h !== 'Partner' ? ' class="num"' : '') + '>' + h + '</th>').join('')
       + '</tr></thead><tbody>' + table + '</tbody></table></div></div>';
   }
