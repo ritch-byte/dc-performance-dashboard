@@ -37,8 +37,44 @@ const CALENDARS = [
 const TAB          = 'DC Assignments';
 const DAYS_AHEAD   = 21;
 const DAYS_BEHIND  = 1;    // keep yesterday, so a meeting is still there to argue about
-const HEADERS = ['eventId', 'calendar', 'title', 'start', 'end', 'durationMin', 'organizer',
-                 'guests', 'assignedTo', 'assignedBy', 'assignedAt', 'syncedAt'];
+const HEADERS = ['eventId', 'calendar', 'partner', 'sdrEmail', 'start', 'end', 'durationMin',
+                 'assignedTo', 'assignedBy', 'assignedAt', 'syncedAt'];
+
+/**
+ * Who booked it, and for whom.
+ *
+ * A real event reads: organizer partner.six-eleven@, guests the prospect, the partner's own
+ * people, concierge, bdr-team, and exactly one SDR. So the partner comes off the organizer
+ * rather than out of the title, which is free text and will not always say "and Partner X",
+ * and the SDR is the one internal address that is not a shared mailbox.
+ *
+ * The prospect's name and email are deliberately NOT written to the sheet. That tab gets
+ * published to the web for a page the whole floor can open, and a client's name plus the
+ * partner they are being sold to is not something to put on the open internet to save a
+ * click. Partner and SDR are enough to say who owns the meeting and whether anyone is awake.
+ */
+function partnerFrom_(email) {
+  const m = String(email || '').match(/^partner\.([^@]+)@/i);
+  if (!m) return '';
+  const words = m[1].replace(/[-_.]+/g, ' ').split(' ');
+  return words.map(function (w) {
+    if (!w) return w;
+    // A short token with no vowel is an acronym, not a word: HGS OSS, not Hgsoss.
+    if (w.length <= 4 && !/[aeiou]/i.test(w)) return w.toUpperCase();
+    return w.charAt(0).toUpperCase() + w.slice(1);
+  }).join(' ');
+}
+function sdrFrom_(emails) {
+  for (let i = 0; i < emails.length; i++) {
+    const e = String(emails[i] || '').toLowerCase();
+    if (e.indexOf('@outsourceaccelerator.com') < 0) continue;
+    if (/^partner\./.test(e)) continue;
+    if (/^concierge/.test(e)) continue;
+    if (/^bdr-team@/.test(e)) continue;
+    return e;
+  }
+  return '';
+}
 
 function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj))
@@ -73,8 +109,8 @@ function syncCalendars() {
     const rows = sh.getRange(2, 1, last - 1, HEADERS.length).getValues();
     rows.forEach(function (r) {
       const id = String(r[0] || '').trim();
-      if (id && String(r[8] || '').trim()) {
-        kept[id] = { to: r[8], by: r[9], at: r[10] };
+      if (id && String(r[7] || '').trim()) {
+        kept[id] = { to: r[7], by: r[8], at: r[9] };
       }
     });
   }
@@ -87,25 +123,24 @@ function syncCalendars() {
     cal.getEvents(from, to).forEach(function (ev) {
       const eid = ev.getId();
       const a = kept[eid] || { to: '', by: '', at: '' };
-      let guests = '';
-      try {
-        guests = ev.getGuestList().map(function (g) { return g.getEmail(); }).join(' ');
-      } catch (e) { guests = ''; }
-      let organizer = '';
-      try { organizer = ev.getCreators().join(' '); } catch (e) { organizer = ''; }
+      let guests = [];
+      try { guests = ev.getGuestList().map(function (g) { return g.getEmail(); }); } catch (e) {}
+      let creators = [];
+      try { creators = ev.getCreators(); } catch (e) {}
+      let partner = '';
+      creators.concat(guests).forEach(function (e) { if (!partner) partner = partnerFrom_(e); });
       out.push([
-        eid, id, ev.getTitle(),
+        eid, id, partner, sdrFrom_(guests),
         Utilities.formatDate(ev.getStartTime(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm"),
         Utilities.formatDate(ev.getEndTime(),   'Asia/Manila', "yyyy-MM-dd'T'HH:mm"),
         Math.round((ev.getEndTime() - ev.getStartTime()) / 60000),
-        organizer, guests,
         a.to, a.by, a.at,
         Utilities.formatDate(now, 'Asia/Manila', "yyyy-MM-dd'T'HH:mm")
       ]);
     });
   });
 
-  out.sort(function (a, b) { return String(a[3]).localeCompare(String(b[3])); });
+  out.sort(function (a, b) { return String(a[4]).localeCompare(String(b[4])); });
 
   if (sh.getLastRow() > 1) {
     sh.getRange(2, 1, sh.getLastRow() - 1, HEADERS.length).clearContent();
@@ -153,7 +188,7 @@ function doPost(e) {
       const stamp = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm");
       // Clearing an assignment is a write like any other, so an empty name is allowed through
       // and blanks the row rather than being rejected as a mistake.
-      sh.getRange(row, 9,  1, 3).setValues([[
+      sh.getRange(row, 8,  1, 3).setValues([[
         String(data.assignedTo || ''), String(data.assignedBy || ''),
         String(data.assignedTo || '') ? stamp : ''
       ]]);

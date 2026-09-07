@@ -1126,10 +1126,10 @@
         out.push({
           id: (c[ix('eventid')] || '').trim(),
           cal: (c[ix('calendar')] || '').trim(),
-          title: (c[ix('title')] || '').trim() || '(no title)',
+          partner: (c[ix('partner')] || '').trim(),
+          sdrEmail: (c[ix('sdremail')] || '').trim(),
           start: start, end: (c[ix('end')] || '').trim(),
           mins: Number(c[ix('durationmin')] || 0) || 0,
-          guests: (c[ix('guests')] || '').trim(),
           to: (c[ix('assignedto')] || '').trim(),
           by: (c[ix('assignedby')] || '').trim()
         });
@@ -1180,6 +1180,55 @@
       if (w.wraps && r.off !== DOW[prev.getDay()] && mins < w.e) on.push(r.name);
     });
     return on;
+  }
+
+  // The booking SDR comes through as an address like r.aurelio@, so it is turned back into a
+  // name the roster recognises. Initial plus surname is enough almost everywhere; where two
+  // people share a surname it can land on the wrong one, so nothing here is more than a label.
+  function dcaSdr(email) {
+    const local = String(email || '').split('@')[0];
+    if (!local) return null;
+    const parts = local.split(/[._-]+/).filter(Boolean);
+    if (!parts.length) return null;
+    const guess = parts.map(x => x.charAt(0).toUpperCase() + x.slice(1)).join(' ');
+    const id = resolveAgent(guess);
+    if (!id) return { id: null, name: guess };
+    let found = null;
+    TEAMS.forEach(t => t.members.forEach(m => { if (m.id === id) found = { m: m, team: t }; }));
+    if (!found) return { id: null, name: guess };
+    // resolveAgent matches on surname, so d.bautista landed on Samara Bautista: same surname,
+    // different person, and the meeting was then judged against her shift rather than his.
+    // The initial has to agree before this claims to know whose meeting it is. Being told the
+    // owner is unknown is recoverable; being told the wrong name quietly is not.
+    const initial = parts[0].charAt(0).toLowerCase();
+    if (parts.length > 1 && found.m.display.charAt(0).toLowerCase() !== initial) {
+      return { id: null, name: local, unsure: true };
+    }
+    return { id: id, name: found.m.display, team: found.team.name };
+  }
+  // Whether that SDR was rostered on at the moment their own meeting starts. This is the
+  // question the tab exists for: a call booked into an hour its owner is asleep for needs
+  // somebody else on it, and until now nobody could see which those were.
+  function dcaOwnerOnShift(sdrName, iso) {
+    const all = (typeof schedRows === 'function') ? schedRows() : [];
+    if (!all.length || !sdrName) return null;
+    const row = all.find(r => r.name === sdrName)
+             || all.find(r => resolveAgent(r.name) && resolveAgent(r.name) === resolveAgent(sdrName));
+    if (!row) return null;
+    const w = dcaShiftWindow(row.shift);
+    if (!w) return null;
+    const mins = Number(iso.slice(11, 13)) * 60 + Number(iso.slice(14, 16));
+    const p = iso.slice(0, 10).split('-').map(Number);
+    const day = new Date(p[0], p[1] - 1, p[2]);
+    const prev = new Date(day); prev.setDate(day.getDate() - 1);
+    const DOW = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    let on = false;
+    if (row.off !== DOW[day.getDay()]) {
+      if (!w.wraps && mins >= w.s && mins < w.e) on = true;
+      if (w.wraps && mins >= w.s) on = true;
+    }
+    if (!on && w.wraps && row.off !== DOW[prev.getDay()] && mins < w.e) on = true;
+    return { on: on, shift: row.shift, off: row.off };
   }
 
   function dcaFmtTime(iso) {
@@ -1267,14 +1316,20 @@
     const rows = dcaRows.filter(r => r.start.slice(0, 10) >= today && r.start.slice(0, 10) <= cut);
 
     const unassigned = rows.filter(r => !r.to).length;
-    const uncovered  = rows.filter(r => { const c = dcaCoverage(r.start); return c && !c.length; }).length;
+    const needsCover = rows.filter(function (r) {
+      const sdr = dcaSdr(r.sdrEmail);
+      const own = sdr ? dcaOwnerOnShift(sdr.name, r.start) : null;
+      const cov = dcaCoverage(r.start);
+      return (own && !own.on) || (cov && !cov.length);
+    }).length;
 
     const bar = '<div class="card" style="padding:14px 17px;margin-bottom:12px">'
       + '<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">'
       + '<div style="flex:1;min-width:230px"><div class="boardtitle">Upcoming discovery calls</div>'
       + '<div class="boardsub">' + rows.length + ' in the next ' + DCA_DAYS + ' days · '
       + unassigned + ' with nobody assigned'
-      + (uncovered ? ' · <b style="color:var(--red)">' + uncovered + ' with no SDR rostered at that hour</b>' : '')
+      + (needsCover ? ' · <b style="color:var(--red)">' + needsCover
+          + ' fall outside the booking SDR&rsquo;s shift</b>' : '')
       + '</div></div>'
       + (_dcaUnlocked
           ? '<input placeholder="Your name" value="' + esc(_dcaWho) + '" oninput="_dcaWho=this.value"'
@@ -1294,11 +1349,21 @@
 
     const blocks = Object.keys(days).sort().map(function (d) {
       const items = days[d].map(function (r) {
+        const sdr = dcaSdr(r.sdrEmail);
+        const own = sdr ? dcaOwnerOnShift(sdr.name, r.start) : null;
+        const offShift = own && !own.on;
         const cov = dcaCoverage(r.start);
         const none = cov && !cov.length;
-        const covTxt = cov === null ? ''
-          : none ? '<b style="color:var(--red)">nobody rostered at this hour</b>'
-                 : cov.length + ' SDR' + (cov.length === 1 ? '' : 's') + ' on shift';
+
+        const bits = [];
+        if (sdr && sdr.unsure) bits.push('booked by ' + esc(sdr.name) + ' (not on the roster)');
+        else if (sdr) bits.push('booked by ' + esc(sdr.name));
+        if (offShift) bits.push('<b style="color:var(--red)">off shift (' + esc(own.shift) + ')</b>');
+        else if (own)  bits.push('on shift');
+        else if (sdr && !sdr.unsure) bits.push('no roster for them');
+        if (none) bits.push('<b style="color:var(--red)">nobody rostered at this hour</b>');
+        else if (cov && cov.length) bits.push(cov.length + ' on shift');
+
         const assign = _dcaUnlocked
           ? '<input value="' + esc(r.to) + '" placeholder="assign to…" '
             + 'onchange="dcaAssign(' + "'" + esc(r.id) + "'" + ',this.value)" '
@@ -1306,12 +1371,14 @@
             + 'style="width:150px;border:1px solid var(--border);border-radius:7px;padding:4px 8px;'
             + 'font-size:11.5px;font-family:inherit">'
           : (r.to ? '<span class="dcato">' + esc(r.to) + '</span>'
-                  : '<span class="dcanone">unassigned</span>');
-        return '<div class="dca' + (none ? ' gap' : '') + '">'
+                  : '<span class="dcanone">' + (offShift || none ? 'needs cover' : 'unassigned') + '</span>');
+
+        return '<div class="dca' + (offShift || none ? ' gap' : '') + '">'
           + '<div class="dcatime">' + esc(dcaFmtTime(r.start))
           + '<span>' + (r.mins ? r.mins + ' min' : '') + '</span></div>'
-          + '<div class="dcamid"><div class="dcatitle">' + esc(r.title) + '</div>'
-          + '<div class="dcameta">' + esc(dcaCal(r.cal)) + (covTxt ? ' · ' + covTxt : '') + '</div></div>'
+          + '<div class="dcamid">'
+          + '<div class="dcatitle">' + esc(r.partner || dcaCal(r.cal)) + '</div>'
+          + '<div class="dcameta">' + bits.join(' · ') + '</div></div>'
           + '<div class="dcaright">' + assign + '</div></div>';
       }).join('');
       return '<div class="board" style="margin-bottom:12px">'
