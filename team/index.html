@@ -91,6 +91,27 @@
   .rteam{font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;flex-shrink:0}
   .rval{font-size:13px;font-weight:800;flex-shrink:0;min-width:52px;text-align:right}
 
+  /* ── source partners ── */
+  .splist{display:grid;grid-template-columns:repeat(auto-fit,minmax(292px,1fr));gap:0}
+  .sp{display:flex;align-items:center;gap:11px;padding:10px 16px;border-top:1px solid #F0F2F6}
+  .sprank{min-width:38px;height:30px;border-radius:8px;background:#EEF0F5;color:var(--slate);
+          font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;
+          flex-shrink:0;padding:0 7px}
+  .sprank.hot{background:#FDECEC;color:var(--red)}
+  .spmid{flex:1;min-width:0}
+  .spname{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .spmeta{font-size:10.5px;color:var(--slate);margin-top:1px}
+  .sprate{font-size:12.5px;font-weight:800;flex-shrink:0}
+  .tablewrap{overflow-x:auto}
+  .sptable{width:100%;border-collapse:collapse;min-width:610px}
+  .sptable th{background:#F3F5FC;color:var(--navy);font-size:10px;text-transform:uppercase;
+              letter-spacing:.4px;text-align:left;padding:8px 11px;font-weight:800;white-space:nowrap}
+  .sptable td{padding:8px 11px;font-size:12.5px;border-top:1px solid #F0F2F6}
+  .sptable .num{text-align:right;white-space:nowrap}
+  .sptable th.num{text-align:right}
+  .sptable .spn{font-weight:600;white-space:nowrap;max-width:230px;overflow:hidden;text-overflow:ellipsis}
+  .minibar{height:6px;border-radius:3px;background:#EEF0F5;overflow:hidden;min-width:88px}
+
   /* ── trend ── */
   .trend{background:var(--card);border:1px solid var(--border);border-radius:13px;padding:16px 18px}
   .bars{display:flex;align-items:flex-end;gap:5px;height:132px;margin-top:6px}
@@ -141,6 +162,9 @@
   <div class="banner" id="banner"></div>
 
   <div class="floor" id="floor"></div>
+
+  <h2>Source partners — where to book</h2>
+  <div id="partners"></div>
 
   <h2>Team standings</h2>
   <div class="teams" id="teams"></div>
@@ -418,6 +442,7 @@
         { hour: 'numeric', minute: '2-digit' });
       buildMonthPick();
       renderAll();
+      loadPartners();
     } catch (err) {
       $('banner').textContent = 'Could not load the booking sheet: ' + err.message +
         '. It usually clears on its own — press Refresh in a moment.';
@@ -671,6 +696,164 @@
     const total = days.reduce((a, d) => a + (t.byDay[d] || 0), 0);
     $('trend').innerHTML = '<div class="tiny muted">' + total + ' DCs across '
       + days.length + ' days · grey columns are weekends</div><div class="bars">' + bars + '</div>';
+  }
+
+  // ── Source partners ──────────────────────────────────────────────────────
+  // The Fulfillment Tracker, published as CSV. It has no single table: it is a stack of blocks,
+  // one per cycle, each headed "Cycle N (Month) Fulfillment" and followed by its own header row
+  // and a Total. So the parser looks for those markers rather than trusting row positions, and
+  // a new cycle appended next month is picked up without anyone touching this page.
+  const SP_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQTaivbMKZdvEAkEUcJLuk9xwUon9tZvpDL-BCvvXzBCSS6AmIZynkPz_VwTh_kQMlr7OvCYAElyBBz/pub?output=csv';
+  let spCycles = [], _spCycle = -1, _spError = '';
+
+  function spNum(v) {
+    const n = Number(String(v || '').replace(/[^0-9.\-]/g, ''));
+    return isFinite(n) ? n : 0;
+  }
+
+  function parseSpCsv(text) {
+    const lines = splitCsvRows(text.trim());
+    const cycles = [];
+    let cur = null;
+    for (const line of lines) {
+      const c = splitLine(line);
+      // the sheet keeps column A empty, so find the first cell with anything in it
+      let i = 0; while (i < c.length && !String(c[i] || '').trim()) i++;
+      const label = String(c[i] || '').trim();
+      if (!label) continue;
+      const m = label.match(/^Cycle\s+(.+?)\s+Fulfillment$/i);
+      if (m) { cur = { title: m[1], rows: [], total: null }; cycles.push(cur); continue; }
+      if (!cur) continue;                                  // the portal title, before any cycle
+      if (/^BPO Name$/i.test(label)) continue;             // that block's header row
+      const target = spNum(c[i + 1]), sched = spNum(c[i + 2]), success = spNum(c[i + 3]);
+      // "No. of Meetings Needed" is written as a negative shortfall and a positive surplus, so
+      // it is turned back into a plain count of what is still owed. A partner already over its
+      // target owes nothing, and saying "needs -19" would be nonsense to a rep reading it.
+      const raw = spNum(c[i + 4]);
+      const rec = { name: label, target: target, scheduled: sched, successful: success,
+                    needed: Math.max(0, -raw), over: Math.max(0, raw),
+                    rate: target ? success / target : null };
+      if (/^Total$/i.test(label)) { cur.total = rec; continue; }
+      if (!target && !sched && !success) continue;         // a stray or spacer row
+      cur.rows.push(rec);
+    }
+    return cycles.filter(c => c.rows.length);
+  }
+
+  async function loadPartners() {
+    try {
+      spCycles = parseSpCsv(await fetchCsv(SP_CSV_URL + '&t=' + Date.now()));
+      _spError = '';
+      if (_spCycle < 0 || _spCycle >= spCycles.length) _spCycle = spCycles.length - 1;
+    } catch (err) {
+      _spError = err.message;
+    }
+    renderPartners();
+  }
+
+  function setSpCycle(i) { _spCycle = Number(i); renderPartners(); }
+
+  function renderPartners() {
+    const host = $('partners');
+    if (!host) return;
+    if (_spError) {
+      host.innerHTML = '<div class="card"><div class="empty">Could not load the partner tracker: '
+        + esc(_spError) + '.</div></div>';
+      return;
+    }
+    if (!spCycles.length) { host.innerHTML = '<div class="card"><div class="empty">Loading partners…</div></div>'; return; }
+
+    const cyc = spCycles[_spCycle] || spCycles[spCycles.length - 1];
+    const rows = cyc.rows.slice();
+    const totTarget  = rows.reduce((a, r) => a + r.target, 0);
+    const totSuccess = rows.reduce((a, r) => a + r.successful, 0);
+    const totSched   = rows.reduce((a, r) => a + r.scheduled, 0);
+    const totNeeded  = rows.reduce((a, r) => a + r.needed, 0);
+    const rate = totTarget ? Math.round(totSuccess / totTarget * 100) : 0;
+
+    // Priority is not a column in the sheet, it is what the sheet implies: whoever is furthest
+    // from target needs the calls most. Sorted by what is still owed, biggest first, so a rep
+    // opening this page in the morning can see where to point the day without doing arithmetic.
+    const priority = rows.filter(r => r.needed > 0)
+                         .sort((a, b) => b.needed - a.needed).slice(0, 9);
+    const done = rows.filter(r => r.needed === 0);
+
+    // The sheet carries its own Total row. Where it disagrees with the partners listed under it,
+    // say so instead of quietly showing a different number: the August block totals 126 against
+    // rows that add to 68, which means that block is missing partners it is still counting.
+    const t = cyc.total;
+    const mismatch = t && (t.target !== totTarget || t.successful !== totSuccess)
+      ? 'The sheet totals this cycle at ' + t.successful + ' of ' + t.target
+        + ', which does not match the partners listed under it. Figures here add up the rows you can see.'
+      : '';
+
+    const picker = spCycles.length > 1
+      ? '<select onchange="setSpCycle(this.value)" style="margin-left:auto">'
+        + spCycles.map((c, i) => '<option value="' + i + '"' + (i === _spCycle ? ' selected' : '')
+            + '>Cycle ' + esc(c.title) + '</option>').join('') + '</select>'
+      : '';
+
+    const chips = priority.map((r, i) => {
+      const pctv = r.rate === null ? null : Math.round(r.rate * 100);
+      return '<div class="sp">'
+        + '<div class="sprank' + (i < 3 ? ' hot' : '') + '">' + r.needed + '</div>'
+        + '<div class="spmid"><div class="spname">' + esc(r.name) + '</div>'
+        + '<div class="spmeta">' + r.successful + ' of ' + r.target + ' done'
+        + (r.scheduled ? ' · ' + r.scheduled + ' booked and waiting' : ' · nothing booked yet')
+        + '</div></div>'
+        + '<div class="sprate" style="color:' + rateColor(pctv, 100) + '">'
+        + (pctv === null ? '—' : pctv + '%') + '</div></div>';
+    }).join('');
+
+    const table = rows.sort((a, b) => b.needed - a.needed || b.target - a.target).map(r => {
+      const pctv = r.rate === null ? null : Math.round(r.rate * 100);
+      const w = Math.min(100, pctv === null ? 0 : pctv);
+      return '<tr>'
+        + '<td class="spn">' + esc(r.name) + '</td>'
+        + '<td class="num">' + r.target + '</td>'
+        + '<td class="num">' + r.scheduled + '</td>'
+        + '<td class="num">' + r.successful + '</td>'
+        + '<td class="num" style="color:' + (r.needed ? 'var(--red)' : 'var(--green)') + ';font-weight:800">'
+        + (r.needed ? r.needed : (r.over ? '+' + r.over : '0')) + '</td>'
+        + '<td style="min-width:104px"><div class="minibar"><div style="width:' + w
+        + '%;background:' + (w >= 100 ? 'var(--green)' : w >= 50 ? 'var(--amber)' : 'var(--blue)')
+        + ';height:100%;border-radius:3px"></div></div></td>'
+        + '<td class="num" style="color:' + rateColor(pctv, 100) + '">' + (pctv === null ? '—' : pctv + '%') + '</td>'
+        + '</tr>';
+    }).join('');
+
+    host.innerHTML =
+      '<div class="card" style="padding:15px 17px;margin-bottom:12px">'
+      + '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
+      + '<div><div class="boardtitle">Cycle ' + esc(cyc.title) + '</div>'
+      + '<div class="boardsub">' + totSuccess + ' of ' + totTarget + ' meetings delivered · '
+      + totNeeded + ' still needed · ' + totSched + ' booked and waiting to happen</div></div>'
+      + picker + '</div>'
+      + '<div class="bar" style="margin-top:12px"><div class="barfill" style="width:' + Math.min(100, rate)
+      + '%;background:' + (rate >= 100 ? 'var(--green)' : rate >= 50 ? 'var(--amber)' : 'var(--blue)')
+      + '"></div></div>'
+      + '<div class="tiny muted">' + rate + '% of the cycle target delivered</div>'
+      + (mismatch ? '<div class="tiny" style="color:var(--amber);margin-top:6px">' + esc(mismatch) + '</div>' : '')
+      + '</div>'
+
+      + '<div class="board" style="margin-bottom:12px">'
+      + '<div class="boardhead"><div class="boardtitle">Where the calls are needed most</div>'
+      + '<div class="boardsub">The number is how many more successful meetings that partner still owes. '
+      + 'Book here first.</div></div>'
+      + (chips ? '<div class="splist">' + chips + '</div>'
+               : '<div class="empty">Every partner is at target for this cycle.</div>')
+      + '</div>'
+
+      + '<div class="board">'
+      + '<div class="boardhead"><div class="boardtitle">Every partner this cycle</div>'
+      + '<div class="boardsub">Booked and waiting means a meeting is set but has not happened yet, so it '
+      + 'does not count towards the target until it does.'
+      + (done.length ? ' ' + done.length + ' partner' + (done.length === 1 ? ' is' : 's are') + ' already there.' : '')
+      + '</div></div>'
+      + '<div class="tablewrap"><table class="sptable"><thead><tr>'
+      + ['Partner', 'Target', 'Booked', 'Done', 'Needed', '', 'Rate']
+          .map(h => '<th' + (h && h !== 'Partner' ? ' class="num"' : '') + '>' + h + '</th>').join('')
+      + '</tr></thead><tbody>' + table + '</tbody></table></div></div>';
   }
 
   // ── Go ───────────────────────────────────────────────────────────────────
