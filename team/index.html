@@ -143,6 +143,19 @@
   .dpcyc.late{background:#FDECEC;color:var(--red)}
   .dp.late{background:#FFFBFB}
 
+  /* ── dc assignments ── */
+  .dca{display:flex;align-items:center;gap:13px;padding:10px 16px;border-top:1px solid #F0F2F6}
+  .dca.gap{background:#FFFBFB}
+  .dcatime{width:84px;flex-shrink:0;font-size:13px;font-weight:800;color:var(--navy);line-height:1.2}
+  .dcatime span{display:block;font-size:9.5px;font-weight:600;color:var(--mute)}
+  .dcamid{flex:1;min-width:0}
+  .dcatitle{font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dcameta{font-size:10.5px;color:var(--slate);margin-top:2px}
+  .dcaright{flex-shrink:0}
+  .dcato{font-size:11.5px;font-weight:700;background:var(--greenbg);color:var(--green);
+         border:1px solid var(--greenbd);padding:3px 9px;border-radius:6px;white-space:nowrap}
+  .dcanone{font-size:11px;color:var(--mute);font-style:italic}
+
   /* ── trend ── */
   .trend{background:var(--card);border:1px solid var(--border);border-radius:13px;padding:16px 18px}
   .bars{display:flex;align-items:flex-end;gap:5px;height:132px;margin-top:6px}
@@ -183,6 +196,7 @@
   <div class="tabinner">
     <button class="tab on" id="tabPerf"  onclick="setView('perf')">Performance</button>
     <button class="tab"    id="tabParts" onclick="setView('parts')">Source partners</button>
+    <button class="tab"    id="tabDca"   onclick="setView('dca')">DC assignments</button>
   </div>
 </div>
 
@@ -212,6 +226,11 @@
   <div class="trend" id="trend"></div>
 
   <p class="note" id="method"></p>
+  </div>
+
+  <div id="viewDca" style="display:none">
+    <h2>DC assignments — upcoming meetings</h2>
+    <div id="dcassign"></div>
   </div>
 
   <div id="viewParts" style="display:none">
@@ -485,6 +504,7 @@
       buildMonthPick();
       renderAll();
       loadPartners();
+      loadSchedule().then(loadDcAssign);
     } catch (err) {
       $('banner').textContent = 'Could not load the booking sheet: ' + err.message +
         '. It usually clears on its own — press Refresh in a moment.';
@@ -545,8 +565,10 @@
     _view = v;
     $('tabPerf').classList.toggle('on',  v === 'perf');
     $('tabParts').classList.toggle('on', v === 'parts');
+    $('tabDca').classList.toggle('on',   v === 'dca');
     $('viewPerf').style.display  = v === 'perf'  ? '' : 'none';
     $('viewParts').style.display = v === 'parts' ? '' : 'none';
+    $('viewDca').style.display   = v === 'dca'   ? '' : 'none';
     $('periodBar').style.display = v === 'perf'  ? '' : 'none';
   }
 
@@ -1031,9 +1053,280 @@
       + '</tr></thead><tbody>' + table + '</tbody></table></div></div>';
   }
 
+  // ── Rostered shifts ──────────────────────────────────────────────────────
+  // The same published Schedule tab the leaders' dashboard reads. It is here only to answer one
+  // question: was anybody actually on shift when that meeting is due to start. Newest upload for
+  // a period wins, matching how the other dashboard resolves it.
+  const SCH_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSr9FXCEpsr01V3nxJhB4UZIH2AJqteMzsJ3YoNQO_r33FzI8XE53Xs0D1k21RI2AAfci5y79H89HBv/pub?gid=1803207209&single=true&output=csv';
+  let _schByPeriod = {};
+  function schedRows() {
+    const keys = Object.keys(_schByPeriod).sort();
+    if (!keys.length) return [];
+    const ym = localIso(new Date()).slice(0, 7);
+    let pick = _schByPeriod[ym];
+    if (!pick) { for (const k of keys) if (k <= ym) pick = _schByPeriod[k]; }
+    return pick ? pick.rows : [];
+  }
+  async function loadSchedule() {
+    try {
+      const lines = splitCsvRows((await fetchCsv(SCH_CSV_URL + '&t=' + Date.now())).trim());
+      if (lines.length < 2) return;
+      const h = splitLine(lines[0]).map(x => x.trim().toLowerCase());
+      const ix = n => h.indexOf(n);
+      const by = {};
+      for (let i = 1; i < lines.length; i++) {
+        const c = splitLine(lines[i]);
+        const period = (c[ix('period')] || '').trim();
+        if (!/^\d{4}-\d{2}$/.test(period)) continue;
+        const at = (c[ix('uploadedat')] || '').trim();
+        if (!by[period] || at > by[period].savedAt) by[period] = { savedAt: at, rows: [] };
+        if (at !== by[period].savedAt) continue;
+        const name = (c[ix('name')] || '').trim();
+        if (!name) continue;
+        by[period].rows.push({ name: name, shift: (c[ix('shift')] || '').trim(),
+                               off: (c[ix('off')] || '').trim() });
+      }
+      _schByPeriod = by;
+    } catch (err) { /* coverage is a nice-to-have; the meetings still list without it */ }
+  }
+
+  // ── DC assignments ───────────────────────────────────────────────────────
+  // Upcoming meetings from the three concierge calendars, pulled into a sheet tab by a timed
+  // Apps Script and published as CSV. The page never talks to Google Calendar: a static site
+  // cannot authenticate, and an iCal feed refuses a browser fetch outright.
+  //
+  // Assigning posts to a script that is deliberately not the coaching tracker. That one relays
+  // to the Anthropic API, and this URL ships inside a page the whole floor can open.
+  const DCA_CSV_URL  = '';   // published CSV of the "DC Assignments" tab
+  const DCA_POST_URL = '';   // /exec of the DC Assignment web app
+  // SHA-256 of the passcode, for gating the controls. The real check is on the script side,
+  // because anyone can read this file and this hash only decides what the page draws.
+  const DCA_PASS_HASH = 'bd15020d0b60b66f3022dc01dc775cf3a1e88129bb8d1c46c9931cb426c2f499';
+  const DCA_DAYS = 14;
+
+  let dcaRows = [], dcaError = '', _dcaUnlocked = false, _dcaWho = '', _dcaBusy = '';
+
+  async function sha256Hex(str) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+    return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  async function loadDcAssign() {
+    if (!DCA_CSV_URL) { renderDcAssign(); return; }
+    try {
+      const lines = splitCsvRows((await fetchCsv(DCA_CSV_URL + '&t=' + Date.now())).trim());
+      if (lines.length < 2) { dcaRows = []; dcaError = ''; renderDcAssign(); return; }
+      const h = splitLine(lines[0]).map(x => x.trim().toLowerCase());
+      const ix = n => h.indexOf(n);
+      const out = [];
+      for (let i = 1; i < lines.length; i++) {
+        const c = splitLine(lines[i]);
+        const start = (c[ix('start')] || '').trim();
+        if (!start) continue;
+        out.push({
+          id: (c[ix('eventid')] || '').trim(),
+          cal: (c[ix('calendar')] || '').trim(),
+          title: (c[ix('title')] || '').trim() || '(no title)',
+          start: start, end: (c[ix('end')] || '').trim(),
+          mins: Number(c[ix('durationmin')] || 0) || 0,
+          guests: (c[ix('guests')] || '').trim(),
+          to: (c[ix('assignedto')] || '').trim(),
+          by: (c[ix('assignedby')] || '').trim()
+        });
+      }
+      out.sort((a, b) => a.start.localeCompare(b.start));
+      dcaRows = out; dcaError = '';
+    } catch (err) {
+      dcaError = err.message;
+    }
+    renderDcAssign();
+  }
+
+  // ── Who is rostered when ─────────────────────────────────────────────────
+  // A meeting outside everyone's shift is the whole reason this tab exists, so coverage is
+  // worked out rather than eyeballed. Shifts come from the schedule already published for the
+  // leaders' dashboard: "9PM-8AM (4x11)", "6AM-5PM" and so on.
+  function dcaShiftWindow(shift) {
+    const m = String(shift || '').match(
+      /(\d{1,2})(?::(\d{2}))?\s*(AM|PM)\s*[-–]\s*(\d{1,2})(?::(\d{2}))?\s*(AM|PM)/i);
+    if (!m) return null;
+    const to24 = (h, ap) => { h = Number(h) % 12; return ap.toUpperCase() === 'PM' ? h + 12 : h; };
+    const s = to24(m[1], m[3]) * 60 + Number(m[2] || 0);
+    const e = to24(m[4], m[6]) * 60 + Number(m[5] || 0);
+    return { s: s, e: e, wraps: e <= s };
+  }
+  // How many rostered SDRs are on shift at that moment. A night shift beginning at 9PM covers
+  // 3AM the following morning, so the day before is checked too: the person on that meeting
+  // started work yesterday by the calendar and is very much at their desk.
+  function dcaCoverage(iso) {
+    const all = (typeof schedRows === 'function') ? schedRows() : [];
+    if (!all.length) return null;
+    const d = iso.slice(0, 10), t = iso.slice(11);
+    const mins = Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+    const p = d.split('-').map(Number);
+    const day = new Date(p[0], p[1] - 1, p[2]);
+    const prev = new Date(day); prev.setDate(day.getDate() - 1);
+    const DOW = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    const on = [];
+    all.forEach(function (r) {
+      const w = dcaShiftWindow(r.shift);
+      if (!w) return;
+      // a shift that starts on the meeting's own day
+      if (r.off !== DOW[day.getDay()]) {
+        if (!w.wraps && mins >= w.s && mins < w.e) { on.push(r.name); return; }
+        if (w.wraps && mins >= w.s)                { on.push(r.name); return; }
+      }
+      // or one that started the day before and is still running
+      if (w.wraps && r.off !== DOW[prev.getDay()] && mins < w.e) on.push(r.name);
+    });
+    return on;
+  }
+
+  function dcaFmtTime(iso) {
+    const hh = Number(iso.slice(11, 13)), mm = iso.slice(14, 16);
+    const ap = hh >= 12 ? 'PM' : 'AM', h12 = (hh % 12) || 12;
+    return h12 + (mm === '00' ? '' : ':' + mm) + ' ' + ap;
+  }
+  function dcaFmtDay(d) {
+    const today = localIso(new Date());
+    const t = new Date(); t.setDate(t.getDate() + 1);
+    if (d === today) return 'Today';
+    if (d === localIso(t)) return 'Tomorrow';
+    const p = d.split('-').map(Number);
+    return new Date(p[0], p[1] - 1, p[2])
+      .toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+  }
+  function dcaCal(email) {
+    const m = String(email).match(/^([^@]+)/);
+    return m ? m[1].replace(/-/g, ' ') : email;
+  }
+
+  async function dcaUnlock() {
+    const v = prompt('Passcode to assign meetings:');
+    if (v === null) return;
+    const hex = await sha256Hex(v);
+    if (hex !== DCA_PASS_HASH) { alert('That passcode is not right.'); return; }
+    _dcaUnlocked = true;
+    try { sessionStorage.setItem('oaDcaPass', v); } catch (e) {}
+    renderDcAssign();
+  }
+  function dcaLock() {
+    _dcaUnlocked = false;
+    try { sessionStorage.removeItem('oaDcaPass'); } catch (e) {}
+    renderDcAssign();
+  }
+
+  async function dcaAssign(id, value) {
+    if (!DCA_POST_URL) { alert('The assignment endpoint is not set up yet.'); return; }
+    let pass = '';
+    try { pass = sessionStorage.getItem('oaDcaPass') || ''; } catch (e) {}
+    if (!pass) { alert('Unlock assigning first.'); return; }
+    _dcaBusy = id; renderDcAssign();
+    try {
+      const res = await fetch(DCA_POST_URL, {
+        method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ record: 'dcassign', eventId: id, assignedTo: value,
+                               assignedBy: _dcaWho || '', pass: pass })
+      });
+      const out = await res.json();
+      if (!out.ok) { alert('Could not save: ' + (out.error || 'unknown error')); }
+      else {
+        const row = dcaRows.find(r => r.id === id);
+        if (row) { row.to = value; row.by = _dcaWho || ''; }
+      }
+    } catch (err) {
+      // no-cors would hide the answer, so the request is a real one and a failure is reported
+      alert('Could not save: ' + err.message);
+    }
+    _dcaBusy = ''; renderDcAssign();
+  }
+
+  function renderDcAssign() {
+    const host = $('dcassign');
+    if (!host) return;
+
+    if (!DCA_CSV_URL) {
+      host.innerHTML = '<div class="card" style="padding:18px 20px">'
+        + '<div class="boardtitle">Not connected yet</div>'
+        + '<div class="boardsub" style="margin-top:6px;max-width:640px">This tab reads upcoming '
+        + 'meetings from the concierge calendars. It needs the Apps Script in '
+        + '<b>dc-assignment-apps-script.gs</b> installed, the three calendars shared with the '
+        + 'account that runs it, and the "DC Assignments" tab published as CSV. Once those links '
+        + 'are in, meetings appear here on their own.</div></div>';
+      return;
+    }
+    if (dcaError) {
+      host.innerHTML = '<div class="card"><div class="empty">Could not load assignments: '
+        + esc(dcaError) + '.</div></div>';
+      return;
+    }
+
+    const today = localIso(new Date());
+    const limit = new Date(); limit.setDate(limit.getDate() + DCA_DAYS);
+    const cut = localIso(limit);
+    const rows = dcaRows.filter(r => r.start.slice(0, 10) >= today && r.start.slice(0, 10) <= cut);
+
+    const unassigned = rows.filter(r => !r.to).length;
+    const uncovered  = rows.filter(r => { const c = dcaCoverage(r.start); return c && !c.length; }).length;
+
+    const bar = '<div class="card" style="padding:14px 17px;margin-bottom:12px">'
+      + '<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">'
+      + '<div style="flex:1;min-width:230px"><div class="boardtitle">Upcoming discovery calls</div>'
+      + '<div class="boardsub">' + rows.length + ' in the next ' + DCA_DAYS + ' days · '
+      + unassigned + ' with nobody assigned'
+      + (uncovered ? ' · <b style="color:var(--red)">' + uncovered + ' with no SDR rostered at that hour</b>' : '')
+      + '</div></div>'
+      + (_dcaUnlocked
+          ? '<input placeholder="Your name" value="' + esc(_dcaWho) + '" oninput="_dcaWho=this.value"'
+            + ' style="border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:12px;font-family:inherit">'
+            + '<button class="pbtn" onclick="dcaLock()">Lock</button>'
+          : '<button class="pbtn" onclick="dcaUnlock()">Unlock assigning</button>')
+      + '</div></div>';
+
+    if (!rows.length) {
+      host.innerHTML = bar + '<div class="card"><div class="empty">Nothing on those calendars in '
+        + 'the next ' + DCA_DAYS + ' days.</div></div>';
+      return;
+    }
+
+    const days = {};
+    rows.forEach(r => { (days[r.start.slice(0, 10)] = days[r.start.slice(0, 10)] || []).push(r); });
+
+    const blocks = Object.keys(days).sort().map(function (d) {
+      const items = days[d].map(function (r) {
+        const cov = dcaCoverage(r.start);
+        const none = cov && !cov.length;
+        const covTxt = cov === null ? ''
+          : none ? '<b style="color:var(--red)">nobody rostered at this hour</b>'
+                 : cov.length + ' SDR' + (cov.length === 1 ? '' : 's') + ' on shift';
+        const assign = _dcaUnlocked
+          ? '<input value="' + esc(r.to) + '" placeholder="assign to…" '
+            + 'onchange="dcaAssign(' + "'" + esc(r.id) + "'" + ',this.value)" '
+            + (_dcaBusy === r.id ? 'disabled ' : '')
+            + 'style="width:150px;border:1px solid var(--border);border-radius:7px;padding:4px 8px;'
+            + 'font-size:11.5px;font-family:inherit">'
+          : (r.to ? '<span class="dcato">' + esc(r.to) + '</span>'
+                  : '<span class="dcanone">unassigned</span>');
+        return '<div class="dca' + (none ? ' gap' : '') + '">'
+          + '<div class="dcatime">' + esc(dcaFmtTime(r.start))
+          + '<span>' + (r.mins ? r.mins + ' min' : '') + '</span></div>'
+          + '<div class="dcamid"><div class="dcatitle">' + esc(r.title) + '</div>'
+          + '<div class="dcameta">' + esc(dcaCal(r.cal)) + (covTxt ? ' · ' + covTxt : '') + '</div></div>'
+          + '<div class="dcaright">' + assign + '</div></div>';
+      }).join('');
+      return '<div class="board" style="margin-bottom:12px">'
+        + '<div class="boardhead"><div class="boardtitle">' + esc(dcaFmtDay(d)) + '</div>'
+        + '<div class="boardsub">' + days[d].length + ' meeting' + (days[d].length === 1 ? '' : 's')
+        + '</div></div>' + items + '</div>';
+    }).join('');
+
+    host.innerHTML = bar + blocks;
+  }
+
   // ── Go ───────────────────────────────────────────────────────────────────
   function boot() {
     setView('perf');   // set it in code rather than trusting the inline style alone
+    try { _dcaUnlocked = !!sessionStorage.getItem('oaDcaPass'); } catch (e) {}
     loadAll();
     setInterval(function () { if (!document.hidden) loadAll(); }, REFRESH_MS);
   }
