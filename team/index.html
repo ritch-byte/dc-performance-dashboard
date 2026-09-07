@@ -134,6 +134,11 @@
   .dpnum b{display:block;font-size:20px;font-weight:800;color:var(--navy)}
   .dpnum span{font-size:9.5px;color:var(--slate);text-transform:uppercase;letter-spacing:.4px}
 
+  .dpcyc{font-size:9.5px;font-weight:700;color:var(--slate);background:#EEF0F5;
+         padding:1px 6px;border-radius:5px;vertical-align:1px;white-space:nowrap}
+  .dpcyc.late{background:#FDECEC;color:var(--red)}
+  .dp.late{background:#FFFBFB}
+
   /* ── trend ── */
   .trend{background:var(--card);border:1px solid var(--border);border-radius:13px;padding:16px 18px}
   .bars{display:flex;align-items:flex-end;gap:5px;height:132px;margin-top:6px}
@@ -797,14 +802,13 @@
   function setSpCycle(i) { _spCycle = Number(i); renderPartners(); }
 
   // ── Today's priority ─────────────────────────────────────────────────────
-  // The tracker has no daily-priority column, so this is derived rather than read: what a
-  // partner still owes, spread over the working days left in the cycle. A gap of 74 with three
-  // weeks to run is a different instruction from the same gap with two days to run, and a
-  // standing list sorted by size alone cannot tell a rep which of those they are looking at.
+  // The tracker has no daily-priority column, so this is derived: what a partner still owes,
+  // spread over the working days left in its cycle.
   //
-  // Cycles are assumed to run the calendar month their title names, which is what Cycle 15
-  // (August) and Cycle 1 (September) have done. If a cycle ever runs to different dates this is
-  // the line to change.
+  // It spans every cycle that still has something owed, not just the one selected below. Cycle
+  // 15 is an August cycle still short 44 meetings in September, so treating a cycle as finished
+  // because its month ended would have hidden the most overdue work on the floor. A cycle drops
+  // off this list when its partners are actually fulfilled, not when the calendar moves on.
   const SP_MONTHS = ['january','february','march','april','may','june','july','august',
                      'september','october','november','december'];
   function spCycleMonth(title) {
@@ -813,17 +817,17 @@
     const i = SP_MONTHS.indexOf(m[1].toLowerCase());
     if (i < 0) return null;
     const now = new Date();
-    // A cycle named for a month later than this one belongs to the year just gone, which keeps
-    // December right when read in January.
     const y = (i > now.getMonth() + 1) ? now.getFullYear() - 1 : now.getFullYear();
     return { y: y, m: i };
   }
+  // Working days from today to the end of the cycle's month. A cycle whose month has already
+  // gone is past due rather than over, so it returns 0 and everything it owes is owed now.
   function spDaysLeft(title) {
     const cm = spCycleMonth(title);
     if (!cm) return null;
     const now = new Date(), today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const last = new Date(cm.y, cm.m + 1, 0);
-    if (last < today) return 0;                       // the cycle has closed
+    if (last < today) return 0;
     let d = new Date(cm.y, cm.m, 1);
     if (d < today) d = new Date(today);
     let n = 0;
@@ -835,55 +839,70 @@
     return n;
   }
 
-  function renderDaily(cyc, rows) {
-    const left = spDaysLeft(cyc.title);
+  const DP_PER_CYCLE = 4;   // how many of each cycle's worst are guaranteed a place
+
+  function renderDaily(cycles) {
     const today = new Date().toLocaleDateString('en-US',
       { weekday: 'long', month: 'long', day: 'numeric' });
 
-    if (left === 0) {
+    // Each cycle contributes its own worst offenders, so a cycle can never be crowded out of the
+    // list by another one's larger numbers. Overdue work is owed today, so its rate is its gap.
+    let picks = [], open = 0;
+    cycles.forEach(function (cyc) {
+      const behind = cyc.rows.filter(r => r.needed > 0);
+      if (!behind.length) return;
+      open++;
+      const left = spDaysLeft(cyc.title);
+      const overdue = left === 0;
+      behind.map(r => ({
+        r: r, cycle: cyc.title, overdue: overdue,
+        perDay: overdue ? r.needed : Math.ceil(r.needed / Math.max(1, left))
+      })).sort((a, b) => b.perDay - a.perDay || b.r.needed - a.r.needed)
+        .slice(0, DP_PER_CYCLE)
+        .forEach(x => picks.push(x));
+    });
+
+    if (!picks.length) {
       return '<div class="board" style="margin-bottom:12px"><div class="boardhead">'
         + '<div class="boardtitle">Today’s priority</div>'
-        + '<div class="boardsub">Cycle ' + esc(cyc.title) + ' has closed, so there is nothing to '
-        + 'chase against it. Switch to the current cycle.</div></div></div>';
-    }
-
-    // Rank by the daily rate a partner needs, not by the raw gap. Partners with nothing booked
-    // at all are shown as such, because a big gap with a full pipeline and a big gap with an
-    // empty one need different work today.
-    const list = rows.filter(r => r.needed > 0)
-      .map(r => ({ r: r, perDay: left ? Math.ceil(r.needed / left) : r.needed }))
-      .sort((a, b) => b.perDay - a.perDay || b.r.needed - a.r.needed)
-      .slice(0, 5);
-
-    if (!list.length) {
-      return '<div class="board" style="margin-bottom:12px"><div class="boardhead">'
-        + '<div class="boardtitle">Today’s priority</div>'
-        + '<div class="boardsub">Every partner is at target for this cycle. Nothing is behind.</div>'
+        + '<div class="boardsub">Every partner in every open cycle is at target. Nothing is behind.</div>'
         + '</div></div>';
     }
 
-    const need = list.reduce((a, x) => a + x.perDay, 0);
-    const cards = list.map((x, i) => {
+    // Overdue first: a cycle whose month has gone is owed now, whatever a live cycle's rate says.
+    picks.sort((a, b) => (b.overdue - a.overdue) || (b.perDay - a.perDay) || (b.r.needed - a.r.needed));
+
+    const overdueTotal = picks.filter(x => x.overdue).reduce((a, x) => a + x.r.needed, 0);
+    const liveRate     = picks.filter(x => !x.overdue).reduce((a, x) => a + x.perDay, 0);
+
+    const cards = picks.map(function (x, i) {
       const r = x.r;
-      return '<div class="dp' + (i === 0 ? ' first' : '') + '">'
+      return '<div class="dp' + (i === 0 ? ' first' : '') + (x.overdue ? ' late' : '') + '">'
         + '<div class="dprank">' + (i + 1) + '</div>'
         + '<div class="dpmid">'
-          + '<div class="dpname">' + esc(r.name) + '</div>'
+          + '<div class="dpname">' + esc(r.name)
+          + ' <span class="dpcyc' + (x.overdue ? ' late' : '') + '">Cycle ' + esc(x.cycle) + '</span></div>'
           + '<div class="dpmeta">' + r.needed + ' still owed'
           + (r.scheduled ? ' · ' + r.scheduled + ' already booked and waiting'
                          : ' · <b style="color:var(--red)">nothing booked yet</b>') + '</div>'
         + '</div>'
-        + '<div class="dpnum"><b>' + x.perDay + '</b><span>a day</span></div>'
+        + '<div class="dpnum">'
+          + '<b' + (x.overdue ? ' style="color:var(--red)"' : '') + '>' + x.perDay + '</b>'
+          + '<span>' + (x.overdue ? 'overdue' : 'a day') + '</span></div>'
         + '</div>';
     }).join('');
+
+    const bits = [];
+    if (overdueTotal) bits.push(overdueTotal + ' meetings are past due from a cycle whose month has ended');
+    if (liveRate)     bits.push('the live cycle needs ' + liveRate + ' a day from the partners listed');
 
     return '<div class="board" style="margin-bottom:12px">'
       + '<div class="boardhead">'
       + '<div class="boardtitle">Today’s priority — ' + esc(today) + '</div>'
-      + '<div class="boardsub">' + left + ' working day' + (left === 1 ? '' : 's')
-      + ' left in cycle ' + esc(cyc.title) + '. These five need ' + need
-      + ' successful meetings a day between them to land on target. Ranked by that daily rate, '
-      + 'not by the size of the gap.</div></div>'
+      + '<div class="boardsub">Across ' + open + ' open cycle' + (open === 1 ? '' : 's')
+      + ', worst ' + DP_PER_CYCLE + ' from each. '
+      + (bits.length ? bits.join(', and ') + '. ' : '')
+      + 'Ranked by what is owed per working day left, so overdue work comes first.</div></div>'
       + '<div class="dplist">' + cards + '</div></div>';
   }
 
@@ -957,7 +976,7 @@
     }).join('');
 
     host.innerHTML =
-      renderDaily(cyc, rows)
+      renderDaily(spCycles)
       + '<div class="card" style="padding:15px 17px;margin-bottom:12px">'
       + '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
       + '<div><div class="boardtitle">Cycle ' + esc(cyc.title) + '</div>'
