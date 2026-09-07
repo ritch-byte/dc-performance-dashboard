@@ -134,6 +134,10 @@
   .dpnum b{display:block;font-size:20px;font-weight:800;color:var(--navy)}
   .dpnum span{font-size:9.5px;color:var(--slate);text-transform:uppercase;letter-spacing:.4px}
 
+  .dpbar{height:5px;border-radius:3px;background:#EEF0F5;overflow:hidden;margin:6px 0 5px;max-width:230px}
+  .dplate{font-size:9px;font-weight:800;letter-spacing:.5px;color:#fff;background:var(--red);
+          padding:2px 6px;border-radius:5px;vertical-align:1px}
+  .dprate{display:block;font-size:9.5px;color:var(--slate);text-transform:none;letter-spacing:0;margin-top:2px}
   .dpcyc{font-size:9.5px;font-weight:700;color:var(--slate);background:#EEF0F5;
          padding:1px 6px;border-radius:5px;vertical-align:1px;white-space:nowrap}
   .dpcyc.late{background:#FDECEC;color:var(--red)}
@@ -875,26 +879,40 @@
     const overdueTotal = picks.filter(x => x.overdue).reduce((a, x) => a + x.r.needed, 0);
     const liveRate     = picks.filter(x => !x.overdue).reduce((a, x) => a + x.perDay, 0);
 
+    // Every row now answers the same three questions in the same order: how many of the target
+    // are done, how many are booked but not yet counted, how many are still to book. The big
+    // number is always the last of those, because it is the only one a rep can act on this
+    // morning, and it means the same thing on an overdue row as on a live one. The daily rate
+    // sits underneath rather than in the big slot, where it read as if it were the whole job.
     const cards = picks.map(function (x, i) {
       const r = x.r;
+      const donePct = r.target ? Math.min(100, Math.round(r.successful / r.target * 100)) : 0;
       return '<div class="dp' + (i === 0 ? ' first' : '') + (x.overdue ? ' late' : '') + '">'
         + '<div class="dprank">' + (i + 1) + '</div>'
         + '<div class="dpmid">'
           + '<div class="dpname">' + esc(r.name)
-          + ' <span class="dpcyc' + (x.overdue ? ' late' : '') + '">Cycle ' + esc(x.cycle) + '</span></div>'
-          + '<div class="dpmeta">' + r.needed + ' still owed'
-          + (r.scheduled ? ' · ' + r.scheduled + ' already booked and waiting'
-                         : ' · <b style="color:var(--red)">nothing booked yet</b>') + '</div>'
+          + ' <span class="dpcyc' + (x.overdue ? ' late' : '') + '">Cycle ' + esc(x.cycle) + '</span>'
+          + (x.overdue ? ' <span class="dplate">OVERDUE</span>' : '') + '</div>'
+          + '<div class="dpbar"><div style="width:' + donePct + '%;background:'
+            + (x.overdue ? 'var(--red)' : 'var(--blue)') + ';height:100%;border-radius:3px"></div></div>'
+          + '<div class="dpmeta">'
+            + '<b>' + r.successful + ' of ' + r.target + '</b> meetings done · '
+            + (r.scheduled
+                ? r.scheduled + ' booked, waiting to happen'
+                : '<b style="color:var(--red)">0 booked so far</b>')
+          + '</div>'
         + '</div>'
         + '<div class="dpnum">'
-          + '<b' + (x.overdue ? ' style="color:var(--red)"' : '') + '>' + x.perDay + '</b>'
-          + '<span>' + (x.overdue ? 'overdue' : 'a day') + '</span></div>'
+          + '<b' + (x.overdue ? ' style="color:var(--red)"' : '') + '>' + r.needed + '</b>'
+          + '<span>still to book</span>'
+          + (x.overdue ? '' : '<span class="dprate">about ' + x.perDay + ' a day</span>')
+        + '</div>'
         + '</div>';
     }).join('');
 
     const bits = [];
-    if (overdueTotal) bits.push(overdueTotal + ' meetings are past due from a cycle whose month has ended');
-    if (liveRate)     bits.push('the live cycle needs ' + liveRate + ' a day from the partners listed');
+    if (overdueTotal) bits.push(overdueTotal + ' meetings are past due from a cycle that has already ended');
+    if (liveRate)     bits.push('the partners below need about ' + liveRate + ' a day between them to finish on time');
 
     return '<div class="board" style="margin-bottom:12px">'
       + '<div class="boardhead">'
@@ -902,7 +920,8 @@
       + '<div class="boardsub">Across ' + open + ' open cycle' + (open === 1 ? '' : 's')
       + ', worst ' + DP_PER_CYCLE + ' from each. '
       + (bits.length ? bits.join(', and ') + '. ' : '')
-      + 'Ranked by what is owed per working day left, so overdue work comes first.</div></div>'
+      + 'The big number on each row is how many meetings still need booking for that partner. '
+      + 'Meetings already booked do not count until they actually happen.</div></div>'
       + '<div class="dplist">' + cards + '</div></div>';
   }
 
