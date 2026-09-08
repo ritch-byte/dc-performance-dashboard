@@ -1388,6 +1388,34 @@
     return { on: on, shift: row.shift, off: row.off };
   }
 
+  // Who could actually take a given call. Rostered on at that hour and not off sick, which is a
+  // different list at 3AM than at 2PM, so it is worked out per meeting rather than once.
+  // Everyone else stays selectable underneath: a leader sometimes has to ask somebody to come in
+  // for a call, and a picker that hides them would just be overruled on paper instead.
+  const _dcaShiftCache = {};
+  function dcaShiftOf(id) {
+    if (_dcaShiftCache[id] !== undefined) return _dcaShiftCache[id];
+    const all = (typeof schedRows === 'function') ? schedRows() : [];
+    let hit = null;
+    for (const r of all) { if (resolveAgent(r.name) === id) { hit = r; break; } }
+    return (_dcaShiftCache[id] = hit);
+  }
+  function dcaAvailable(iso) {
+    const on = [], off = [];
+    sdrs().forEach(function (p) {
+      const away = absFor(dcaAddressBook()[p.m.id] || '', iso)
+                || absByKey[p.m.id + '|' + iso.slice(0, 10)] || '';
+      if (away === 'Absent' || away === 'On leave') { off.push({ p: p, why: away.toLowerCase() }); return; }
+      const row = dcaShiftOf(p.m.id);
+      if (!row) { off.push({ p: p, why: 'no roster' }); return; }
+      const own = dcaOwnerOnShift(row.name, iso);
+      if (own && own.on) on.push({ p: p, why: '' });
+      else off.push({ p: p, why: 'off shift' });
+    });
+    const byName = function (a, b) { return a.p.m.display.localeCompare(b.p.m.display); };
+    return { on: on.sort(byName), off: off.sort(byName) };
+  }
+
   function dcaFmtTime(iso) {
     const hh = Number(iso.slice(11, 13)), mm = iso.slice(14, 16);
     const ap = hh >= 12 ? 'PM' : 'AM', h12 = (hh % 12) || 12;
@@ -1446,7 +1474,8 @@
                                assignedEmail: to.email, partner: row0 ? row0.partner : '',
                                startsAt: row0 ? row0.start : '',
                                mins: row0 ? row0.mins : 0,
-                               bookedBy: bookedBy })
+                               bookedBy: bookedBy,
+                               bookedByEmail: row0 ? row0.sdrEmail : '' })
       });
       const out = await res.json();
       if (!out.ok) { alert('Could not save: ' + (out.error || 'unknown error')); }
@@ -1559,12 +1588,24 @@
             + 'style="width:168px;border:1px solid var(--border);border-radius:7px;padding:4px 6px;'
             + 'font-size:11.5px;font-family:inherit">'
             + '<option value="">assign to…</option>'
-            + sdrs().slice().sort(function (a, b) { return a.m.display.localeCompare(b.m.display); })
-                .map(function (pp) {
-                  return '<option value="' + esc(pp.m.display) + '"'
-                    + (r.to === pp.m.display ? ' selected' : '') + '>' + esc(pp.m.display)
-                    + (book[pp.m.id] ? '' : ' (no email)') + '</option>';
-                }).join('')
+            + (function () {
+                const av = dcaAvailable(r.start);
+                const opt = function (x, suffix) {
+                  return '<option value="' + esc(x.p.m.display) + '"'
+                    + (r.to === x.p.m.display ? ' selected' : '') + '>' + esc(x.p.m.display)
+                    + (book[x.p.m.id] ? '' : ' (no email)') + (suffix ? ' — ' + suffix : '') + '</option>';
+                };
+                let h = '';
+                if (av.on.length) {
+                  h += '<optgroup label="On shift at this hour">'
+                    + av.on.map(function (x) { return opt(x, ''); }).join('') + '</optgroup>';
+                }
+                if (av.off.length) {
+                  h += '<optgroup label="Not available">'
+                    + av.off.map(function (x) { return opt(x, x.why); }).join('') + '</optgroup>';
+                }
+                return h;
+              })()
             + (r.to && !sdrs().some(function (pp) { return pp.m.display === r.to; })
                 ? '<option value="' + esc(r.to) + '" selected>' + esc(r.to) + '</option>' : '')
             + '</select>'

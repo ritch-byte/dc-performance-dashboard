@@ -455,10 +455,18 @@ function notifyAssignee_(data, calId, eventId) {
   ].filter(function (l) { return l !== ''; });
 
   try {
+    // Copied: the leaders' mailbox, and the rep who booked it. The booker is the one person
+    // who knows what the call is about, and a handover where they are not told is how a lead
+    // arrives at a meeting nobody has prepared for. Never copied to themselves.
+    const cc = [];
+    if (ASSIGN_CC) { cc.push(ASSIGN_CC); }
+    const booker = String(data.bookedByEmail || '').trim().toLowerCase();
+    if (booker && booker !== to.toLowerCase()
+        && /^[^@\s]+@outsourceaccelerator\.com$/i.test(booker)) { cc.push(booker); }
     const mail = { to: to, subject: subject, body: lines.join(String.fromCharCode(10)) };
-    if (ASSIGN_CC) { mail.cc = ASSIGN_CC; }
+    if (cc.length) { mail.cc = cc.join(','); }
     MailApp.sendEmail(mail);
-    return ASSIGN_CC ? 'sent, cc ' + ASSIGN_CC : 'sent';
+    return cc.length ? 'sent, cc ' + cc.join(' ') : 'sent';
   } catch (err) {
     // Quota exhausted, bad address, anything: say so in the log and let the assignment stand.
     console.warn('could not email ' + to + ': ' + err);
