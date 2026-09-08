@@ -1109,7 +1109,7 @@
   // as its own tab. Status and date only: those mails carry medical and family detail and this
   // page is open to the floor, so the reason never leaves the mailbox.
   const ABS_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRuS9DSz6faT_IUDKyHdf-gwNpuqETpeD9GtT5Y0BJ6XitofvuB869TjK_NksUcVTsik7u7_dvQhPwS/pub?gid=1126000059&single=true&output=csv';   // published "Absences" tab
-  let absByKey = {};
+  let absByKey = {}, absPairs = [];
 
   async function loadAbsences() {
     if (!ABS_CSV_URL) return;
@@ -1118,7 +1118,7 @@
       if (lines.length < 2) return;
       const h = splitLine(lines[0]).map(x => x.trim().toLowerCase());
       const ix = n => h.indexOf(n);
-      const out = {};
+      const out = {}, pairs = [];
       for (let i = 1; i < lines.length; i++) {
         const c = splitLine(lines[i]);
         const day = dcaNormIso(c[ix('date')]) .slice(0, 10)
@@ -1139,8 +1139,10 @@
           const k2 = who + '|' + day;
           if (!out[k2] || rank(st) > rank(out[k2])) out[k2] = st;
         }
+        if (id && who) pairs.push({ id: id, email: who });
       }
       absByKey = out;
+      absPairs = pairs;
     } catch (err) { /* the tab is optional; meetings still list without it */ }
     renderDcAssign();
   }
@@ -1176,6 +1178,31 @@
     const viaEmail = dcaSdr(email);
     return viaEmail && viaEmail.id ? viaEmail.id : '';
   }
+  // Addresses are never invented. Everyone on this floor has an address of some shape, but the
+  // shapes disagree: r.aurelio@, charlito@, vincent@, diana@. Guessing one and mailing it either
+  // bounces or, worse, reaches the wrong person, so the book is built only from addresses the
+  // feeds have actually shown us. Someone with no address on file can still be assigned; the
+  // page says plainly that they will not be told by email.
+  function dcaAddressBook() {
+    const book = {};
+    dcaRows.forEach(function (r) {
+      if (!r.sdrEmail) return;
+      const who = dcaSdr(r.sdrEmail);
+      if (who && who.id) book[who.id] = r.sdrEmail;
+    });
+    // The attendance mailbox knows addresses for people who have not booked lately, so it is
+    // worth harvesting too. Only where the sender is provably the person the notice names: a
+    // leader filing on somebody's behalf would otherwise put the leader's address against the
+    // rep, and the assignment mail would go to the wrong desk.
+    absPairs.forEach(function (pr) {
+      const viaEmail = dcaSdr(pr.email);
+      if (!viaEmail || !viaEmail.id) return;
+      if (viaEmail.id !== pr.id) return;
+      if (!book[pr.id]) book[pr.id] = pr.email;
+    });
+    return book;
+  }
+
   function absFor(email, iso) {
     if (!iso) return '';
     const day = iso.slice(0, 10);
@@ -1397,12 +1424,26 @@
     let pass = '';
     try { pass = sessionStorage.getItem('oaDcaPass') || ''; } catch (e) {}
     if (!pass) { alert('Unlock assigning first.'); return; }
+    const row0 = dcaRows.find(function (r) { return r.id === id; });
+    const book = dcaAddressBook();
+    // Only a roster member with a known address gets mailed. A cleared assignment sends nothing.
+    const picked = value ? sdrs().find(function (pp) { return pp.m.display === value; }) : null;
+    const to = { email: (picked && book[picked.m.id]) ? book[picked.m.id] : '' };
+    const bk = row0 ? dcaSdr(row0.sdrEmail) : null;
+    const bookedBy = bk ? bk.name : '';
+    if (value && !to.email && !confirm(value +
+        ' has no address on file, so they will not be emailed. Assign anyway?')) { return; }
+
     _dcaBusy = id; renderDcAssign();
     try {
       const res = await fetch(DCA_POST_URL, {
         method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({ record: 'dcassign', eventId: id, assignedTo: value,
-                               assignedBy: _dcaWho || '', pass: pass })
+                               assignedBy: _dcaWho || '', pass: pass,
+                               assignedEmail: to.email, partner: row0 ? row0.partner : '',
+                               startsAt: row0 ? row0.start : '',
+                               mins: row0 ? row0.mins : 0,
+                               bookedBy: bookedBy })
       });
       const out = await res.json();
       if (!out.ok) { alert('Could not save: ' + (out.error || 'unknown error')); }
@@ -1484,6 +1525,7 @@
     const days = {};
     rows.forEach(r => { (days[r.start.slice(0, 10)] = days[r.start.slice(0, 10)] || []).push(r); });
 
+    const book = dcaAddressBook();
     const blocks = Object.keys(days).sort().map(function (d) {
       const items = days[d].map(function (r) {
         const sdr = dcaSdr(r.sdrEmail);
@@ -1509,11 +1551,20 @@
         else if (cov && cov.length) bits.push(cov.length + ' on shift');
 
         const assign = _dcaUnlocked
-          ? '<input value="' + esc(r.to) + '" placeholder="assign to…" '
-            + 'onchange="dcaAssign(' + "'" + esc(r.id) + "'" + ',this.value)" '
+          ? '<select onchange="dcaAssign(' + "'" + esc(r.id) + "'" + ',this.value)" '
             + (_dcaBusy === r.id ? 'disabled ' : '')
-            + 'style="width:150px;border:1px solid var(--border);border-radius:7px;padding:4px 8px;'
+            + 'style="width:168px;border:1px solid var(--border);border-radius:7px;padding:4px 6px;'
             + 'font-size:11.5px;font-family:inherit">'
+            + '<option value="">assign to…</option>'
+            + sdrs().slice().sort(function (a, b) { return a.m.display.localeCompare(b.m.display); })
+                .map(function (pp) {
+                  return '<option value="' + esc(pp.m.display) + '"'
+                    + (r.to === pp.m.display ? ' selected' : '') + '>' + esc(pp.m.display)
+                    + (book[pp.m.id] ? '' : ' (no email)') + '</option>';
+                }).join('')
+            + (r.to && !sdrs().some(function (pp) { return pp.m.display === r.to; })
+                ? '<option value="' + esc(r.to) + '" selected>' + esc(r.to) + '</option>' : '')
+            + '</select>'
           : (r.to ? '<span class="dcato">' + esc(r.to) + '</span>'
                   : '<span class="dcanone">' + (outToday || offShift || none ? 'needs cover' : 'unassigned') + '</span>');
 

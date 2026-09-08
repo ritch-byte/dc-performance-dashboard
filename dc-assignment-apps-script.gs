@@ -201,7 +201,10 @@ function doPost(e) {
         String(data.assignedTo || ''), String(data.assignedBy || ''),
         String(data.assignedTo || '') ? stamp : ''
       ]]);
-      return json_({ ok: true, row: row });
+      // The row is written before the mail goes out, and the mail cannot undo it. Somebody
+      // being told twice is a nuisance; a call that nobody is recorded against is a problem.
+      const mailed = String(data.assignedTo || '') ? notifyAssignee_(data) : 'cleared, no mail';
+      return json_({ ok: true, row: row, mailed: mailed });
     }
     return json_({ ok: false, error: 'that meeting is not in the sheet' });
   } catch (err) {
@@ -370,4 +373,62 @@ function syncAbsences() {
 // something has not updated.
 function syncAll() {
   return { calendars: syncCalendars(), absences: syncAbsences() };
+}
+
+/**
+ * Tell the person they have been given a call.
+ *
+ * Sent from the account that runs this script, so it arrives from a real colleague rather than
+ * a no-reply nobody reads. Only on an actual assignment: clearing one sends nothing, because a
+ * mail saying a meeting is no longer yours is noise on a floor that already gets plenty.
+ *
+ * A failure here must not fail the assignment. The row is already written by the time this
+ * runs, and refusing to record who is covering a call because a mailbox was full would be the
+ * wrong way round. It is logged and swallowed.
+ */
+function notifyAssignee_(data) {
+  const to = String(data.assignedEmail || '').trim();
+  if (!to) { return 'no address'; }
+  if (!/^[^@\s]+@outsourceaccelerator\.com$/i.test(to)) { return 'refused: not an OA address'; }
+
+  const when = absPrettyWhen_(String(data.startsAt || ''));
+  const partner = String(data.partner || '').trim();
+  const mins = Number(data.mins || 0);
+  const booked = String(data.bookedBy || '').trim();
+  const by = String(data.assignedBy || '').trim();
+
+  const subject = 'You are covering a discovery call' + (when ? ' — ' + when : '');
+  const lines = [
+    'Hi ' + String(data.assignedTo || '').split(' ')[0] + ',',
+    '',
+    'You have been assigned to cover a discovery call.',
+    '',
+    (when ? 'When:     ' + when + (mins ? ' (' + mins + ' min)' : '') : ''),
+    (partner ? 'Partner:  ' + partner : ''),
+    (booked ? 'Booked by: ' + booked : ''),
+    (by ? 'Assigned by: ' + by : ''),
+    '',
+    'The meeting is on the concierge calendar. If you cannot take it, tell your team leader as',
+    'soon as you can so it can go to somebody else.',
+    '',
+    'Sent automatically by the DC assignment board.'
+  ].filter(function (l) { return l !== ''; });
+
+  try {
+    MailApp.sendEmail({ to: to, subject: subject, body: lines.join('\n') });
+    return 'sent';
+  } catch (err) {
+    // Quota exhausted, bad address, anything: say so in the log and let the assignment stand.
+    console.warn('could not email ' + to + ': ' + err);
+    return 'not sent: ' + err;
+  }
+}
+
+// "Tuesday 9 Sep, 11:00 AM" from 2026-09-09T11:00. Written out rather than left as an ISO
+// string, because a rep reading this on a phone should not have to decode a timestamp.
+function absPrettyWhen_(iso) {
+  const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{1,2}):(\d{2})/);
+  if (!m) { return ''; }
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]));
+  return Utilities.formatDate(d, 'Asia/Manila', 'EEEE d MMM, h:mm a');
 }
