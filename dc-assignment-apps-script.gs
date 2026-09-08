@@ -44,6 +44,9 @@ const CALENDARS = [
   'concierge-team@outsourceaccelerator.com'
 ];
 const TAB          = 'DC Assignments';
+// Copied on every assignment mail, so the leaders' mailbox carries a record of who was put on
+// what without anyone having to remember to forward it. Set to '' to stop copying anyone.
+const ASSIGN_CC    = 'sd-attendance@outsourceaccelerator.com';
 const DAYS_AHEAD   = 21;
 const DAYS_BEHIND  = 1;    // keep yesterday, so a meeting is still there to argue about
 const HEADERS = ['eventId', 'calendar', 'partner', 'lead', 'sdrEmail', 'start', 'end',
@@ -452,8 +455,10 @@ function notifyAssignee_(data, calId, eventId) {
   ].filter(function (l) { return l !== ''; });
 
   try {
-    MailApp.sendEmail({ to: to, subject: subject, body: lines.join('\n') });
-    return 'sent';
+    const mail = { to: to, subject: subject, body: lines.join(String.fromCharCode(10)) };
+    if (ASSIGN_CC) { mail.cc = ASSIGN_CC; }
+    MailApp.sendEmail(mail);
+    return ASSIGN_CC ? 'sent, cc ' + ASSIGN_CC : 'sent';
   } catch (err) {
     // Quota exhausted, bad address, anything: say so in the log and let the assignment stand.
     console.warn('could not email ' + to + ': ' + err);
