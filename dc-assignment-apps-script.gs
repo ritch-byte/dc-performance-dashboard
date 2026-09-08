@@ -203,7 +203,8 @@ function doPost(e) {
       ]]);
       // The row is written before the mail goes out, and the mail cannot undo it. Somebody
       // being told twice is a nuisance; a call that nobody is recorded against is a problem.
-      const mailed = String(data.assignedTo || '') ? notifyAssignee_(data) : 'cleared, no mail';
+      const calId = String(sh.getRange(row, 2).getValue() || '');
+      const mailed = String(data.assignedTo || '') ? notifyAssignee_(data, calId, eid) : 'cleared, no mail';
       return json_({ ok: true, row: row, mailed: mailed });
     }
     return json_({ ok: false, error: 'that meeting is not in the sheet' });
@@ -386,7 +387,31 @@ function syncAll() {
  * runs, and refusing to record who is covering a call because a mailbox was full would be the
  * wrong way round. It is logged and swallowed.
  */
-function notifyAssignee_(data) {
+/**
+ * The lead's name, read from the event at the moment the mail is sent.
+ *
+ * It is never written to the sheet. That tab is published as CSV, so anything in it is on the
+ * open internet whatever the page chooses to draw; this is a private mail to one colleague, and
+ * somebody being sent to cover a call needs to know who they are meeting. So it is fetched here
+ * and thrown away, which gets the name to the one person entitled to it and nowhere else.
+ */
+function leadFrom_(calId, eventId) {
+  try {
+    const cal = CalendarApp.getCalendarById(calId);
+    if (!cal) { return { title: '', lead: '' }; }
+    const ev = cal.getEventById(eventId);
+    if (!ev) { return { title: '', lead: '' }; }
+    const title = String(ev.getTitle() || '').trim();
+    // Titles read "Igor Matrosov and Partner Outposter". Everything before "and Partner" is the
+    // lead; where a title is written some other way the whole title is used rather than a guess.
+    const m = title.match(/^(.+?)\s+and\s+Partner\b/i);
+    return { title: title, lead: m ? m[1].trim() : '' };
+  } catch (err) {
+    return { title: '', lead: '' };
+  }
+}
+
+function notifyAssignee_(data, calId, eventId) {
   const to = String(data.assignedEmail || '').trim();
   if (!to) { return 'no address'; }
   if (!/^[^@\s]+@outsourceaccelerator\.com$/i.test(to)) { return 'refused: not an OA address'; }
@@ -397,12 +422,15 @@ function notifyAssignee_(data) {
   const booked = String(data.bookedBy || '').trim();
   const by = String(data.assignedBy || '').trim();
 
-  const subject = 'You are covering a discovery call' + (when ? ' — ' + when : '');
+  const ev = leadFrom_(calId, eventId);
+  const subject = 'You are covering a discovery call' + (when ? ' — ' + when : '')
+    + (ev.lead ? ' with ' + ev.lead : '');
   const lines = [
     'Hi ' + String(data.assignedTo || '').split(' ')[0] + ',',
     '',
     'You have been assigned to cover a discovery call.',
     '',
+    (ev.lead ? 'Lead:     ' + ev.lead : (ev.title ? 'Meeting:  ' + ev.title : '')),
     (when ? 'When:     ' + when + (mins ? ' (' + mins + ' min)' : '') : ''),
     (partner ? 'Partner:  ' + partner : ''),
     (booked ? 'Booked by: ' + booked : ''),
