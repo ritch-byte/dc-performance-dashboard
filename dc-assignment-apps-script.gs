@@ -46,8 +46,8 @@ const CALENDARS = [
 const TAB          = 'DC Assignments';
 const DAYS_AHEAD   = 21;
 const DAYS_BEHIND  = 1;    // keep yesterday, so a meeting is still there to argue about
-const HEADERS = ['eventId', 'calendar', 'partner', 'sdrEmail', 'start', 'end', 'durationMin',
-                 'assignedTo', 'assignedBy', 'assignedAt', 'syncedAt'];
+const HEADERS = ['eventId', 'calendar', 'partner', 'lead', 'sdrEmail', 'start', 'end',
+                 'durationMin', 'assignedTo', 'assignedBy', 'assignedAt', 'syncedAt'];
 
 /**
  * Who booked it, and for whom.
@@ -95,6 +95,9 @@ function sheet_() {
   let sh = ss.getSheetByName(TAB);
   if (!sh) { sh = ss.insertSheet(TAB); }
   if (sh.getLastRow() === 0) { sh.appendRow(HEADERS); }
+  // Rewritten every time rather than only when the tab is new: a sheet built before a column was
+  // added would otherwise keep its old header and pair new values with the wrong names.
+  sh.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
   return sh;
 }
 
@@ -118,8 +121,8 @@ function syncCalendars() {
     const rows = sh.getRange(2, 1, last - 1, HEADERS.length).getValues();
     rows.forEach(function (r) {
       const id = String(r[0] || '').trim();
-      if (id && String(r[7] || '').trim()) {
-        kept[id] = { to: r[7], by: r[8], at: r[9] };
+      if (id && String(r[8] || '').trim()) {
+        kept[id] = { to: r[8], by: r[9], at: r[10] };
       }
     });
   }
@@ -138,8 +141,10 @@ function syncCalendars() {
       try { creators = ev.getCreators(); } catch (e) {}
       let partner = '';
       creators.concat(guests).forEach(function (e) { if (!partner) partner = partnerFrom_(e); });
+      const title = String(ev.getTitle() || '').trim();
+      const lm = title.match(LEAD_RE);
       out.push([
-        eid, id, partner, sdrFrom_(guests),
+        eid, id, partner, (lm ? lm[1].trim() : title), sdrFrom_(guests),
         Utilities.formatDate(ev.getStartTime(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm"),
         Utilities.formatDate(ev.getEndTime(),   'Asia/Manila', "yyyy-MM-dd'T'HH:mm"),
         Math.round((ev.getEndTime() - ev.getStartTime()) / 60000),
@@ -149,7 +154,7 @@ function syncCalendars() {
     });
   });
 
-  out.sort(function (a, b) { return String(a[4]).localeCompare(String(b[4])); });
+  out.sort(function (a, b) { return String(a[5]).localeCompare(String(b[5])); });
 
   if (sh.getLastRow() > 1) {
     sh.getRange(2, 1, sh.getLastRow() - 1, HEADERS.length).clearContent();
@@ -197,7 +202,7 @@ function doPost(e) {
       const stamp = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm");
       // Clearing an assignment is a write like any other, so an empty name is allowed through
       // and blanks the row rather than being rejected as a mistake.
-      sh.getRange(row, 8,  1, 3).setValues([[
+      sh.getRange(row, 9,  1, 3).setValues([[
         String(data.assignedTo || ''), String(data.assignedBy || ''),
         String(data.assignedTo || '') ? stamp : ''
       ]]);
@@ -233,6 +238,10 @@ function doGet() {
  * Matching is on the sender's address, not the name, because it is the same key
  * the calendar gives us and names in these mails are written six different ways.
  * ════════════════════════════════════════════════════════════════════════════ */
+
+// Titles read "Igor Matrosov and Partner Outposter", so everything before "and Partner" is
+// the lead. A title written some other way keeps its whole text rather than being guessed at.
+const LEAD_RE = /^(.+?)\s+and\s+Partner\b/i;
 
 const ABS_TAB     = 'Absences';
 const ABS_HEADERS = ['date', 'sdrEmail', 'name', 'status', 'notifiedAt', 'syncedAt'];
@@ -404,7 +413,7 @@ function leadFrom_(calId, eventId) {
     const title = String(ev.getTitle() || '').trim();
     // Titles read "Igor Matrosov and Partner Outposter". Everything before "and Partner" is the
     // lead; where a title is written some other way the whole title is used rather than a guess.
-    const m = title.match(/^(.+?)\s+and\s+Partner\b/i);
+    const m = title.match(LEAD_RE);
     return { title: title, lead: m ? m[1].trim() : '' };
   } catch (err) {
     return { title: '', lead: '' };
