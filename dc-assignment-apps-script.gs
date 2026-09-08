@@ -1,11 +1,18 @@
 /**
  * DC Assignment — Google Apps Script Web App
  * ------------------------------------------------------------------
- * Two jobs:
+ * Three jobs:
  *   1. syncCalendars()  — on a timer, reads upcoming events from the concierge calendars
  *                         into a "DC Assignments" sheet tab.
- *   2. doPost()         — records who a meeting is assigned to, passcode checked HERE
+ *   2. syncAbsences()   — reads attendance notices sent to sd-attendance@ into an
+ *                         "Absences" tab, so a meeting booked by someone who has called
+ *                         in sick shows as needing cover. Status and date only, never
+ *                         the reason: those mails carry medical and family detail and
+ *                         the tab is published to a page the whole floor can open.
+ *   3. doPost()         — records who a meeting is assigned to, passcode checked HERE
  *                         rather than only in the browser.
+ *
+ *   syncAll() runs both syncs, and is what the trigger should call.
  *
  * This is deliberately a SEPARATE script from the coaching tracker. Its /exec URL ships inside
  * a page the whole floor can open, and the tracker's URL also relays to the Anthropic API, so
@@ -22,11 +29,13 @@
  *      DC_ASSIGN_PASS   = <the passcode leaders will type>
  *    Keep it out of this file. This file lives in a public GitHub repo.
  * 4. Run syncCalendars() once by hand and accept the permission prompts.
- * 5. Triggers (clock icon) → Add trigger → syncCalendars → Time-driven → every 30 minutes.
+ * 5. Triggers (clock icon) → Add trigger → syncAll → Time-driven → every 30 minutes.
+ *    (If a syncCalendars trigger already exists, change it to syncAll or absences never sync.)
  * 6. Deploy → New deployment → Web app → Execute as: Me → Who has access: Anyone → Deploy.
  *    Send Claude the /exec URL.
  * 7. In the Sheet: File → Share → Publish to web → "DC Assignments" → CSV → Publish.
- *    Send Claude that link too. The dashboard reads that, and posts to /exec only to assign.
+ *    Then do the same again for the "Absences" tab. Send Claude both links. The dashboard
+ *    reads those, and posts to /exec only to assign.
  */
 
 const CALENDARS = [
@@ -202,4 +211,163 @@ function doPost(e) {
 
 function doGet() {
   return ContentService.createTextOutput('DC Assignment endpoint is live.');
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+ * ABSENCE SYNC
+ *
+ * SDRs mail sd-attendance@ when they will be absent, late or on leave. A meeting
+ * booked by someone who has just called in sick needs covering, and nobody was
+ * joining those two facts up.
+ *
+ * WHAT IS DELIBERATELY NOT STORED: the reason. Those mails carry medical and
+ * family detail, someone recovering from illness, a parent's diagnosis. This tab
+ * is published to the web for a page the whole floor can open. Status and date
+ * answer "does this meeting need cover"; the reason answers nothing this page is
+ * entitled to ask, and belongs between a rep and their leader.
+ *
+ * Matching is on the sender's address, not the name, because it is the same key
+ * the calendar gives us and names in these mails are written six different ways.
+ * ════════════════════════════════════════════════════════════════════════════ */
+
+const ABS_TAB     = 'Absences';
+const ABS_HEADERS = ['date', 'sdrEmail', 'name', 'status', 'notifiedAt', 'syncedAt'];
+const ABS_QUERY   = '(to:sd-attendance@outsourceaccelerator.com OR cc:sd-attendance@outsourceaccelerator.com) newer_than:21d';
+const ABS_MAX     = 250;
+
+// Which kind of notice this is, from the subject. Anything that is not one of these
+// is not an attendance notice at all: that mailbox also receives fulfilment
+// summaries, coaching logs and rebooking requests.
+function absStatus_(subject) {
+  const s = String(subject || '').toLowerCase();
+  if (/shift change|rebook|request for|fulfillment|coaching-log/.test(s)) return '';
+  if (/absen/.test(s))                                       return 'Absent';
+  if (/\bleave\b|\bvl\b|\bsl\b|vacation|sick leave/.test(s))  return 'On leave';
+  if (/under\s*time/.test(s))                                 return 'Undertime';
+  if (/\blate\b|tardy/.test(s))                               return 'Late';
+  return '';
+}
+
+const ABS_MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july',
+                    'august', 'september', 'october', 'november', 'december'];
+
+// 09/08/2026, 9-8-2026, "September 8, 2026", "Sept 8 2026". Returns yyyy-MM-dd or ''.
+function absDate_(raw, fallbackYear) {
+  const s = String(raw || '').trim();
+  let m = s.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+  if (m) {
+    let y = Number(m[3]);
+    if (y < 100) { y += 2000; }
+    return Utilities.formatDate(new Date(y, Number(m[1]) - 1, Number(m[2])), 'Asia/Manila', 'yyyy-MM-dd');
+  }
+  m = s.match(/([A-Za-z]{3,9})\.?\s+(\d{1,2})(?:\s*,)?\s*(\d{4})?/);
+  if (m) {
+    const want = m[1].toLowerCase();
+    let idx = -1;
+    for (let i = 0; i < ABS_MONTHS.length; i++) {
+      if (ABS_MONTHS[i].indexOf(want) === 0) { idx = i; break; }
+    }
+    if (idx >= 0) {
+      const y = m[3] ? Number(m[3]) : fallbackYear;
+      return Utilities.formatDate(new Date(y, idx, Number(m[2])), 'Asia/Manila', 'yyyy-MM-dd');
+    }
+  }
+  return '';
+}
+
+// The date the notice is ABOUT, which is not the date it was sent: a leave request
+// filed on Friday for Monday would otherwise mark the wrong day off.
+function absFieldDate_(body, label, fallbackYear) {
+  const re = new RegExp(label + '\\s*[:\\-]\\s*([^\\r\\n]{0,60})', 'i');
+  const m = String(body || '').match(re);
+  return m ? absDate_(m[1], fallbackYear) : '';
+}
+
+function absName_(body, email) {
+  const m = String(body || '').match(/(?:full\s*name|name)\s*[:\-]\s*([^\r\n]{2,60})/i);
+  if (m) { return m[1].trim().replace(/\s+/g, ' '); }
+  return String(email || '').split('@')[0];
+}
+
+function syncAbsences() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sh = ss.getSheetByName(ABS_TAB);
+  if (!sh) { sh = ss.insertSheet(ABS_TAB); }
+  if (sh.getLastRow() === 0) { sh.appendRow(ABS_HEADERS); }
+
+  const now = new Date();
+  const stamp = Utilities.formatDate(now, 'Asia/Manila', "yyyy-MM-dd'T'HH:mm");
+  const seen = {};
+  let scanned = 0, notices = 0;
+
+  GmailApp.search(ABS_QUERY, 0, ABS_MAX).forEach(function (thread) {
+    thread.getMessages().forEach(function (msg) {
+      scanned++;
+      const status = absStatus_(msg.getSubject());
+      if (!status) { return; }
+      const hit = String(msg.getFrom()).match(/[\w.\-+]+@[\w.\-]+/);
+      if (!hit) { return; }
+      const email = hit[0].toLowerCase();
+      // Only a person's own notice counts. A leader forwarding a batch on behalf of
+      // several SDRs is about somebody else, and crediting it to the sender would mark
+      // the wrong person off.
+      if (email.indexOf('@outsourceaccelerator.com') < 0) { return; }
+
+      let body = '';
+      try { body = msg.getPlainBody(); } catch (e) { body = ''; }
+      const sentYear = Number(Utilities.formatDate(msg.getDate(), 'Asia/Manila', 'yyyy'));
+
+      const day1 = absFieldDate_(body, '(?:date \\(shift date\\)|shift\\s*date)', sentYear)
+                || absFieldDate_(body, 'date', sentYear)
+                || Utilities.formatDate(msg.getDate(), 'Asia/Manila', 'yyyy-MM-dd');
+      const ret = absFieldDate_(body, 'date of return', sentYear);
+
+      // A return date makes this a span. It is the day they are BACK, so the last day
+      // off is the day before it, and a next-day return means a single day off.
+      const days = [day1];
+      if (ret && ret > day1) {
+        const p = day1.split('-').map(Number);
+        const d = new Date(p[0], p[1] - 1, p[2]);
+        for (let i = 0; i < 30; i++) {
+          d.setDate(d.getDate() + 1);
+          const iso = Utilities.formatDate(d, 'Asia/Manila', 'yyyy-MM-dd');
+          if (iso >= ret) { break; }
+          days.push(iso);
+        }
+      }
+
+      const name = absName_(body, email);
+      notices++;
+      days.forEach(function (day) {
+        const key = email + '|' + day;
+        // Newest notice for a person and day wins: a late that later becomes an absence
+        // should read as an absence.
+        if (seen[key] && seen[key].at >= msg.getDate()) { return; }
+        seen[key] = { at: msg.getDate(),
+                      row: [day, email, name, status,
+                            Utilities.formatDate(msg.getDate(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm"),
+                            stamp] };
+      });
+    });
+  });
+
+  const out = [];
+  Object.keys(seen).forEach(function (k) { out.push(seen[k].row); });
+  out.sort(function (a, b) { return String(a[0]).localeCompare(String(b[0])); });
+
+  if (sh.getLastRow() > 1) {
+    sh.getRange(2, 1, sh.getLastRow() - 1, ABS_HEADERS.length).clearContent();
+  }
+  if (out.length) {
+    sh.getRange(2, 1, out.length, ABS_HEADERS.length).setValues(out);
+  }
+  console.log('scanned ' + scanned + ' messages, ' + notices + ' were attendance notices, '
+    + out.length + ' person-days written');
+  return { scanned: scanned, notices: notices, rows: out.length };
+}
+
+// One trigger for both, so there is one thing to schedule and one place to look when
+// something has not updated.
+function syncAll() {
+  return { calendars: syncCalendars(), absences: syncAbsences() };
 }

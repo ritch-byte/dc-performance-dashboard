@@ -505,6 +505,7 @@
       renderAll();
       loadPartners();
       loadSchedule().then(loadDcAssign);
+      loadAbsences();
     } catch (err) {
       $('banner').textContent = 'Could not load the booking sheet: ' + err.message +
         '. It usually clears on its own — press Refresh in a moment.';
@@ -1104,6 +1105,38 @@
   const DCA_PASS_HASH = 'fed5e6c7d987981b00e0c8ce3f8b6ee59d4eacfb3e45b05b750b952ba6c6e81f';
   const DCA_DAYS = 14;
 
+  // Attendance notices, scraped from the sd-attendance mailbox by the same script and published
+  // as its own tab. Status and date only: those mails carry medical and family detail and this
+  // page is open to the floor, so the reason never leaves the mailbox.
+  const ABS_CSV_URL = '';   // published CSV of the "Absences" tab
+  let absByKey = {};
+
+  async function loadAbsences() {
+    if (!ABS_CSV_URL) return;
+    try {
+      const lines = splitCsvRows((await fetchCsv(ABS_CSV_URL + '&t=' + Date.now())).trim());
+      if (lines.length < 2) return;
+      const h = splitLine(lines[0]).map(x => x.trim().toLowerCase());
+      const ix = n => h.indexOf(n);
+      const out = {};
+      for (let i = 1; i < lines.length; i++) {
+        const c = splitLine(lines[i]);
+        const day = dcaNormIso(c[ix('date')]) .slice(0, 10)
+                 || (c[ix('date')] || '').trim().slice(0, 10);
+        const who = (c[ix('sdremail')] || '').trim().toLowerCase();
+        const st  = (c[ix('status')] || '').trim();
+        if (!day || !who || !st) continue;
+        out[who + '|' + day] = st;
+      }
+      absByKey = out;
+    } catch (err) { /* the tab is optional; meetings still list without it */ }
+    renderDcAssign();
+  }
+  function absFor(email, iso) {
+    if (!email || !iso) return '';
+    return absByKey[String(email).toLowerCase() + '|' + iso.slice(0, 10)] || '';
+  }
+
   let dcaRows = [], dcaError = '', _dcaLoaded = false, _dcaUnlocked = false, _dcaWho = '', _dcaBusy = '';
 
   async function sha256Hex(str) {
@@ -1373,6 +1406,10 @@
       const cov = dcaCoverage(r.start);
       return (own && !own.on) || (cov && !cov.length);
     }).length;
+    const awayCount = rows.filter(function (r) {
+      const a = absFor(r.sdrEmail, r.start);
+      return a === 'Absent' || a === 'On leave';
+    }).length;
 
     const bar = '<div class="card" style="padding:14px 17px;margin-bottom:12px">'
       + '<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">'
@@ -1381,6 +1418,8 @@
       + unassigned + ' with nobody assigned'
       + (needsCover ? ' · <b style="color:var(--red)">' + needsCover
           + ' fall outside the booking SDR&rsquo;s shift</b>' : '')
+      + (awayCount ? ' · <b style="color:var(--red)">' + awayCount
+          + ' booked by someone who has called in</b>' : '')
       + '</div></div>'
       + (_dcaUnlocked
           ? '<input placeholder="Your name" value="' + esc(_dcaWho) + '" oninput="_dcaWho=this.value"'
@@ -1406,9 +1445,16 @@
         const cov = dcaCoverage(r.start);
         const none = cov && !cov.length;
 
+        const away = absFor(r.sdrEmail, r.start);
+        const outToday = away === 'Absent' || away === 'On leave';
+
         const bits = [];
         if (sdr && sdr.unsure) bits.push('booked by ' + esc(sdr.name) + ' (not on the roster)');
         else if (sdr) bits.push('booked by ' + esc(sdr.name));
+        // An attendance notice outranks the roster. Someone rostered on who has called in sick
+        // is not going to be on this call, and that is the more urgent of the two facts.
+        if (away) bits.push('<b style="color:' + (outToday ? 'var(--red)' : 'var(--amber)') + '">'
+          + esc(away.toLowerCase()) + ' that day</b>');
         if (offShift) bits.push('<b style="color:var(--red)">off shift (' + esc(own.shift) + ')</b>');
         else if (own)  bits.push('on shift');
         else if (sdr && !sdr.unsure) bits.push('no roster for them');
@@ -1422,9 +1468,9 @@
             + 'style="width:150px;border:1px solid var(--border);border-radius:7px;padding:4px 8px;'
             + 'font-size:11.5px;font-family:inherit">'
           : (r.to ? '<span class="dcato">' + esc(r.to) + '</span>'
-                  : '<span class="dcanone">' + (offShift || none ? 'needs cover' : 'unassigned') + '</span>');
+                  : '<span class="dcanone">' + (outToday || offShift || none ? 'needs cover' : 'unassigned') + '</span>');
 
-        return '<div class="dca' + (offShift || none ? ' gap' : '') + '">'
+        return '<div class="dca' + (outToday || offShift || none ? ' gap' : '') + '">'
           + '<div class="dcatime">' + esc(dcaFmtTime(r.start))
           + '<span>' + (r.mins ? r.mins + ' min' : '') + '</span></div>'
           + '<div class="dcamid">'
