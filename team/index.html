@@ -1108,7 +1108,7 @@
   // Attendance notices, scraped from the sd-attendance mailbox by the same script and published
   // as its own tab. Status and date only: those mails carry medical and family detail and this
   // page is open to the floor, so the reason never leaves the mailbox.
-  const ABS_CSV_URL = '';   // published CSV of the "Absences" tab
+  const ABS_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRuS9DSz6faT_IUDKyHdf-gwNpuqETpeD9GtT5Y0BJ6XitofvuB869TjK_NksUcVTsik7u7_dvQhPwS/pub?gid=1126000059&single=true&output=csv';   // published "Absences" tab
   let absByKey = {};
 
   async function loadAbsences() {
@@ -1125,16 +1125,63 @@
                  || (c[ix('date')] || '').trim().slice(0, 10);
         const who = (c[ix('sdremail')] || '').trim().toLowerCase();
         const st  = (c[ix('status')] || '').trim();
-        if (!day || !who || !st) continue;
-        out[who + '|' + day] = st;
+        if (!day || !st) continue;
+        const name = (c[ix('name')] || '').trim();
+        const id = absResolve(name, who);
+        // Absent outranks Late for the same person and day: two notices often arrive, the
+        // second upgrading the first, and the worse of the two is the one that needs cover.
+        const rank = x => (x === 'Absent' ? 4 : x === 'On leave' ? 3 : x === 'Undertime' ? 2 : 1);
+        if (id) {
+          const k = id + '|' + day;
+          if (!out[k] || rank(st) > rank(out[k])) out[k] = st;
+        }
+        if (who) {
+          const k2 = who + '|' + day;
+          if (!out[k2] || rank(st) > rank(out[k2])) out[k2] = st;
+        }
       }
       absByKey = out;
     } catch (err) { /* the tab is optional; meetings still list without it */ }
     renderDcAssign();
   }
+  // Whose absence is it. The sender is only right when someone files their own notice; when a
+  // leader forwards on behalf of the floor, the sender is the leader and the absence belongs to
+  // the person named in the body. Nine of fifty-eight rows were leaders, so keying on the
+  // address alone marked Jonathan absent and left Rommel looking available.
+  //
+  // Names arrive in every order the language allows: "Jerry Demayo", "Galoso, Lawrence",
+  // "Ramirez Mark Lauren" surname-first, "*Catolico, Pedro" with a stray asterisk. So rather
+  // than parse the order, every word is tested against the roster's surnames, and a given name
+  // settles it when two people share one.
+  function absResolve(name, email) {
+    const words = String(name || '').toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/)
+      .filter(function (w) { return w.length > 1; });
+    if (words.length) {
+      const hits = [];
+      TEAMS.forEach(t => t.members.forEach(function (m) {
+        const ln = String(m.ln || '').toLowerCase();
+        if (ln && words.indexOf(ln) >= 0) hits.push(m);
+      }));
+      if (hits.length === 1) return hits[0].id;
+      if (hits.length > 1) {
+        const exact = hits.find(function (m) { return m.fn && words.indexOf(String(m.fn).toLowerCase()) >= 0; });
+        if (exact) return exact.id;
+        const byFirst = hits.find(function (m) {
+          return words.indexOf(m.display.split(/\s+/)[0].toLowerCase()) >= 0;
+        });
+        if (byFirst) return byFirst.id;
+      }
+    }
+    // nothing usable in the name, so fall back to the address
+    const viaEmail = dcaSdr(email);
+    return viaEmail && viaEmail.id ? viaEmail.id : '';
+  }
   function absFor(email, iso) {
-    if (!email || !iso) return '';
-    return absByKey[String(email).toLowerCase() + '|' + iso.slice(0, 10)] || '';
+    if (!iso) return '';
+    const day = iso.slice(0, 10);
+    const who = dcaSdr(email);
+    if (who && who.id && absByKey[who.id + '|' + day]) return absByKey[who.id + '|' + day];
+    return absByKey[String(email || '').toLowerCase() + '|' + day] || '';
   }
 
   let dcaRows = [], dcaError = '', _dcaLoaded = false, _dcaUnlocked = false, _dcaWho = '', _dcaBusy = '';
