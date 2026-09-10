@@ -278,7 +278,7 @@
         { id: 'silang',     display: 'Gian Carlo Silang',     ln: 'silang', email: 'g.silang@outsourceaccelerator.com' },
         { id: 'galoso',     display: 'Lawrence Galoso',       ln: 'galoso', email: 'l.galoso@outsourceaccelerator.com' },
         { id: 'silva',      display: 'Godwin Silva',          ln: 'silva', email: 'g.silva@outsourceaccelerator.com' },
-        { id: 'bautista',   display: 'Samara Bautista',       ln: 'bautista', email: 'd.bautista@outsourceaccelerator.com' },
+        { id: 'bautista',   display: 'Dan Mark Anthony Bautista', ln: 'bautista', email: 'd.bautista@outsourceaccelerator.com' },
         { id: 'baliuag',    display: 'Charlon Baliuag',       ln: 'baliuag', email: 'c.baliuag@outsourceaccelerator.com' },
         { id: 'malavega',   display: 'Jose Carlos Malavega',  ln: 'malavega', email: 'j.malavega@outsourceaccelerator.com' },
         { id: 'villaruel',  display: 'Lance Villaruel',       ln: 'villaruel', email: 'l.villaruel@outsourceaccelerator.com' },
@@ -301,7 +301,7 @@
         { id: 'benjamin',   display: 'Russell Benjamin',      ln: 'benjamin', email: 'r.benjamin@outsourceaccelerator.com' },
         { id: 'susana',     display: 'John Christian Susana', ln: 'susana', hidden: true },
         { id: 'tungol',     display: 'Lorenzo Luiz Tungol',   ln: 'tungol', email: 'l.tungol@outsourceaccelerator.com' },
-        { id: 'magtalas',   display: 'Ayesha Magtalas',       ln: 'magtalas', email: 'o.magtalas@outsourceaccelerator.com' },
+        { id: 'magtalas',   display: 'Ayesha Magtalas',       ln: 'magtalas', email: 'o.magtalas@outsourceaccelerator.com', hidden: true },
         { id: 'balbido',    display: 'Justine Balbido',       ln: 'balbido', email: 'j.balbido@outsourceaccelerator.com' },
         { id: 'decastro',   display: 'Catherine de Castro',   ln: 'castro',  ln2: 'de castro', email: 'c.decastro@outsourceaccelerator.com' },
         { id: 'caguimbal',  display: 'Divinamor Caguimbal',   ln: 'caguimbal', hidden: true },
@@ -1316,7 +1316,7 @@
   // people share a surname it can land on the wrong one, so nothing here is more than a label.
   function dcaSdr(email) {
     // The directory settles it where it can. That matters beyond convenience: d.bautista@ is
-    // Samara Bautista and o.magtalas@ is Ayesha Magtalas, and no rule about initials was ever
+    // Dan Mark Anthony Bautista, which no rule about initials was ever
     // going to work those out. Everything below is the fallback for an address not on it.
     const exact = String(email || '').trim().toLowerCase();
     if (exact) {
@@ -1369,7 +1369,7 @@
     let found = null;
     TEAMS.forEach(t => t.members.forEach(m => { if (m.id === id) found = { m: m, team: t }; }));
     if (!found) return { id: null, name: guess };
-    // resolveAgent matches on surname, so d.bautista landed on Samara Bautista: same surname,
+    // resolveAgent matches on surname alone, which put one Bautista's meetings against another:
     // different person, and the meeting was then judged against her shift rather than his.
     // The initial has to agree before this claims to know whose meeting it is. Being told the
     // owner is unknown is recoverable; being told the wrong name quietly is not.
