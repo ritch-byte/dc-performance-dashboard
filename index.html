@@ -7753,6 +7753,133 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
 
   // Tolerant parse: find the header row rather than assuming line 1, map by column name, and
   // stop cleanly at the management block or the trailing notes.
+  // ── Grid rosters ─────────────────────────────────────────────────────────
+  // The other shape a roster arrives in: one column per date, one cell per person per day,
+  // holding either a shift, OFF or PTO. It carries more than the column layout does, since an
+  // off day is a date rather than a weekday and leave is marked where it falls, so this reads
+  // the grid rather than asking anyone to reshape a file by hand.
+  //
+  // It is flattened into the same record the rest of the dashboard already understands: the
+  // shift each person actually works, the weekdays they are off, and PTO dates kept in the note
+  // so they survive the trip through the Schedule tab and can still be read back.
+  const SCH_MONTHS = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+  function schGridDate(s){
+    const m = String(s || '').trim().match(/^(\d{1,2})-([A-Za-z]{3,})-(\d{4})$/);
+    if (!m) return null;
+    const mi = SCH_MONTHS.indexOf(m[2].slice(0,3).toLowerCase());
+    if (mi < 0) return null;
+    return new Date(Number(m[3]), mi, Number(m[1]));
+  }
+  // 05:00 - 14:00 reads as a clock to a person and as nothing at all to the shift parsers, which
+  // expect AM and PM. Converted once here so every consumer keeps working untouched.
+  function sch24to12(s){
+    const m = String(s || '').trim().match(/^(\d{1,2}):(\d{2})\s*[-–]\s*(\d{1,2}):(\d{2})$/);
+    if (!m) return String(s || '').trim();
+    const one = function(h, mm){
+      h = Number(h); const ap = h >= 12 ? 'PM' : 'AM'; const h12 = (h % 12) || 12;
+      return h12 + (mm === '00' ? '' : ':' + mm) + ap;
+    };
+    return one(m[1], m[2]) + '-' + one(m[3], m[4]);
+  }
+
+  function schParseGrid(lines){
+    const warn = [];
+    // the header row is the one where the date columns start
+    let hdrIdx = -1, dateCols = null;
+    for (let i = 0; i < Math.min(lines.length, 15); i++){
+      const c = splitLine(lines[i]);
+      const cols = [];
+      for (let j = 0; j < c.length; j++){ const d = schGridDate(c[j]); if (d) cols.push({ j:j, d:d }); }
+      if (cols.length >= 5){ hdrIdx = i; dateCols = cols; break; }
+    }
+    if (hdrIdx < 0) return null;
+
+    const hdr = splitLine(lines[hdrIdx]).map(function(x){ return x.trim().toLowerCase(); });
+    const find = function(re){ for (let j = 0; j < hdr.length; j++) if (re.test(hdr[j])) return j; return -1; };
+    const iName  = Math.max(0, find(/^(agent|full name|name)/));
+    const iTL    = find(/team leader/);
+    const iShift = find(/^shift/);
+
+    // Two passes: the first learns who the leaders are, because a leader is simply somebody who
+    // appears in the TEAM LEADER column. Only then can a row be filed as SDR or management.
+    // Nothing is inferred from whose leader is missing: a roster listing only SDRs would then
+    // file the entire floor as management.
+    const leaders = {};
+    for (let i = hdrIdx + 1; i < lines.length; i++){
+      const c = splitLine(lines[i]);
+      if (!(c[iName] || '').trim()) continue;
+      if (iTL >= 0){ const tl = (c[iTL] || '').trim(); if (tl) leaders[tl.toLowerCase()] = true; }
+    }
+
+    const rows = [], mgmt = [];
+    const months = {};
+    for (let i = hdrIdx + 1; i < lines.length; i++){
+      const c = splitLine(lines[i]);
+      const name = (c[iName] || '').trim();
+      if (!name || !c.join('').trim()) continue;
+
+      const tl = iTL >= 0 ? (c[iTL] || '').trim() : '';
+      const isLeader = !!leaders[name.toLowerCase()];
+
+      const offDays = [], pto = [], shifts = {};
+      dateCols.forEach(function(dc){
+        const v = (c[dc.j] || '').trim();
+        if (!v) return;
+        months[dc.d.getFullYear() + '-' + String(dc.d.getMonth() + 1).padStart(2,'0')] = true;
+        if (/^off$/i.test(v)){
+          const wd = SCH_DAYS[dc.d.getDay()];
+          if (offDays.indexOf(wd) < 0) offDays.push(wd);
+          return;
+        }
+        if (!/\d/.test(v)){                       // PTO, LEAVE, HOLIDAY, anything named
+          pto.push(v.toUpperCase() + ' ' + localIso(dc.d));
+          return;
+        }
+        const s = sch24to12(v);
+        shifts[s] = (shifts[s] || 0) + 1;
+      });
+
+      // the shift they actually work, which is the one worked most, not the one printed in a
+      // column that a mid-month change would leave stale
+      let shift = iShift >= 0 ? sch24to12((c[iShift] || '').trim()) : '';
+      const ranked = Object.keys(shifts).sort(function(a,b){ return shifts[b] - shifts[a]; });
+      if (ranked.length) shift = ranked[0];
+      if (ranked.length > 1) warn.push(name + ' works more than one shift in this period; using ' + ranked[0]);
+
+      const rec = {
+        emp: '', name: name, batch: '',
+        team: '', shift: shift,
+        off: offDays.length ? offDays[0] : '',
+        rest: offDays.join(', '),
+        note: pto.join('; ')
+      };
+
+      if (isLeader){
+        mgmt.push({ name:name, role:(tl ? 'reports to ' + tl : ''), team:'', shift:shift,
+                    off:rec.off });
+        continue;
+      }
+
+      rec.id = resolveAgent(name) || null;
+      if (!rec.id) warn.push('No dashboard roster match for ' + name);
+      else {
+        // the roster knows which team they are on; the grid only names their leader, and one
+        // leader can hold two teams
+        TEAMS.forEach(function(t){ t.members.forEach(function(m){ if (m.id === rec.id) rec.team = t.name; }); });
+      }
+      // No team invented for somebody the roster does not know. Their leader's name in a Team
+      // column reads as a team and is not one, and the warning already says they are unmatched.
+      rows.push(rec);
+    }
+
+    const ms = Object.keys(months).sort();
+    if (ms.length > 1){
+      warn.push('This roster spans ' + ms.join(' and ') + '. It is filed under the month you '
+        + 'chose above, and off days are read as weekdays, so both months are covered.');
+    }
+    return { rows:rows, mgmt:mgmt, warnings:warn };
+  }
+
   function schParseCsv(text){
     const lines = splitCsvRows(String(text || '').replace(/\r/g,'').trim());
     const warn = [];
@@ -7761,7 +7888,14 @@ Return ONLY valid JSON (no markdown, no commentary) with this exact shape:
       const c = splitLine(lines[i]).map(function(x){ return x.trim().toLowerCase(); });
       if (c.indexOf('team') >= 0 && (c.indexOf('shift') >= 0 || c.indexOf('off day') >= 0)){ hdrIdx = i; hdr = c; break; }
     }
-    if (hdrIdx < 0) return { rows:[], mgmt:[], warnings:['Could not find a header row containing Team and Shift. Expected columns like Full Name, Team, Shift, Off Day.'] };
+    if (hdrIdx < 0){
+      // Not the column layout, so try the grid before giving up: telling somebody their file is
+      // unreadable when it is merely a different shape is how a working roster ends up retyped.
+      const grid = schParseGrid(lines);
+      if (grid) return grid;
+      return { rows:[], mgmt:[], warnings:['Could not read this file. Expected either columns like '
+        + 'Full Name, Team, Shift, Off Day, or a grid with one column per date.'] };
+    }
     const col = function(){ for (let i = 0; i < arguments.length; i++){ const j = hdr.indexOf(arguments[i]); if (j >= 0) return j; } return -1; };
     const iName = col('full name (legal)','full name','name','legal name');
     const iTeam = col('team'), iShift = col('shift'), iOff = col('off day','off'), iRest = col('rest days','rest');
