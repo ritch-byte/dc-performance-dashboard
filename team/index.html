@@ -527,6 +527,21 @@
   }
   function teamsList() { return TEAMS.filter(t => t.id !== 'poc'); }
 
+  // Who can be put on a call. Not the same list as sdrs(): the SMEs sit in POC TEAM alongside
+  // the team leaders, which is why that team stays out of every count and leaderboard, since
+  // they carry no quota and ranking them against reps who do would be meaningless. They are on
+  // the floor and can take a call, so they belong here. Named rather than derived, because
+  // which of POC is an SME and which is a leader is an organisational fact, not one the roster
+  // encodes.
+  const DCA_SME_IDS = ['gadier', 'bayhon', 'vosotros', 'melo'];
+  function dcaAssignable() {
+    const out = sdrs();
+    TEAMS.forEach(t => t.members.forEach(function (m) {
+      if (!m.hidden && DCA_SME_IDS.indexOf(m.id) >= 0) out.push({ m: m, team: t, sme: true });
+    }));
+    return out;
+  }
+
   // ── Period ───────────────────────────────────────────────────────────────
   function ymOf(iso) { return iso.slice(0, 7); }
   function todayIso() { return localIso(new Date()); }
@@ -1418,7 +1433,7 @@
   }
   function dcaAvailable(iso) {
     const on = [], off = [];
-    sdrs().forEach(function (p) {
+    dcaAssignable().forEach(function (p) {
       const away = absFor(dcaAddressBook()[p.m.id] || '', iso)
                 || absByKey[p.m.id + '|' + iso.slice(0, 10)] || '';
       if (away === 'Absent' || away === 'On leave') { off.push({ p: p, why: away.toLowerCase() }); return; }
@@ -1474,7 +1489,7 @@
     const row0 = dcaRows.find(function (r) { return r.id === id; });
     const book = dcaAddressBook();
     // Only a roster member with a known address gets mailed. A cleared assignment sends nothing.
-    const picked = value ? sdrs().find(function (pp) { return pp.m.display === value; }) : null;
+    const picked = value ? dcaAssignable().find(function (pp) { return pp.m.display === value; }) : null;
     const to = { email: (picked && book[picked.m.id]) ? book[picked.m.id] : '' };
     const bk = row0 ? dcaSdr(row0.sdrEmail) : null;
     const bookedBy = bk ? bk.name : '';
@@ -1609,7 +1624,8 @@
                 const opt = function (x, suffix) {
                   return '<option value="' + esc(x.p.m.display) + '"'
                     + (r.to === x.p.m.display ? ' selected' : '') + '>' + esc(x.p.m.display)
-                    + (book[x.p.m.id] ? '' : ' (no email)') + (suffix ? ' — ' + suffix : '') + '</option>';
+                    + (x.p.sme ? ' · SME' : '') + (book[x.p.m.id] ? '' : ' (no email)')
+                    + (suffix ? ' — ' + suffix : '') + '</option>';
                 };
                 let h = '';
                 if (av.on.length) {
@@ -1622,7 +1638,7 @@
                 }
                 return h;
               })()
-            + (r.to && !sdrs().some(function (pp) { return pp.m.display === r.to; })
+            + (r.to && !dcaAssignable().some(function (pp) { return pp.m.display === r.to; })
                 ? '<option value="' + esc(r.to) + '" selected>' + esc(r.to) + '</option>' : '')
             + '</select>'
           : (r.to ? '<span class="dcato">' + esc(r.to) + '</span>'
