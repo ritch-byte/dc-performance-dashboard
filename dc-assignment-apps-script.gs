@@ -153,9 +153,14 @@ function syncCalendars() {
       try { creators = ev.getCreators(); } catch (e) {}
       let partner = '';
       creators.concat(guests).forEach(function (e) { if (!partner) { partner = partnerFrom_(e); } });
-      const title = String(ev.getTitle() || '').trim();
+      const rawTitle = String(ev.getTitle() || '').trim();
+      const wasCancelled = CANCEL_RE.test(rawTitle);
+      const title = rawTitle.replace(CANCEL_RE, '').trim();
       const lm = title.match(LEAD_RE);
       const prev = have[eid];
+      // Never overwrites a person: a leader who recorded No-show on a meeting later renamed
+      // keeps their answer, because they were there and the calendar was not.
+      const hadOutcome = prev && String(prev[12] || '').trim();
 
       const row = [
         eid, calId, partner, (lm ? lm[1].trim() : title), sdrFrom_(guests),
@@ -165,9 +170,9 @@ function syncCalendars() {
         prev ? prev[9]  : '',      // assignedBy
         prev ? prev[10] : '',      // assignedAt
         iso(now),
-        prev ? prev[12] : '',      // outcome, only ever set by a person
-        prev ? prev[13] : '',      // outcomeBy
-        prev ? prev[14] : ''       // outcomeAt
+        hadOutcome ? prev[12] : (wasCancelled ? 'Cancelled' : ''),
+        hadOutcome ? prev[13] : (wasCancelled ? 'calendar' : ''),
+        hadOutcome ? prev[14] : (wasCancelled ? iso(now) : '')
       ];
       if (!have[eid]) { order.push(eid); }
       have[eid] = row;
@@ -299,6 +304,11 @@ function doGet() {
 // Titles read "Igor Matrosov and Partner Outposter", so everything before "and Partner" is
 // the lead. A title written some other way keeps its whole text rather than being guessed at.
 const LEAD_RE = /^(.+?)\s+and\s+Partner\b/i;
+// A cancelled meeting is not deleted from these calendars, it is renamed: the title gains a
+// "Canceled:" prefix and the event stays put. Thirteen per cent of the board carries one, and
+// sometimes twice over when a meeting is cancelled, revived and cancelled again. So the prefix
+// is both the outcome and a thing to strip, or the lead reads "Canceled: Ryan Blundell".
+const CANCEL_RE = /^(\s*cancell?ed:\s*)+/i;
 
 const ABS_TAB     = 'Absences';
 const ABS_HEADERS = ['date', 'sdrEmail', 'name', 'status', 'notifiedAt', 'syncedAt'];

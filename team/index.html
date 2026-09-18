@@ -1652,7 +1652,13 @@
     const today = localIso(new Date());
     const limit = new Date(); limit.setDate(limit.getDate() + DCA_DAYS);
     const cut = localIso(limit);
-    const rows = dcaRows.filter(r => r.start.slice(0, 10) >= today && r.start.slice(0, 10) <= cut);
+    // A cancelled meeting needs nobody on it. Counting one as upcoming work overstates the day
+    // and, worse, puts a call that is not happening in front of a leader looking for gaps.
+    const isOff = function (r) { return String(r.outcome || '').toLowerCase() === 'cancelled'; };
+    const rows = dcaRows.filter(r => r.start.slice(0, 10) >= today && r.start.slice(0, 10) <= cut
+                                  && !isOff(r));
+    const cancelledAhead = dcaRows.filter(r => r.start.slice(0, 10) >= today
+                                  && r.start.slice(0, 10) <= cut && isOff(r)).length;
     // The days just gone, newest first: the calls whose outcome somebody still has to record.
     const past = dcaRows.filter(function (r) {
       return r.start.slice(0, 10) < today && r.to;
@@ -1679,6 +1685,7 @@
           + ' fall outside the booking SDR&rsquo;s shift</b>' : '')
       + (awayCount ? ' · <b style="color:var(--red)">' + awayCount
           + ' booked by someone who has called in</b>' : '')
+      + (cancelledAhead ? ' · ' + cancelledAhead + ' cancelled, not listed' : '')
       + '</div></div>'
       + (_dcaUnlocked
           ? '<input placeholder="Your name" value="' + esc(_dcaWho) + '" oninput="_dcaWho=this.value"'
