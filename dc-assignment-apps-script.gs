@@ -463,7 +463,13 @@ function syncAbsences() {
 // One trigger for both, so there is one thing to schedule and one place to look when
 // something has not updated.
 function syncAll() {
-  return { calendars: syncCalendars(), absences: syncAbsences(), outcomes: syncOutcomes() };
+  const out = { calendars: syncCalendars(), absences: syncAbsences() };
+  // The API sync only runs once a token exists; until then the pasted tab carries the outcomes,
+  // and after that it stays harmless because HubSpot outranks it.
+  const token = PropertiesService.getScriptProperties().getProperty('HUBSPOT_TOKEN');
+  if (token) { out.outcomes = syncOutcomes(); }
+  out.pasted = applyPastedOutcomes();
+  return out;
 }
 
 /**
@@ -776,4 +782,71 @@ function syncOutcomes() {
     + set + ' outcomes written, ' + kept + ' left as a person recorded them, '
     + noMatch + ' sheet rows had no HubSpot meeting');
   return { fetched: fetched, set: set, kept: kept, noMatch: noMatch };
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+ * PASTED OUTCOMES — the bridge until a HubSpot token exists
+ *
+ * Private apps are admin-only in this portal, so syncOutcomes has nothing to authenticate with
+ * yet. Meanwhile the outcomes do exist in HubSpot and can be lifted out by hand. Paste them into
+ * an "Outcomes" tab, four columns — lead, partner, start, outcome — and this matches them to the
+ * board the same way the API sync would, on lead, partner and start time.
+ *
+ * It is a bridge and behaves like one. It never overrides a person, and never overrides HubSpot
+ * once the token arrives, so leaving the tab in place after the real sync is running does no
+ * harm: it simply stops being the freshest thing in the room.
+ * ════════════════════════════════════════════════════════════════════════════ */
+
+const PASTE_TAB = 'Outcomes';
+
+function applyPastedOutcomes() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const src = ss.getSheetByName(PASTE_TAB);
+  if (!src || src.getLastRow() < 2) { return { skipped: 'no Outcomes tab, or it is empty' }; }
+
+  const vals = src.getRange(1, 1, src.getLastRow(), Math.max(4, src.getLastColumn())).getValues();
+  const head = vals[0].map(function (h) { return String(h || '').trim().toLowerCase(); });
+  const col = function (n) { return head.indexOf(n); };
+  const iLead = col('lead'), iPartner = col('partner'), iStart = col('start'), iOut = col('outcome');
+  if (iLead < 0 || iPartner < 0 || iStart < 0 || iOut < 0) {
+    return { error: 'the Outcomes tab needs a header row: lead, partner, start, outcome' };
+  }
+
+  const want = {};
+  let read = 0;
+  vals.slice(1).forEach(function (r) {
+    const lead = String(r[iLead] || '').trim();
+    const start = cellIso_(r[iStart]);
+    const outcome = String(r[iOut] || '').trim();
+    if (!lead || !start || !outcome) { return; }
+    want[hsKey_(lead, r[iPartner], start)] = outcome;
+    read++;
+  });
+
+  const sh = sheet_();
+  const last = sh.getLastRow();
+  if (last < 2) { return { error: 'nothing synced yet, run syncAll first' }; }
+  const rows = sh.getRange(2, 1, last - 1, HEADERS.length).getValues();
+
+  let set = 0, kept = 0, noMatch = 0;
+  const used = {};
+  rows.forEach(function (r) {
+    const k = hsKey_(r[3], r[2], cellIso_(r[5]));
+    const v = want[k];
+    if (v === undefined) { return; }
+    used[k] = true;
+    const by = String(r[13] || '').trim().toLowerCase();
+    // A person's answer and HubSpot's both outrank a paste. The calendar's guess does not.
+    if (String(r[12] || '').trim() && by !== '' && by !== 'calendar') { kept++; return; }
+    if (r[12] === v && by === 'pasted') { return; }
+    r[12] = v; r[13] = 'pasted';
+    r[14] = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm");
+    set++;
+  });
+  Object.keys(want).forEach(function (k) { if (!used[k]) { noMatch++; } });
+
+  if (set) { sh.getRange(2, 1, rows.length, HEADERS.length).setValues(rows); }
+  console.log('Outcomes tab: ' + read + ' rows read, ' + set + ' applied, '
+    + kept + ' left as a person or HubSpot recorded them, ' + noMatch + ' matched no meeting');
+  return { read: read, set: set, kept: kept, noMatch: noMatch };
 }
