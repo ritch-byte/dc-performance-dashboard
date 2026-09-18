@@ -1548,7 +1548,7 @@
   // contributes the one fact it does know — that an event has gone — and a leader says the rest.
   const DCA_OUTCOMES = [
     { v:'Showed',      c:'var(--green)', bg:'var(--greenbg)', bd:'var(--greenbd)' },
-    { v:'No-show',     c:'var(--red)',   bg:'var(--redbg)',   bd:'#F4BFBF' },
+    { v:'Lead no-show', c:'var(--red)',  bg:'var(--redbg)',   bd:'#F4BFBF' },
     { v:'Cancelled',   c:'var(--amber)', bg:'var(--amberbg)', bd:'var(--amberbd)' },
     { v:'Rescheduled', c:'var(--slate)', bg:'#EEF0F5',        bd:'var(--border)' }
   ];
@@ -1593,7 +1593,7 @@
       if (r.start > b.last) b.last = r.start;
       const o = String(r.outcome || '').toLowerCase();
       if (o === 'showed') b.showed++;
-      else if (o === 'no-show') b.noshow++;
+      else if (o === 'no-show' || o === 'lead no-show') b.noshow++;
       else if (o === 'cancelled') b.cancelled++;
       else if (o === 'rescheduled') b.resched++;
       else b.unrecorded++;
@@ -1616,7 +1616,7 @@
       const pct  = held ? Math.round(b.showed / held * 100) : null;
       const bits = [];
       if (b.showed)     bits.push('<b style="color:var(--green)">' + b.showed + ' showed</b>');
-      if (b.noshow)     bits.push('<b style="color:var(--red)">' + b.noshow + ' no-show</b>');
+      if (b.noshow)     bits.push('<b style="color:var(--red)">' + b.noshow + ' lead no-show</b>');
       if (b.cancelled)  bits.push(b.cancelled + ' cancelled');
       if (b.resched)    bits.push(b.resched + ' rescheduled');
       if (b.unrecorded) bits.push('<span style="color:var(--amber)">' + b.unrecorded + ' not recorded yet</span>');

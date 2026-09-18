@@ -463,7 +463,7 @@ function syncAbsences() {
 // One trigger for both, so there is one thing to schedule and one place to look when
 // something has not updated.
 function syncAll() {
-  return { calendars: syncCalendars(), absences: syncAbsences() };
+  return { calendars: syncCalendars(), absences: syncAbsences(), outcomes: syncOutcomes() };
 }
 
 /**
@@ -654,4 +654,126 @@ function backfillAssignments() {
     + filled + ' rows filled, ' + already + ' already assigned, '
     + unmatched + ' mails matched no row in the sheet');
   return { scanned: scanned, parsed: parsed, filled: filled, already: already, unmatched: unmatched };
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+ * OUTCOMES FROM HUBSPOT
+ *
+ * The outcome was never missing, it was in the CRM. Every discovery call is a HubSpot meeting
+ * carrying hs_meeting_outcome, and the vocabulary is the floor's own: BOTH ATTENDED, BPO
+ * ATTENDED, CANCELED BY LEAD, RESCHEDULED. The titles are identical to the calendar events
+ * — "Nicole Hart and Partner Six Eleven" — so lead, partner and start time together identify a
+ * meeting on both sides without anything having to be typed twice.
+ *
+ * This is why the booking sheet was the wrong place to look. It records what an SDR logged; this
+ * records what happened, which is a different fact and the one being asked for.
+ *
+ * SETUP: HubSpot → Settings → Integrations → Private Apps → Create, with scope
+ *        crm.objects.meetings.read. Copy the token into Script properties as HUBSPOT_TOKEN.
+ *        Kept there rather than here, because this file is in a public repository.
+ *
+ * A leader's own answer still wins. Somebody who watched a call happen and recorded it keeps
+ * their answer even if the CRM disagrees, because they were there.
+ * ════════════════════════════════════════════════════════════════════════════ */
+
+const HS_SEARCH_URL = 'https://api.hubapi.com/crm/v3/objects/meetings/search';
+const HS_PAGE       = 100;
+const HS_MAX_PAGES  = 40;
+
+// HubSpot's vocabulary, reduced to the four things the board shows. Anything unrecognised is
+// passed through as it stands rather than dropped, so a new outcome added in the CRM shows up
+// here as itself instead of silently becoming nothing.
+function hsOutcome_(v) {
+  const s = String(v || '').trim().toUpperCase();
+  if (!s || s === 'SCHEDULED') { return ''; }           // not yet happened
+  if (s.indexOf('BOTH ATTENDED') === 0 || s === 'COMPLETED' || s === 'ATTENDED') { return 'Showed'; }
+  if (s.indexOf('NO SHOW') >= 0 || s.indexOf('NO_SHOW') >= 0) { return 'Lead no-show'; }
+  // The partner turned up and the lead did not. Its own outcome rather than folded into
+  // no-show, because on this floor it is a distinct thing that happened and gets said out loud.
+  if (s.indexOf('BPO ATTENDED') === 0) { return 'Lead no-show'; }
+  if (s.indexOf('CANCEL') === 0 || s.indexOf('CANCEL') > 0) { return 'Cancelled'; }
+  if (s.indexOf('RESCHEDUL') >= 0) { return 'Rescheduled'; }
+  return String(v || '').trim();
+}
+
+function hsKey_(lead, partner, startIso) {
+  const n = function (x) { return String(x || '').toLowerCase().replace(/[^a-z0-9]/g, ''); };
+  return n(lead) + '|' + n(partner) + '|' + String(startIso || '');
+}
+
+// "Nicole Hart and Partner Six Eleven" back into its two halves, the same split the sync makes
+// when it reads the calendar.
+function hsSplitTitle_(title) {
+  const t = String(title || '').replace(CANCEL_RE, '').trim();
+  const m = t.match(/^(.+?)\s+and\s+Partner\s+(.+)$/i);
+  return m ? { lead: m[1].trim(), partner: m[2].trim() } : { lead: t, partner: '' };
+}
+
+function syncOutcomes() {
+  const token = PropertiesService.getScriptProperties().getProperty('HUBSPOT_TOKEN');
+  if (!token) { return { error: 'HUBSPOT_TOKEN script property is not set' }; }
+
+  const sh = sheet_();
+  const last = sh.getLastRow();
+  if (last < 2) { return { error: 'nothing synced yet, run syncAll first' }; }
+
+  const now = new Date();
+  const from = new Date(now.getTime() - DAYS_BEHIND * 864e5);
+  const to   = new Date(now.getTime() + DAYS_AHEAD  * 864e5);
+
+  const found = {};
+  let after = null, pages = 0, fetched = 0;
+  do {
+    const payload = {
+      filterGroups: [{ filters: [{ propertyName: 'hs_meeting_start_time', operator: 'BETWEEN',
+                                   value: String(from.getTime()), highValue: String(to.getTime()) }] }],
+      properties: ['hs_meeting_title', 'hs_meeting_start_time', 'hs_meeting_outcome'],
+      limit: HS_PAGE,
+      sorts: [{ propertyName: 'hs_meeting_start_time', direction: 'ASCENDING' }]
+    };
+    if (after) { payload.after = after; }
+    const res = UrlFetchApp.fetch(HS_SEARCH_URL, {
+      method: 'post', contentType: 'application/json',
+      headers: { Authorization: 'Bearer ' + token },
+      payload: JSON.stringify(payload), muteHttpExceptions: true
+    });
+    if (res.getResponseCode() !== 200) {
+      return { error: 'HubSpot ' + res.getResponseCode() + ': ' + res.getContentText().slice(0, 200) };
+    }
+    const body = JSON.parse(res.getContentText());
+    (body.results || []).forEach(function (m) {
+      const p = m.properties || {};
+      if (!p.hs_meeting_start_time) { return; }
+      const startIso = Utilities.formatDate(new Date(p.hs_meeting_start_time), 'Asia/Manila',
+                                            "yyyy-MM-dd'T'HH:mm");
+      const parts = hsSplitTitle_(p.hs_meeting_title);
+      found[hsKey_(parts.lead, parts.partner, startIso)] = hsOutcome_(p.hs_meeting_outcome);
+      fetched++;
+    });
+    after = body.paging && body.paging.next ? body.paging.next.after : null;
+    pages++;
+  } while (after && pages < HS_MAX_PAGES);
+
+  const rows = sh.getRange(2, 1, last - 1, HEADERS.length).getValues();
+  let set = 0, kept = 0, noMatch = 0;
+  rows.forEach(function (r) {
+    const k = hsKey_(r[3], r[2], cellIso_(r[5]));
+    const hs = found[k];
+    if (hs === undefined) { noMatch++; return; }
+    const by = String(r[13] || '').trim().toLowerCase();
+    // A person's answer stands. The calendar's does not: HubSpot is the better witness to a
+    // cancellation, and a row marked Cancelled by the calendar can be corrected by it.
+    if (String(r[12] || '').trim() && by !== '' && by !== 'calendar' && by !== 'hubspot') { kept++; return; }
+    if (!hs) { return; }
+    if (r[12] === hs && by === 'hubspot') { return; }
+    r[12] = hs; r[13] = 'hubspot';
+    r[14] = Utilities.formatDate(now, 'Asia/Manila', "yyyy-MM-dd'T'HH:mm");
+    set++;
+  });
+  if (set) { sh.getRange(2, 1, rows.length, HEADERS.length).setValues(rows); }
+
+  console.log('HubSpot meetings read ' + fetched + ' over ' + pages + ' page(s); '
+    + set + ' outcomes written, ' + kept + ' left as a person recorded them, '
+    + noMatch + ' sheet rows had no HubSpot meeting');
+  return { fetched: fetched, set: set, kept: kept, noMatch: noMatch };
 }
