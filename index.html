@@ -1401,6 +1401,10 @@
       <div class="content-header">
         <div class="page-title">Performance Appraisal</div>
         <div class="ch-right" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <div class="view-toggle" style="display:flex;gap:2px">
+            <button class="view-btn active" id="pafModeSdr" onclick="pafSetMode('sdr')">SDR</button>
+            <button class="view-btn"        id="pafModeTl"  onclick="pafSetMode('tl')">Team leader</button>
+          </div>
           <div style="position:relative;min-width:250px">
             <input id="pafSearch" class="cl-input" autocomplete="off" placeholder="Type a name to search…"
                    oninput="pafSearchInput()" onfocus="pafSearchInput()" onkeydown="pafSearchKey(event)"
@@ -2520,6 +2524,153 @@
     };
   }
 
+  // ── The appraisal for a team leader ──────────────────────────────────────
+  // Same form, different half. Section A for an SDR asks what they booked; for a leader it asks
+  // what their team did and how much of the leading they actually did. Coaching impact is shown
+  // on the Leader Impact page but deliberately not graded here: it is a derived figure with
+  // settling windows, and a quiet fortnight of bookings can move it through nobody's fault. A
+  // number somebody can argue their way out of is a poor thing to put a rating on.
+  //
+  // Team results use the same bands as an SDR's own, because the standard the floor is held to
+  // does not change according to who is being appraised on it.
+  const PAF_TL_STD = {
+    coverage: { unit:'%',  goal:100, rows:[[100,'Every rep coached'],[90,'90% to 99%'],[75,'75% to 89%'],[50,'50% to 74%'],[0,'Below 50%']] },
+    cadence:  { unit:'/mo', goal:2,  rows:[[2,'2 or more a month per rep they lead'],[1.5,'1.5 to 1.9 a month'],[1,'1 to 1.4 a month'],[0.5,'0.5 to 0.9 a month'],[0,'Below 0.5 a month']] }
+  };
+  const PAF_TL_GROUPS = [
+    { key:'teamresult', label:'Team Performance', items:['teamshowup','teamdcs'] },
+    { key:'coaching',   label:'Coaching',         items:['coverage','cadence'] },
+    { key:'attendance', label:'Attendance',       items:['tardiness','absences'] }
+  ];
+  const PAF_TL_ITEM = {
+    teamshowup: { label:'Team show-up rate', desc:'Booked DCs across their team that the lead attended. Goal 80%, pass line 65%.' },
+    teamdcs:    { label:'Team productivity', desc:'Discovery calls booked per rep per month across their team. Goal 40, pass line 31.' },
+    coverage:   { label:'Coaching coverage', desc:'Share of their own team they personally coached at least once in the period. Goal every rep.' },
+    cadence:    { label:'Coaching delivered', desc:'Sessions they ran per rep they lead, per month — their own pod or another leader’s. Goal 2.' },
+    tardiness:  { label:'Tardiness',         desc:'Their own reporting beyond the prescribed schedule, monthly average.' },
+    absences:   { label:'Absences',          desc:'Their own unplanned days not worked, monthly average.' }
+  };
+  const PAF_TL_A_KEYS = ['teamshowup','teamdcs','coverage','cadence','tardiness','absences'];
+
+  // The behavioural half, rewritten for somebody who leads rather than dials. The factors are
+  // the ones the grading standard names; what changes is what each grade looks like when the
+  // work is other people's performance rather than your own.
+  const PAF_B_TL = [
+    { key:'team', label:'Team Orientation', desc:'Builds a team that performs, and works with the wider floor rather than against it.', std:{
+      5:'Their pod is the one others borrow from. Develops people past their own level and lets them go when a better seat opens. Shares what works across teams instead of hoarding an edge, and carries floor-wide problems that are nobody’s job in particular. Raises a peer leader’s issue as readily as their own.',
+      4:'Runs a team that helps each other without being told. Contributes properly to leaders’ huddles and calibrations, lends people when another pod is short, and works with QA, Concierge and Marketing as partners.',
+      3:'Looks after their own team competently. Attends leaders’ sessions, responds when another leader asks, and does not withhold what is working. Rarely offers before being asked.',
+      2:'Protects their own pod at the floor’s expense. Slow to lend cover or share what works, and other departments are treated as obstacles. Friction with peer leaders needs smoothing over.',
+      1:'Undermines the wider team. Blames other pods or departments for their own results, withholds information, and the conduct or commentary costs morale beyond their own group.' } },
+    { key:'dependable', label:'Dependability', desc:'The team runs whether or not anyone is watching.', std:{
+      5:'Nothing needs chasing. Coaching logs, appraisals, schedules and escalations are filed on time and to standard, and the floor runs the same on their day off. Can be handed an ambiguous problem and left with it. Their word is what senior leaders plan around.',
+      4:'Consistently reliable. Commitments are met, records stay current, and risks are flagged early rather than surfacing after the fact. Needs only light oversight.',
+      3:'Delivers what is asked under normal supervision. Occasional reminders on logs, trackers or appraisal paperwork, but nothing is lost.',
+      2:'Follow-through is inconsistent. Coaching logs and returns fall behind, commitments slip without notice, and their work has to be verified before it can move on.',
+      1:'Cannot be relied on. Records are absent or invented after the fact, escalations are missed, and problems are concealed rather than raised.' } },
+    { key:'initiative', label:'Initiative', desc:'Sees what the team needs before being told, and acts on it.', std:{
+      5:'Finds the problem behind the number and fixes it. Reworks how their team runs when the evidence says to, trials an approach and shares what came of it, and brings solutions with the cost already thought through. Changes they made are now how the floor does it.',
+      4:'Acts without waiting. Spots a dip in a rep’s numbers and intervenes before it becomes a review, suggests practical improvements in leaders’ sessions and follows them through.',
+      3:'Does the job as defined, and does it properly. Responds well to direction and carries out agreed changes, but waits to be pointed at a problem.',
+      2:'Waits to be told. Sees a rep slipping and raises it only when asked, or not at all. Agreed changes need chasing.',
+      1:'Avoids ownership. Problems in the team go unaddressed until somebody above intervenes, and instruction is resisted or quietly dropped.' } },
+    { key:'discipline', label:'Discipline', desc:'Holds the standard, including when it is inconvenient, and is held by it too.', std:{
+      5:'Applies the standard evenly and on time, including to people they like and to themselves. Documentation would survive scrutiny. No lapses of their own in the period, and the team’s conduct reflects it.',
+      4:'Holds the line consistently. Coaching and corrective action happen when they should and are recorded properly. A minor lapse of their own at most, corrected at once.',
+      3:'Generally compliant and generally consistent. Some corrective action late or lightly documented, and a few minor lapses of their own, each corrected on the first reminder.',
+      2:'Applies the standard unevenly. Lets things go with some people and not others, documentation is thin or after the fact, and their own adherence needs reminding.',
+      1:'Does not hold the standard. Conduct or performance issues in the team go unaddressed or are covered for, or their own breaches are the matter at hand.' } }
+  ];
+
+  // Everything a leader is measured on, over the chosen months.
+  function pafComputeTl(leaderName, fromYm, toYm){
+    const L = LEADERS.find(function(x){ return x.name === leaderName; });
+    if (!L) return null;
+    const months = pafMonths(fromYm, toYm); if (!months.length) return null;
+
+    const scopeTeams = L.scope === 'floor' ? TEAMS.filter(function(t){ return t.id !== 'poc'; })
+                                           : TEAMS.filter(function(t){ return L.scope.indexOf(t.id) >= 0; });
+    const scope = [];
+    scopeTeams.forEach(function(t){ t.members.forEach(function(m){ if (!m.hidden) scope.push(m); }); });
+    const scopeIds = scope.map(function(m){ return m.id; });
+
+    let dcs = 0, dates = [];
+    months.forEach(function(ym){
+      const mo = aggregateMonth(ym, true);
+      scopeIds.forEach(function(id){ dcs += (mo.counts[id] || 0); });
+      dates = dates.concat(mo.dates);
+    });
+    const suAll = aggregateShowupForDates(dates);
+    let suYes = 0, suHappened = 0;
+    scopeIds.forEach(function(id){
+      const s = suAll[id]; if (!s) return;
+      suYes += s.yes; suHappened += s.happened;
+    });
+    const suPct = suHappened ? Math.round(suYes / suHappened * 100) : null;
+    const dcsPerRepMonth = (scope.length && months.length) ? dcs / scope.length / months.length : 0;
+
+    // All the coaching they ran, whoever the rep belonged to. Leaders here coach across pods as a
+    // matter of course — in Aug-Sep every one of them logged sessions with somebody else's team —
+    // and an hour spent developing another leader's rep is still an hour of leading done. Counting
+    // only their own roster threw away more than half of what the log holds and handed every
+    // leader on the floor the same grade, which is the one thing a rating must never do.
+    const inMonths = function(d){ return months.indexOf(String(d || '').slice(0,7)) >= 0; };
+    const scopeNames = new Set(scope.map(function(m){ return m.display.trim().toLowerCase(); }));
+    const logs = _coachLogs.filter(function(l){
+      return liCanon(l.coach) === L.name && inMonths((l.date||'').slice(0,10));
+    }).sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+    // Coverage is the other half of the question, and that one does have to be their own people:
+    // a leader whose sessions all land on other pods while their own goes untouched is not
+    // covering their team, however busy the log makes them look.
+    const ownLogs = logs.filter(function(l){ return scopeNames.has((l.rep||'').trim().toLowerCase()); });
+    const coached = new Set(ownLogs.map(function(l){ return (l.rep||'').trim().toLowerCase(); }));
+    const coveragePct = scope.length ? Math.round(coached.size / scope.length * 100) : null;
+    const cadence = (scope.length && months.length) ? logs.length / scope.length / months.length : null;
+
+    // Their own attendance, where the roster knows them. Jonathan is not on it, so his
+    // attendance factors stay unrated rather than being scored as though they were perfect.
+    const ownId = resolveAgent(L.name);
+    const att = (ownId && _attLoaded) ? pafAttendance(ownId, months) : null;
+    const tardyAvg = att ? att.late / months.length : null;
+    const absAvg   = att ? att.absencesTotal / months.length : null;
+
+    return {
+      tl: true, id: L.name, name: L.name, role: L.role, team: scopeTeams.map(function(t){ return t.name; }).join(' + '),
+      months: months, monthCount: months.length,
+      scopeSize: scope.length, scopeIds: scopeIds, ownId: ownId, dcs: dcs, dcsPerRepMonth: dcsPerRepMonth,
+      suYes: suYes, suHappened: suHappened, suPct: suPct,
+      sessions: logs.length, ownSessions: ownLogs.length, coachedCount: coached.size, coveragePct: coveragePct, cadence: cadence,
+      logs: logs, att: att, tardyAvg: tardyAvg, absAvg: absAvg,
+      auto: {
+        teamshowup: pafHiGrade(suPct, PAF_STD.showup.rows),
+        teamdcs:    pafHiGrade(dcsPerRepMonth, PAF_STD.dcs.rows),
+        coverage:   pafHiGrade(coveragePct, PAF_TL_STD.coverage.rows),
+        cadence:    pafHiGrade(cadence, PAF_TL_STD.cadence.rows),
+        tardiness:  pafTardyGrade(tardyAvg),
+        absences:   pafAbsentGrade(absAvg)
+      }
+    };
+  }
+
+  // Which form is on screen. Everything below reads these rather than the SDR constants, so one
+  // render serves both and the two cannot drift apart.
+  let _pafMode = 'sdr';
+  function pafIsTl(){ return _pafMode === 'tl'; }
+  function pafGroupsDef(){ return pafIsTl() ? PAF_TL_GROUPS : PAF_GROUPS; }
+  function pafItemsDef(){  return pafIsTl() ? PAF_TL_ITEM   : PAF_ITEM; }
+  function pafBDef(){      return pafIsTl() ? PAF_B_TL      : PAF_B; }
+  function pafAKeysDef(){  return pafIsTl() ? PAF_TL_A_KEYS : PAF_A_KEYS; }
+  function pafSetMode(m){
+    if (_pafMode === m) return;
+    _pafMode = m;
+    if ($('pafModeSdr')) $('pafModeSdr').classList.toggle('active', m === 'sdr');
+    if ($('pafModeTl'))  $('pafModeTl').classList.toggle('active',  m === 'tl');
+    _pafSelId = '';
+    _pafState = null;
+    const s = $('pafSearch'); if (s) s.value = '';
+    renderPaf();
+  }
+
   function pafPeriodLabel(M){
     const f = M.months[0].split('-').map(Number), t = M.months[M.months.length-1].split('-').map(Number);
     const fl = new Date(f[0],f[1]-1,1).toLocaleDateString('en-US',{month:'long',year:'numeric'});
@@ -2540,16 +2691,16 @@
   }
   function pafScores(){
     if (!_pafState) return { groups:[], a:null, b:null, total:null, complete:false, missing:[] };
-    const groups = PAF_GROUPS.map(pafGroupScore);
+    const groups = pafGroupsDef().map(pafGroupScore);
     const a = groups.some(function(v){ return v == null; }) ? null
             : groups.reduce(function(x,y){ return x+y; }, 0) / groups.length;
-    const bv = PAF_B.map(function(r){ return pafVal(r.key); });
+    const bv = pafBDef().map(function(r){ return pafVal(r.key); });
     const b = bv.some(function(v){ return v == null; }) ? null
             : bv.reduce(function(x,y){ return x+y; }, 0) / bv.length;
     const total = (a == null || b == null) ? null : (a + b) / 2;
-    const missing = PAF_A_KEYS.filter(function(k){ return pafVal(k) == null; })
-      .map(function(k){ return PAF_ITEM[k].label; })
-      .concat(PAF_B.filter(function(r){ return pafVal(r.key) == null; }).map(function(r){ return r.label; }));
+    const missing = pafAKeysDef().filter(function(k){ return pafVal(k) == null; })
+      .map(function(k){ return pafItemsDef()[k].label; })
+      .concat(pafBDef().filter(function(r){ return pafVal(r.key) == null; }).map(function(r){ return r.label; }));
     return { groups:groups, a:a, b:b, total:total, complete: total != null, missing:missing,
              result: total == null ? null : (total >= PAF_PASS ? 'PASS' : 'FAIL'),
              category: total == null ? null : pafCategory(total) };
@@ -2576,6 +2727,10 @@
   }
   function pafItemContext(key){
     const S = _pafState, M = S.M;
+    if (key === 'teamshowup')    return 'Team show-up ' + (M.suPct == null ? 'not measurable' : M.suPct + '% (' + M.suYes + ' of ' + M.suHappened + ' resolved DCs across ' + M.scopeSize + ' reps)') + ', goal ' + PAF_GOALS.showup + '%, pass line ' + PAF_STD.showup.rows[2][0] + '%';
+    if (key === 'teamdcs')      return 'Team productivity ' + M.dcsPerRepMonth.toFixed(1) + ' booked DCs per rep per month (' + M.dcs + ' across ' + M.scopeSize + ' reps over ' + M.monthCount + ' month' + (M.monthCount===1?'':'s') + '), goal ' + PAF_GOALS.dcs + ', pass line ' + PAF_STD.dcs.rows[2][0];
+    if (key === 'coverage')     return 'Coaching coverage ' + (M.coveragePct == null ? 'not measurable' : M.coveragePct + '% of their own team (' + M.coachedCount + ' of ' + M.scopeSize + ' reps coached at least once)') + ', goal every rep';
+    if (key === 'cadence')      return 'Coaching delivered ' + (M.cadence == null ? 'not measurable' : M.cadence.toFixed(1) + ' sessions a month per rep they lead (' + M.sessions + ' run, ' + M.ownSessions + ' with their own pod)') + ', goal 2';
     if (key === 'showup')       return 'Show-up rate ' + (M.suPct == null ? 'not measurable' : M.suPct + '% (' + M.suYes + ' of ' + M.suHappened + ' resolved DCs)') + ', goal ' + PAF_GOALS.showup + '%, pass line ' + PAF_STD.showup.rows[2][0] + '%';
     if (key === 'productivity') return 'Booked DCs ' + M.dcsPerMonth.toFixed(1) + ' per month (' + M.dcs + ' over ' + M.monthCount + ' months), goal ' + PAF_GOALS.dcs + ', pass line ' + PAF_STD.dcs.rows[2][0];
     if (key === 'tardiness')    return 'Tardiness ' + (M.tardyAvg == null ? 'not available' : M.tardyAvg.toFixed(1) + ' per month (' + M.att.late + ' late days)') + ', pass line 4 per month';
@@ -2588,11 +2743,11 @@
     if (!grade){ renderPaf(); return; }
     if (!S.rewriting) S.rewriting = {};
     S.rewriting[key] = true; renderPaf();
-    const factor = PAF_B.find(function(r){ return r.key === key; });
+    const factor = pafBDef().find(function(r){ return r.key === key; });
     const auto = M.auto ? M.auto[key] : null;
-    const E = pafEvidence(M);
+    const E = pafEv(M);
     const quotes = factor ? (E.signals[key] || []) : [];
-    const label = factor ? factor.label : PAF_ITEM[key].label;
+    const label = factor ? factor.label : pafItemsDef()[key].label;
     let prompt = 'You are writing one "specific examples" paragraph for a line on a Performance Appraisal Form for a BDR at Outsource Accelerator. "DC" = Discovery Call.\n\n'
       + 'EMPLOYEE: ' + M.name + ', ' + M.team + ', period ' + pafPeriodLabel(M) + '\n'
       + 'LINE: ' + label + '\n'
@@ -2691,22 +2846,42 @@
     if (!SC.complete) out.push('Incomplete — every metric and factor must be rated before the score is final. Still outstanding: ' + SC.missing.join(', ') + '.');
     // The standard raises these three regardless of the average.
     if (pafVal('discipline') === 1) out.push('MANDATORY: Discipline rated 1. A conduct matter goes through the disciplinary process and is not absorbed into an appraisal average.');
-    const oneA = PAF_A_KEYS.filter(function(k){ return pafVal(k) === 1; }).map(function(k){ return PAF_ITEM[k].label; });
+    const oneA = pafAKeysDef().filter(function(k){ return pafVal(k) === 1; }).map(function(k){ return pafItemsDef()[k].label; });
     if (oneA.length) out.push('MANDATORY: rated 1 on ' + oneA.join(', ') + '. A written improvement plan is required for the next period even where the final score passes.');
     if (SC.a != null && SC.b != null && ((SC.a >= PAF_PASS) !== (SC.b >= PAF_PASS)))
       out.push('MANDATORY: split result. Section A is ' + SC.a.toFixed(2) + ' and Section B is ' + SC.b.toFixed(2) + ', so one section passes while the other fails. A documented rationale is needed before sign-off.');
-    if (M.suPct != null && M.suPct < PAF_STD.showup.rows[2][0]) out.push('Show-up of ' + M.suPct + '% is below the ' + PAF_STD.showup.rows[2][0] + '% pass line (goal ' + PAF_GOALS.showup + '%).');
-    if (M.dcsPerMonth < PAF_STD.dcs.rows[2][0]) out.push('Averaging ' + M.dcsPerMonth.toFixed(1) + ' booked DCs a month, below the pass line of ' + PAF_STD.dcs.rows[2][0] + ' (goal ' + PAF_GOALS.dcs + ').');
+    if (pafIsTl()){
+      if (M.suPct != null && M.suPct < PAF_STD.showup.rows[2][0]) out.push('Team show-up of ' + M.suPct + '% is below the ' + PAF_STD.showup.rows[2][0] + '% pass line (goal ' + PAF_GOALS.showup + '%).');
+      if (M.dcsPerRepMonth != null && M.dcsPerRepMonth < PAF_STD.dcs.rows[2][0]) out.push('The team averaged ' + M.dcsPerRepMonth.toFixed(1) + ' booked DCs per rep per month, below the pass line of ' + PAF_STD.dcs.rows[2][0] + ' (goal ' + PAF_GOALS.dcs + ').');
+      if (M.coveragePct != null && M.coveragePct < 75) out.push('Coached ' + M.coachedCount + ' of their ' + M.scopeSize + ' reps (' + M.coveragePct + '%). Anyone not coached in the period has no documented development on file.');
+      if (M.cadence != null && M.cadence < 0.5) out.push('Ran ' + M.cadence.toFixed(1) + ' sessions a month per rep they lead, below the 0.5 floor.');
+    } else {
+      if (M.suPct != null && M.suPct < PAF_STD.showup.rows[2][0]) out.push('Show-up of ' + M.suPct + '% is below the ' + PAF_STD.showup.rows[2][0] + '% pass line (goal ' + PAF_GOALS.showup + '%).');
+      if (M.dcsPerMonth < PAF_STD.dcs.rows[2][0]) out.push('Averaging ' + M.dcsPerMonth.toFixed(1) + ' booked DCs a month, below the pass line of ' + PAF_STD.dcs.rows[2][0] + ' (goal ' + PAF_GOALS.dcs + ').');
+    }
     if (M.att){
       if (M.att.ncns) out.push(M.att.ncns + ' no-call-no-show day' + (M.att.ncns === 1 ? '' : 's') + ' on record.');
       if (M.tardyAvg > 4) out.push('Averaging ' + M.tardyAvg.toFixed(1) + ' late days a month, past the pass line of 4.');
       if (M.absAvg > 2) out.push('Averaging ' + M.absAvg.toFixed(1) + ' absences a month, past the pass line of 2.');
       if (M.att.suspended) out.push(M.att.suspended + ' suspension day(s) recorded in the period.');
     }
-    const E = M.logs ? pafEvidence(M) : null;
-    if (E && E.levels.final) out.push(E.levels.final + ' final written warning(s) on the coaching record.');
-    else if (E && E.levels.written) out.push(E.levels.written + ' written warning(s) on the coaching record.');
-    if (M.sessions === 0) out.push('No coaching logged in the period, so the performance factors have no documented evidence behind them.');
+    const E = M.logs ? pafEv(M) : null;
+    // For a leader the same counts mean the opposite thing: these are warnings they ISSUED, which
+    // is evidence of holding the standard, not of breaching it. Reading them the SDR way put
+    // "6 written warnings on the coaching record" on the form of a leader with a clean record.
+    if (pafIsTl()){
+      if (E && (E.levels.written || E.levels.final))
+        out.push('They issued ' + E.levels.written + ' written and ' + E.levels.final
+          + ' final written warning(s) in the period. This is corrective action they took, not action against them, and it should be read as evidence for Discipline.');
+      if (E && E.types.violation)
+        out.push('They documented ' + E.types.violation + ' logged violation(s) in the period.');
+    } else {
+      if (E && E.levels.final) out.push(E.levels.final + ' final written warning(s) on the coaching record.');
+      else if (E && E.levels.written) out.push(E.levels.written + ' written warning(s) on the coaching record.');
+    }
+    if (M.sessions === 0) out.push(pafIsTl()
+      ? 'No coaching logged in the period. Coaching is the core of the role, so either it did not happen or it is not being recorded, and both are findings.'
+      : 'No coaching logged in the period, so the performance factors have no documented evidence behind them.');
     if (SC.complete && SC.total < PAF_PASS) out.push('Final score of ' + SC.total.toFixed(2) + ' is below the ' + PAF_PASS.toFixed(2) + ' gate. The outcome is decided on the case and is not resolved by rounding up.');
     return out;
   }
@@ -2715,7 +2890,7 @@
     const S = _pafState, M = S.M, SC = pafScores();
     const NAVY='#0D1A6E', SLATE='#5B6678', BORDER='var(--border)';
     const n2 = function(v){ return v == null ? '—' : v.toFixed(2); };
-    const rate = function(k){ const v = pafVal(k); return v == null ? '<span style="color:' + SLATE + '">' + (PAF_ITEM[k] ? 'not entered' : 'not rated') + '</span>' : String(v); };
+    const rate = function(k){ const v = pafVal(k); return v == null ? '<span style="color:' + SLATE + '">' + (pafItemsDef()[k] ? 'not entered' : 'not rated') + '</span>' : String(v); };
     const line = function(label, value, indent, strong){
       return '<div style="display:flex;justify-content:space-between;gap:16px;padding:2px 0' + (indent ? ';padding-left:20px' : '') + '">'
         + '<span style="color:' + (strong ? NAVY : SLATE) + ';font-weight:' + (strong ? 700 : 400) + '">' + label + '</span>'
@@ -2737,7 +2912,7 @@
       + '</div>'
       + '<div>'
         + '<div style="font-size:10px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:' + SLATE + ';margin-bottom:4px">B. Performance factors</div>'
-        + PAF_B.map(function(r,i){ return line((i+1) + '. ' + r.label, rate(r.key), false, true); }).join('')
+        + pafBDef().map(function(r,i){ return line((i+1) + '. ' + r.label, rate(r.key), false, true); }).join('')
         + '<div style="border-top:1px solid ' + BORDER + ';margin-top:6px;padding-top:5px">' + line('SECTION B AVERAGE', n2(SC.b), false, true) + '</div>'
         + '<div style="margin-top:14px;background:' + col + ';border-radius:9px;padding:10px 12px;color:#fff">'
           + '<div style="display:flex;justify-content:space-between;gap:12px"><span style="font-size:10.5px;opacity:.9;text-transform:uppercase;letter-spacing:.4px">Final PAF score</span><span style="font-size:20px;font-weight:800;line-height:1">' + n2(SC.total) + '</span></div>'
@@ -2758,6 +2933,17 @@
 
   let _pafSelId = '';
   function pafPool(){
+    // Leaders are appraised from their own list, not the roster: two of them are not SDRs at
+    // all, and one of them is not on the roster in any form.
+    if (pafIsTl()){
+      return LEADERS.map(function(L){
+        const teams = L.scope === 'floor' ? 'Floor-wide'
+          : TEAMS.filter(function(t){ return L.scope.indexOf(t.id) >= 0; })
+                 .map(function(t){ return t.name; }).join(' + ');
+        return { id:L.name, name:L.name, team:L.role + ' · ' + teams };
+      });
+    }
+
     const out = [], seen = {};
     TEAMS.forEach(function(t){
       if (t.id === 'poc') return;
@@ -2823,7 +3009,7 @@
     const id = _pafSelId, from = $('pafFrom').value, to = $('pafTo').value;
     if (!id || !from || !to){ body.innerHTML = ''; return; }
     if (from > to){ body.innerHTML = '<div style="background:#FFF4F4;border:1px solid #F3C2C2;border-radius:12px;padding:18px;color:#B3261E;font-size:13px">The period start is after the period end. Swap the two months.</div>'; return; }
-    const M = pafCompute(id, from, to); if (!M) return;
+    const M = pafIsTl() ? pafComputeTl(id, from, to) : pafCompute(id, from, to); if (!M) return;
     const keep = (_pafState && _pafState.id === id && _pafState.from === from && _pafState.to === to) ? _pafState : null;
     _pafState = keep || {
       id:id, from:from, to:to, M:M,
@@ -2838,7 +3024,7 @@
     // editor would change the bands and the auto-graded hint while the actual rating, the
     // weighted score and the total silently kept their old values. Anything the evaluator has
     // set by hand is left alone.
-    PAF_A_KEYS.forEach(function(k){
+    pafAKeysDef().forEach(function(k){
       if (_pafState.touched[k]) return;
       if (M.auto[k] != null) _pafState.ratings[k] = M.auto[k];
     });
@@ -2849,7 +3035,7 @@
     const MISS = '<span style="color:#C00000;font-weight:800">BELOW PASS LINE</span>';
     const passOf = function(std){ return std.rows[2][0]; };          // grade 3 floor
     const flag = function(v, std){ return v == null ? '' : ' ' + (v >= passOf(std) ? MET : MISS); };
-    const monthsTxt = M.suByMonth.length > 1
+    const monthsTxt = (M.suByMonth && M.suByMonth.length > 1)
       ? '<div style="font-weight:400;color:' + SLATE + ';font-size:10.5px;margin-top:4px">'
         + M.suByMonth.map(function(m){
             const lbl = new Date(m.ym + '-01T00:00:00').toLocaleDateString('en-US',{month:'short'});
@@ -2857,9 +3043,26 @@
           }).join(' &middot; ') + '</div>'
       : '';
     const evidence = {
+      // The leader's half. Team results carry the same pass lines as an SDR's own, because the
+      // floor is held to one standard whoever is being appraised against it.
+      teamshowup:   (M.suPct == null ? 'No resolved DCs across the team in this period'
+                      : M.suPct + '% team show-up (' + M.suYes + ' of ' + M.suHappened + ' resolved DCs across '
+                        + M.scopeSize + ' reps), goal ' + PAF_GOALS.showup + '%, pass line ' + passOf(PAF_STD.showup) + '%'
+                        + flag(M.suPct, PAF_STD.showup)),
+      teamdcs:      (M.dcsPerRepMonth == null ? 'No bookings in this period'
+                      : M.dcsPerRepMonth.toFixed(1) + ' booked DCs per rep per month (' + M.dcs + ' across '
+                        + M.scopeSize + ' reps over ' + M.monthCount + ' month' + (M.monthCount===1?'':'s') + '), goal '
+                        + PAF_GOALS.dcs + ', pass line ' + passOf(PAF_STD.dcs) + flag(M.dcsPerRepMonth, PAF_STD.dcs)),
+      coverage:     (M.coveragePct == null ? 'No team on record'
+                      : M.coveragePct + '% of their own team coached at least once (' + M.coachedCount + ' of '
+                        + M.scopeSize + '), goal every rep' + flag(M.coveragePct, PAF_TL_STD.coverage)),
+      cadence:      (M.cadence == null ? 'No sessions on record'
+                      : M.cadence.toFixed(1) + ' sessions a month per rep they lead (' + M.sessions + ' run over '
+                        + M.monthCount + ' month' + (M.monthCount===1?'':'s') + ', ' + M.ownSessions
+                        + ' with their own pod), goal 2' + flag(M.cadence, PAF_TL_STD.cadence)),
       showup:       (M.suPct == null ? 'No resolved DCs in this period'
                       : M.suPct + '% show-up (' + M.suYes + ' of ' + M.suHappened + ' resolved DCs), goal ' + PAF_GOALS.showup + '%, pass line ' + passOf(PAF_STD.showup) + '%' + flag(M.suPct, PAF_STD.showup)) + monthsTxt,
-      productivity: M.dcsPerMonth.toFixed(1) + ' booked DCs per month (' + M.dcs + ' over ' + M.monthCount + ' month' + (M.monthCount===1?'':'s') + '), goal ' + PAF_GOALS.dcs + ', pass line ' + passOf(PAF_STD.dcs) + flag(M.dcsPerMonth, PAF_STD.dcs),
+      productivity: (M.dcsPerMonth == null ? 'Not applicable' : M.dcsPerMonth.toFixed(1)) + ' booked DCs per month (' + M.dcs + ' over ' + M.monthCount + ' month' + (M.monthCount===1?'':'s') + '), goal ' + PAF_GOALS.dcs + ', pass line ' + passOf(PAF_STD.dcs) + flag(M.dcsPerMonth, PAF_STD.dcs),
       tardiness:    att ? M.tardyAvg.toFixed(1) + ' late per month (' + att.late + ' over ' + M.monthCount + ' month' + (M.monthCount===1?'':'s') + '), pass line 4 per month' + (M.tardyAvg <= 4 ? ' ' + MET : ' ' + MISS) : 'Attendance not loaded',
       absences:     att ? M.absAvg.toFixed(1) + ' absences per month (' + att.absencesTotal + (att.ncns ? ' incl. ' + att.ncns + ' NCNS' : '') + '), pass line 2 per month' + (M.absAvg <= 2 ? ' ' + MET : ' ' + MISS) : 'Attendance not loaded'
     };
@@ -2907,7 +3110,7 @@
     // Section A: three groups, two of which average a pair of metrics.
     let rowsA = '';
     const metricRow = function(k, heading, indent){
-      const it = PAF_ITEM[k];
+      const it = pafItemsDef()[k];
       return '<tr style="border-top:1px solid ' + BORDER + '">'
         + '<td style="padding:8px 9px' + (indent ? ' 8px 22px' : '') + ';vertical-align:top"><div style="font-size:12.5px;font-weight:' + (heading ? 800 : 700) + ';color:' + NAVY + '">' + esc(heading || it.label) + '</div>'
         + '<div style="font-size:10.5px;color:' + SLATE + ';margin-top:2px">' + esc(it.desc) + '</div>'
@@ -2918,7 +3121,7 @@
         + '<td style="padding:8px 9px;vertical-align:top;min-width:230px">' + ta('ex_' + k, 'Specific examples') + '</td>'
         + '</tr>';
     };
-    PAF_GROUPS.forEach(function(g, gi){
+    pafGroupsDef().forEach(function(g, gi){
       // One metric means one row: a header restating the same number underneath itself is noise.
       if (g.items.length === 1){ rowsA += metricRow(g.items[0], (gi+1) + '. ' + g.label, false); return; }
       rowsA += '<tr style="border-top:2px solid ' + BORDER + ';background:#F8FAFD">'
@@ -2932,7 +3135,7 @@
       + '<td colspan="3" style="padding:8px 9px;font-size:12px;font-weight:800;color:' + NAVY + '">SECTION A AVERAGE</td>'
       + '<td style="padding:8px 9px;text-align:right;font-size:15px;font-weight:800;color:' + (SC.a == null ? SLATE : NAVY) + '">' + num2(SC.a) + '</td><td></td></tr>';
 
-    let rowsB = PAF_B.map(function(r, i){
+    let rowsB = pafBDef().map(function(r, i){
       return '<tr style="border-top:1px solid ' + BORDER + '">'
         + '<td style="padding:8px 9px;vertical-align:top"><div style="font-size:12.5px;font-weight:700;color:' + NAVY + '">' + (i+1) + '. ' + esc(r.label) + '</div><div style="font-size:10.5px;color:' + SLATE + ';margin-top:2px">' + esc(r.desc) + '</div></td>'
         + '<td style="padding:8px 9px;vertical-align:top;font-size:11px;color:' + SLATE + ';min-width:230px">'
@@ -2973,10 +3176,10 @@
     body.innerHTML =
       '<div style="background:#fff;border:1px solid ' + BORDER + ';border-radius:12px;padding:14px 16px;margin-bottom:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px">'
       + '<div><div style="font-size:9.5px;letter-spacing:.5px;text-transform:uppercase;color:' + SLATE + '">Employee</div><div style="font-size:14px;font-weight:800;color:' + NAVY + '">' + esc(M.name) + '</div></div>'
-      + '<div><div style="font-size:9.5px;letter-spacing:.5px;text-transform:uppercase;color:' + SLATE + '">Position</div><div style="font-size:13px;color:var(--ink)">' + esc(PAF_POSITION) + '</div></div>'
+      + '<div><div style="font-size:9.5px;letter-spacing:.5px;text-transform:uppercase;color:' + SLATE + '">Position</div><div style="font-size:13px;color:var(--ink)">' + esc(pafIsTl() ? (M.role || 'Team Leader') : PAF_POSITION) + '</div></div>'
       + '<div><div style="font-size:9.5px;letter-spacing:.5px;text-transform:uppercase;color:' + SLATE + '">Department / LOB</div><div style="font-size:13px;color:var(--ink)">' + esc(PAF_DEPT) + ' · ' + esc(M.team) + '</div></div>'
       + '<div><div style="font-size:9.5px;letter-spacing:.5px;text-transform:uppercase;color:' + SLATE + '">Appraisal period</div><div style="font-size:13px;color:var(--ink)">' + esc(pafPeriodLabel(M)) + '</div></div>'
-      + '<div><div style="font-size:9.5px;letter-spacing:.5px;text-transform:uppercase;color:' + SLATE + '">Rater</div><div style="font-size:13px;color:var(--ink)">' + esc(scTLName(M.teamId) || 'Team Leader') + '</div></div>'
+      + '<div><div style="font-size:9.5px;letter-spacing:.5px;text-transform:uppercase;color:' + SLATE + '">Rater</div><div style="font-size:13px;color:var(--ink)">' + esc(pafIsTl() ? 'To be signed' : (scTLName(M.teamId) || 'Team Leader')) + '</div></div>'
       + '<div><div style="font-size:9.5px;letter-spacing:.5px;text-transform:uppercase;color:' + SLATE + '">Coaching on file</div><div style="font-size:13px;color:var(--ink)">' + M.sessions + ' session' + (M.sessions===1?'':'s') + '</div></div>'
       + '</div>'
       + '<div id="pafSummary" style="margin-bottom:14px"></div>'
@@ -2999,6 +3202,97 @@
   // pile of numbers, because it will invent them; the candidates are computed here from the
   // data and the model may only write up what this hands it. There is normally no formal
   // record of accomplishments for a BDR, so anything genuine has to come from performance.
+  // The same evidence bundle, gathered for somebody who leads rather than dials. It has to be a
+  // separate pass rather than a branch inside pafEvidence: almost every line there reads M.id as
+  // a rep in a team, and a leader is neither.
+  //
+  // One deliberate omission. For an SDR the coaching log is testimony about them, so their notes
+  // are mined for behavioural signal. For a leader the same log is testimony about their output:
+  // the words in it describe the rep in front of them, not the person being appraised. Feeding
+  // those quotes into Section B would have the model appraise the wrong human entirely, so the
+  // signals come back empty and the prompt says plainly that Section B is the appraiser's own
+  // observation. What the log does prove about a leader is whether they filed it and whether they
+  // documented what they were supposed to — which is why the levels and types are still counted.
+  function pafEvidenceTl(M){
+    const ids = M.scopeIds || [];
+    const perMonth = M.months.map(function(ym){
+      const mo = aggregateMonth(ym, true);
+      let dcs = 0; ids.forEach(function(id){ dcs += (mo.counts[id] || 0); });
+      const suAll = aggregateShowupForDates(mo.dates);
+      let y = 0, h = 0;
+      ids.forEach(function(id){ const q = suAll[id]; if (q){ y += q.yes; h += q.happened; } });
+      const a = (M.ownId && _attLoaded) ? pafAttendance(M.ownId, [ym]) : null;
+      const ran = M.logs.filter(function(l){ return (l.date||'').slice(0,7) === ym; }).length;
+      const target = MONTHLY_TARGET * (M.scopeSize || 0);
+      return { ym:ym, days: mo.dates.length,
+        label: new Date(ym + '-01T00:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'}),
+        dcs:dcs, target:target, pct: target ? Math.round(dcs/target*100) : null, sessions:ran,
+        suYes:y, suHappened:h, suPct: h ? Math.round(y/h*100) : null,
+        late: a ? a.late : null, absent: a ? a.absencesTotal : null, ncns: a ? a.ncns : null,
+        scheduled: a ? a.scheduled : null, present: a ? a.present : null };
+    });
+
+    // How the rest of the floor did over the same months, so a team result can be read against
+    // something. A leader whose team sits at 55% show-up on a floor averaging 50% is doing
+    // better than the raw figure suggests, and the form should be able to say so.
+    let allDates = [];
+    M.months.forEach(function(ym){ allDates = allDates.concat(aggregateMonth(ym, true).dates); });
+    const suAll = aggregateShowupForDates(allDates);
+    let floorYes = 0, floorHap = 0, floorDcs = 0, floorReps = 0;
+    TEAMS.filter(function(t){ return t.id !== 'poc'; }).forEach(function(t){
+      t.members.filter(function(m){ return !m.hidden; }).forEach(function(m){
+        floorReps++;
+        M.months.forEach(function(ym){ floorDcs += (aggregateMonth(ym, true).counts[m.id] || 0); });
+        const q = suAll[m.id]; if (q){ floorYes += q.yes; floorHap += q.happened; }
+      });
+    });
+    const floorSuPct = floorHap ? Math.round(floorYes/floorHap*100) : null;
+    const floorDcRate = (floorReps && M.monthCount) ? floorDcs/floorReps/M.monthCount : null;
+
+    const wins = [];
+    if (M.coveragePct === 100 && M.scopeSize)
+      wins.push('Coached every one of their ' + M.scopeSize + ' reps at least once in the period');
+    else if (M.coveragePct != null && M.coveragePct >= 75)
+      wins.push('Coached ' + M.coachedCount + ' of their ' + M.scopeSize + ' reps (' + M.coveragePct + '%) in the period');
+    if (M.sessions >= 20)
+      wins.push('Ran ' + M.sessions + ' coaching sessions over ' + M.monthCount + ' month' + (M.monthCount===1?'':'s')
+        + (M.ownSessions < M.sessions ? ', ' + (M.sessions - M.ownSessions) + ' of them supporting other leaders’ reps' : ''));
+    if (M.suPct != null && floorSuPct != null && M.suHappened >= 20 && M.suPct > floorSuPct + 2)
+      wins.push('Team show-up of ' + M.suPct + '% is above the floor average of ' + floorSuPct + '% (' + M.suHappened + ' resolved DCs)');
+    if (M.dcsPerRepMonth && floorDcRate && M.dcsPerRepMonth > floorDcRate * 1.05)
+      wins.push('Team productivity of ' + M.dcsPerRepMonth.toFixed(1) + ' DCs per rep per month is above the floor average of ' + floorDcRate.toFixed(1));
+    perMonth.forEach(function(m){
+      if (m.target && m.dcs >= m.target) wins.push('Team hit the combined booked-DC target in ' + m.label + ' (' + m.dcs + ' of ' + m.target + ')');
+      if (m.scheduled && m.late === 0 && m.absent === 0)
+        wins.push('Perfect own attendance in ' + m.label + ': no late days and no absences across ' + m.scheduled + ' scheduled days');
+    });
+    if (perMonth.length > 1){
+      const f = perMonth[0], l = perMonth[perMonth.length-1];
+      if (f.suPct != null && l.suPct != null && f.suHappened >= 15 && l.suHappened >= 15 && l.suPct > f.suPct + 5)
+        wins.push('Team show-up improved from ' + f.suPct + '% in ' + f.label + ' to ' + l.suPct + '% in ' + l.label);
+    }
+
+    // What they filed, which is evidence about the leader rather than about the rep.
+    const lv = { verbal:0, written:0, final:0 }, ty = { weekly:0, performance:0, violation:0, pip:0 };
+    M.logs.forEach(function(l){
+      const L = (l.level||'').toLowerCase(), T = (l.type||'').toLowerCase();
+      if (L.indexOf('final') >= 0) lv.final++; else if (L.indexOf('written') >= 0) lv.written++; else if (L) lv.verbal++;
+      if (T.indexOf('violation') >= 0) ty.violation++; else if (T.indexOf('pip') >= 0) ty.pip++;
+      else if (T.indexOf('perf') >= 0) ty.performance++; else if (T.indexOf('weekly') >= 0) ty.weekly++;
+    });
+    const topics = {};
+    M.logs.forEach(function(l){ const t = (l.topic||'').trim(); if (t && t !== 'Weekly Coaching') topics[t] = (topics[t]||0)+1; });
+    const repeated = Object.keys(topics).filter(function(t){ return topics[t] > 1; });
+
+    return { tl:true, perMonth:perMonth, wins:wins, rankDc:0, rankSu:0, teamSize:M.scopeSize,
+             teamDcAvg:null, teamSuPct:floorSuPct, floorSuPct:floorSuPct, floorDcRate:floorDcRate,
+             levels:lv, types:ty, topics:topics, repeated:repeated,
+             signals:{ team:[], dependable:[], initiative:[], discipline:[] } };
+  }
+
+  // One door for both forms, so no call site has to know which is on screen.
+  function pafEv(M){ return (M && M.tl) ? pafEvidenceTl(M) : pafEvidence(M); }
+
   function pafEvidence(M){
     const perMonth = M.months.map(function(ym){
       const mo = aggregateMonth(ym, true);
@@ -3110,15 +3404,25 @@
     const btn = $('pafAiBtn'), M = _pafState.M, S = _pafState;
     btn.disabled = true; btn.textContent = 'Drafting…';
     $('pafStatus').style.color = 'var(--slate)'; $('pafStatus').textContent = 'Drafting from the figures and the logged coaching notes…';
-    const att = M.att || {}, E = pafEvidence(M);
+    const att = M.att || {}, E = pafEv(M);
+    const isTl = pafIsTl();
     const months = E.perMonth.map(function(m){
+      if (isTl){
+        return '  ' + m.label + ': team booked ' + m.dcs + ' DCs against a combined target of ' + m.target + ' (' + m.pct + '%), team show-up '
+          + (m.suPct == null ? 'no resolved DCs' : m.suPct + '% on ' + m.suHappened + ' resolved')
+          + ', ' + m.sessions + ' coaching session(s) run'
+          + (m.scheduled ? ', their own attendance ' + m.present + ' present / ' + m.late + ' late / ' + m.absent + ' absent' + (m.ncns ? ' (incl ' + m.ncns + ' NCNS)' : '') + ' of ' + m.scheduled + ' scheduled days' : '');
+      }
       return '  ' + m.label + ': ' + m.dcs + ' booked DCs of ' + m.target + ' (' + m.pct + '%), show-up '
         + (m.suPct == null ? 'no resolved DCs' : m.suPct + '% on ' + m.suHappened + ' resolved')
         + (m.scheduled ? ', attendance ' + m.present + ' present / ' + m.late + ' late / ' + m.absent + ' absent' + (m.ncns ? ' (incl ' + m.ncns + ' NCNS)' : '') + ' of ' + m.scheduled + ' scheduled days' : '');
     }).join('\n');
+    // For a leader the log is a record of sessions they delivered, so name the rep each one was
+    // with. Without that the model reads them as notes about the person being appraised.
     const notes = M.logs.slice(0,15).map(function(l){
-      return '  - [' + (l.date||'').slice(0,10) + ' ' + (l.topic||'') + (l.level ? ' / ' + l.level : '') + '] ' + (l.summary || '(no summary recorded)');
-    }).join('\n') || '  (no coaching notes on file for this period)';
+      return '  - [' + (l.date||'').slice(0,10) + ' ' + (l.topic||'') + (l.level ? ' / ' + l.level : '') + ']'
+        + (isTl ? ' with ' + (l.rep || 'unnamed rep') + ':' : '') + ' ' + (l.summary || '(no summary recorded)');
+    }).join('\n') || (isTl ? '  (no coaching sessions logged by this leader for this period)' : '  (no coaching notes on file for this period)');
     // State the standard and whether it was met, in code, so the write-up cannot slide into
     // comparing someone to a team average while never saying they missed the bar the grade was
     // actually set against. Being below a weak average and being below the standard are
@@ -3135,37 +3439,80 @@
       if (v == null) return 'not measurable';
       return (v >= pass ? 'PASSES' : 'BELOW THE PASS LINE') + ' (' + v + unit + ' against a pass line of ' + pass + unit + ')';
     };
-    stdLines.push('  Show-up: goal ' + PAF_GOALS.showup + '%, pass line ' + pl(PAF_STD.showup) + '%. Actual ' + (M.suPct == null ? 'no resolved DCs' : verdict(M.suPct, pl(PAF_STD.showup), '%')));
-    stdLines.push('  Productivity: goal ' + PAF_GOALS.dcs + ' DCs a month, pass line ' + pl(PAF_STD.dcs) + '. Actual ' + verdict(Number(M.dcsPerMonth.toFixed(1)), pl(PAF_STD.dcs), ' a month'));
-    stdLines.push('  Tardiness: pass line 4 a month. Actual ' + (M.tardyAvg == null ? 'not available' : M.tardyAvg.toFixed(1) + ' a month, ' + (M.tardyAvg <= 4 ? 'PASSES' : 'BELOW THE PASS LINE')));
-    stdLines.push('  Absences: pass line 2 a month. Actual ' + (M.absAvg == null ? 'not available' : M.absAvg.toFixed(1) + ' a month, ' + (M.absAvg <= 2 ? 'PASSES' : 'BELOW THE PASS LINE')));
+    if (isTl){
+      stdLines.push('  Team show-up: goal ' + PAF_GOALS.showup + '%, pass line ' + pl(PAF_STD.showup) + '%. Actual ' + (M.suPct == null ? 'no resolved DCs' : verdict(M.suPct, pl(PAF_STD.showup), '%')));
+      stdLines.push('  Team productivity: goal ' + PAF_GOALS.dcs + ' DCs per rep per month, pass line ' + pl(PAF_STD.dcs) + '. Actual ' + verdict(Number(M.dcsPerRepMonth.toFixed(1)), pl(PAF_STD.dcs), ' per rep per month'));
+      stdLines.push('  Coaching coverage: goal every rep coached at least once in the period. Actual ' + (M.coveragePct == null ? 'not measurable' : M.coveragePct + '% (' + M.coachedCount + ' of ' + M.scopeSize + ' reps)'));
+      stdLines.push('  Coaching delivered: goal 2 sessions a month for every rep they lead. Actual ' + (M.cadence == null ? 'not measurable' : M.cadence.toFixed(1) + ' a month, ' + (M.cadence >= 2 ? 'PASSES' : 'BELOW THE GOAL')));
+      stdLines.push('  Their own tardiness: pass line 4 a month. Actual ' + (M.tardyAvg == null ? 'not available' : M.tardyAvg.toFixed(1) + ' a month, ' + (M.tardyAvg <= 4 ? 'PASSES' : 'BELOW THE PASS LINE')));
+      stdLines.push('  Their own absences: pass line 2 a month. Actual ' + (M.absAvg == null ? 'not available' : M.absAvg.toFixed(1) + ' a month, ' + (M.absAvg <= 2 ? 'PASSES' : 'BELOW THE PASS LINE')));
+      stdLines.push('  NOTE: team show-up and team productivity are the results of a whole team, not of one person dialling. Credit and criticism both belong to how the leader ran the team, not to their personal output.');
+    } else {
+      stdLines.push('  Show-up: goal ' + PAF_GOALS.showup + '%, pass line ' + pl(PAF_STD.showup) + '%. Actual ' + (M.suPct == null ? 'no resolved DCs' : verdict(M.suPct, pl(PAF_STD.showup), '%')));
+      stdLines.push('  Productivity: goal ' + PAF_GOALS.dcs + ' DCs a month, pass line ' + pl(PAF_STD.dcs) + '. Actual ' + verdict(Number(M.dcsPerMonth.toFixed(1)), pl(PAF_STD.dcs), ' a month'));
+      stdLines.push('  Tardiness: pass line 4 a month. Actual ' + (M.tardyAvg == null ? 'not available' : M.tardyAvg.toFixed(1) + ' a month, ' + (M.tardyAvg <= 4 ? 'PASSES' : 'BELOW THE PASS LINE')));
+      stdLines.push('  Absences: pass line 2 a month. Actual ' + (M.absAvg == null ? 'not available' : M.absAvg.toFixed(1) + ' a month, ' + (M.absAvg <= 2 ? 'PASSES' : 'BELOW THE PASS LINE')));
+    }
     stdLines.push('  NOTE: the goal and the pass line are different numbers. Missing the goal is not the same as failing, and the write-up must not treat them as the same thing.');
     const standards = stdLines.join(BR);
     const wins = E.wins.length ? E.wins.map(function(w){ return '  - ' + w; }).join('\n') : '  (none: nothing in the data rises to an accomplishment)';
 
-    const prompt = 'You are helping a sales supervisor at Outsource Accelerator (offshore staffing) complete a Performance Appraisal Form for a BDR. "DC" = Discovery Call, a booked meeting between a lead and a client.\n\n'
-      + 'EMPLOYEE: ' + M.name + ', ' + M.team + ' team. Period: ' + pafPeriodLabel(M) + ' (' + M.monthCount + ' month(s)).\n\n'
-      + 'PERIOD TOTALS\n'
-      + '  Booked DCs: ' + M.dcs + ' against a target of ' + M.target + ' (' + M.prodPct + '%)\n'
-      + '  Show-up on their booked DCs: ' + (M.suPct == null ? 'no resolved DCs' : M.suPct + '% (' + M.suYes + ' of ' + M.suHappened + ' resolved)') + '\n'
-      + '  Attendance: ' + (att.scheduled ? att.present + ' present, ' + att.late + ' late, ' + att.absent + ' absent, ' + att.ncns + ' NCNS, ' + att.undertime + ' undertime across ' + att.scheduled + ' scheduled days' + (att.leave ? ', plus ' + att.leave + ' days of approved leave which must NOT be held against them' : '') : 'not available') + '\n'
-      + '  Standing on their team: ' + (E.rankDc ? 'ranked ' + E.rankDc + ' of ' + E.teamSize + ' for booked DCs (team average ' + E.teamDcAvg + ')' : 'not ranked')
-      + (E.teamSuPct != null ? ', team show-up average ' + E.teamSuPct + '%' : '') + '\n\n'
+    const totals = isTl
+      ? '  Team: ' + M.team + ', ' + M.scopeSize + ' rep(s)\n'
+        + '  Team booked DCs: ' + M.dcs + ', which is ' + M.dcsPerRepMonth.toFixed(1) + ' per rep per month\n'
+        + '  Team show-up: ' + (M.suPct == null ? 'no resolved DCs' : M.suPct + '% (' + M.suYes + ' of ' + M.suHappened + ' resolved)') + '\n'
+        + '  Coaching they ran: ' + M.sessions + ' session(s), of which ' + M.ownSessions + ' were with their own reps, reaching ' + M.coachedCount + ' of their ' + M.scopeSize + ' (' + M.coveragePct + '%)\n'
+        + '  Their own attendance: ' + (att.scheduled ? att.present + ' present, ' + att.late + ' late, ' + att.absent + ' absent, ' + att.ncns + ' NCNS across ' + att.scheduled + ' scheduled days' + (att.leave ? ', plus ' + att.leave + ' days of approved leave which must NOT be held against them' : '') : 'not on the roster feed, so it cannot be assessed here') + '\n'
+        + '  The rest of the floor over the same months: show-up ' + (E.floorSuPct == null ? 'not measurable' : E.floorSuPct + '%')
+          + ', productivity ' + (E.floorDcRate == null ? 'not measurable' : E.floorDcRate.toFixed(1) + ' DCs per rep per month') + '\n'
+      : '  Booked DCs: ' + M.dcs + ' against a target of ' + M.target + ' (' + M.prodPct + '%)\n'
+        + '  Show-up on their booked DCs: ' + (M.suPct == null ? 'no resolved DCs' : M.suPct + '% (' + M.suYes + ' of ' + M.suHappened + ' resolved)') + '\n'
+        + '  Attendance: ' + (att.scheduled ? att.present + ' present, ' + att.late + ' late, ' + att.absent + ' absent, ' + att.ncns + ' NCNS, ' + att.undertime + ' undertime across ' + att.scheduled + ' scheduled days' + (att.leave ? ', plus ' + att.leave + ' days of approved leave which must NOT be held against them' : '') : 'not available') + '\n'
+        + '  Standing on their team: ' + (E.rankDc ? 'ranked ' + E.rankDc + ' of ' + E.teamSize + ' for booked DCs (team average ' + E.teamDcAvg + ')' : 'not ranked')
+        + (E.teamSuPct != null ? ', team show-up average ' + E.teamSuPct + '%' : '') + '\n';
+
+    // For an SDR the coaching notes are testimony about them. For a leader they are testimony
+    // about the rep sitting opposite, so there is nothing in them to quote in Section B and the
+    // model is told so outright rather than left to find a way to use them anyway.
+    const candidates = isTl
+      ? '  (none available. The notes above describe the reps this leader coached, not the leader. '
+        + 'Section B must be rated by the appraiser from their own observation, using the figures '
+        + 'and the shape of the coaching record as context only.)'
+      : ['team','dependable','initiative','discipline'].map(function(k){
+          const v = E.signals[k] || [];
+          return '  ' + k + ': ' + (v.length ? v.join(' | ') : 'nothing in the notes touches this');
+        }).join('\n');
+
+    const aSchema = isTl
+      ? '"ex_teamshowup":"evidence on the team show-up rate, naming the pass mark and whether it was met, and treating it as a result the leader is accountable for rather than their personal metric",'
+        + '"ex_teamdcs":"evidence on team productivity, citing DCs per rep per month against the pass line and the month-by-month movement",'
+        + '"ex_coverage":"evidence on coaching coverage, citing how many of their own reps they coached out of how many, and naming anyone left uncoached as a gap",'
+        + '"ex_cadence":"evidence on coaching delivered, citing sessions run per rep per month against the goal of 2, and noting sessions run for other leaders reps as contribution to the wider floor",'
+        + '"ex_tardiness":"evidence on their own punctuality, citing late days, or state that they are not on the roster feed",'
+        + '"ex_absences":"evidence on their own absences, citing absent days and naming NCNS separately if any, or state that they are not on the roster feed",'
+      : '"ex_showup":"evidence on the show-up rate, naming the pass mark and whether it was met",'
+        + '"ex_productivity":"evidence for productivity, citing booked DCs against target and the month-by-month movement",'
+        + '"ex_tardiness":"evidence on punctuality, citing late days",'
+        + '"ex_absences":"evidence on absences, citing absent days and naming NCNS separately if any",';
+
+    const roleLine = isTl
+      ? 'You are helping a sales operations supervisor at Outsource Accelerator (offshore staffing) complete a Performance Appraisal Form for a TEAM LEADER who manages a team of BDRs. "DC" = Discovery Call, a booked meeting between a lead and a client. You are appraising the leader, never the reps.\n\n'
+      : 'You are helping a sales supervisor at Outsource Accelerator (offshore staffing) complete a Performance Appraisal Form for a BDR. "DC" = Discovery Call, a booked meeting between a lead and a client.\n\n';
+
+    const prompt = roleLine
+      + 'EMPLOYEE: ' + M.name + (isTl ? ', ' + M.role + ' of ' + M.team : ', ' + M.team + ' team') + '. Period: ' + pafPeriodLabel(M) + ' (' + M.monthCount + ' month(s)).\n\n'
+      + 'PERIOD TOTALS\n' + totals + '\n'
       + 'MONTH BY MONTH\n' + months + '\n\n'
-      + 'COACHING LOGGED THIS PERIOD (' + M.sessions + ' session(s), newest first)\n' + notes + '\n\n'
+      + (isTl ? 'COACHING THIS LEADER DELIVERED THIS PERIOD (' : 'COACHING LOGGED THIS PERIOD (') + M.sessions + ' session(s), newest first)\n' + notes + '\n\n'
       + 'COACHING RECORD SHAPE\n'
       + '  Escalation level: ' + E.levels.verbal + ' verbal, ' + E.levels.written + ' WRITTEN warning(s), ' + E.levels.final + ' FINAL WRITTEN warning(s)\n'
       + '  Session type: ' + E.types.weekly + ' routine weekly, ' + E.types.performance + ' performance, ' + E.types.violation + ' logged violation(s), ' + E.types.pip + ' PIP\n'
       + '  Issues raised more than once: ' + (E.repeated.length ? E.repeated.join('; ') : 'none') + '\n\n'
-      + 'CANDIDATE EVIDENCE PER COMPETENCY, quoted from the notes above\n'
-      + ['team','dependable','initiative','discipline'].map(function(k){
-          const v = E.signals[k] || [];
-          return '  ' + k + ': ' + (v.length ? v.join(' | ') : 'nothing in the notes touches this');
-        }).join('\n') + '\n\n'
+      + 'CANDIDATE EVIDENCE PER COMPETENCY, quoted from the notes above\n' + candidates + '\n\n'
       + 'VERIFIED ACHIEVEMENTS, computed from the data\n' + wins + '\n\n'
       + 'STANDARD, AND WHETHER IT WAS MET\n' + standards + '\n\n'
       + 'BEHAVIOURAL STANDARD FOR THE FOUR FACTORS, rate against these definitions\n'
-      + PAF_B.map(function(r){
+      + pafBDef().map(function(r){
           return r.label + ': ' + [5,4,3,2,1].map(function(gr){ return gr + ' = ' + r.std[gr]; }).join(' | ');
         }).join('\n') + '\n\n'
       + 'RULES\n'
@@ -3175,13 +3522,12 @@
       + '4. Approved leave is never a mark against the rep. NCNS is a serious attendance issue and should be named as one where it occurred.\n'
       + '5. Be factual and fair, the tone of a supervisor writing for a permanent record that the employee will read and sign. No em dashes.\n\n'
       + '6. Every Section A example must state plainly whether the standard was met or missed, name the figure that is the standard, and give the gap in points. Never describe a metric only as below a team average when it is also below the standard, because the standard is what the grade is set against and being better than a weak floor is not the same as passing. Where the standard changed during the period, say which months were held to which mark.\n'
-      + '7. You must also PROPOSE a 1 to 5 rating for each of the four factors, choosing the grade whose behavioural standard above the record actually matches. Start every one at 3, meaning meets expectations, and move only where the record supports it. Go to 4 or 5 only where the coaching notes record something specifically good. Go to 2 or 1 only on documented grounds: a Written or Final Written warning, a logged violation, the same issue raised repeatedly, or for Dependability a pattern of absence and NCNS. Where there is no evidence either way, keep 3 and say so in that competency box. Never infer character from booked DC numbers alone, and never rate someone down for approved leave.\n\n'
+      + '7. You must also PROPOSE a 1 to 5 rating for each of the four factors, choosing the grade whose behavioural standard above the record actually matches. Start every one at 3, meaning meets expectations, and move only where the record supports it. Go to 4 or 5 only where the coaching notes record something specifically good. Go to 2 or 1 only on documented grounds: a Written or Final Written warning, a logged violation, the same issue raised repeatedly, or for Dependability a pattern of absence and NCNS. Where there is no evidence either way, keep 3 and say so in that competency box. Never infer character from booked DC numbers alone, and never rate someone down for approved leave.\n'
+      + (isTl ? '8. This is a leader. Section B has no quoted evidence available, so rate all four factors 3 unless the figures or the shape of the coaching record give a documented reason to move, and say in each box that the rating is the appraiser’s to confirm from their own observation. Never read a rep’s behaviour in a coaching note as the leader’s behaviour. A leader whose own team went uncoached while they coached other teams is a Team Orientation and Dependability point worth naming.\n' : '')
+      + '\n'
       + 'Return ONLY valid JSON with these fields, each a short paragraph:\n'
       + '{'
-      + '"ex_showup":"evidence on the show-up rate, naming the pass mark and whether it was met",'
-      + '"ex_productivity":"evidence for productivity, citing booked DCs against target and the month-by-month movement",'
-      + '"ex_tardiness":"evidence on punctuality, citing late days",'
-      + '"ex_absences":"evidence on absences, citing absent days and naming NCNS separately if any",'
+      + aSchema
       + '"ex_team":"team orientation, from the coaching notes, or state there is no logged evidence",'
       + '"ex_dependable":"dependability, drawing on attendance consistency and whether they acted on coaching",'
       + '"ex_initiative":"initiative, from the coaching notes, or state there is no logged evidence",'
@@ -3199,7 +3545,7 @@
       // paragraph recorded against a blank grade.
       if (!S.aiSet) S.aiSet = {};
       let applied = 0;
-      PAF_B.forEach(function(r){
+      pafBDef().forEach(function(r){
         const v = parseInt(g['rate_' + r.key], 10);
         if (!(v >= 1 && v <= 5)) return;
         if (S.touched[r.key]) return;
@@ -3229,27 +3575,32 @@
     const g = function(k){ return esc(S.text[k] || ''); };
     const n2 = function(v){ return v == null ? '&mdash;' : v.toFixed(2); };
     const rv = function(k, word){ const v = pafVal(k); return v == null ? word : v + ' &mdash; ' + PAF_GRADE[v]; };
+    const band = function(rows){ return rows.map(function(r,i){ return (5-i) + ' = ' + r[1]; }).join('  &middot;  '); };
     const GUIDE = {
-      showup:       PAF_STD.showup.rows.map(function(r,i){ return (5-i) + ' = ' + r[1]; }).join('  &middot;  '),
-      productivity: PAF_STD.dcs.rows.map(function(r,i){ return (5-i) + ' = ' + r[1]; }).join('  &middot;  '),
+      showup:       band(PAF_STD.showup.rows),
+      productivity: band(PAF_STD.dcs.rows),
+      teamshowup:   band(PAF_STD.showup.rows),
+      teamdcs:      band(PAF_STD.dcs.rows),
+      coverage:     band(PAF_TL_STD.coverage.rows),
+      cadence:      band(PAF_TL_STD.cadence.rows),
       tardiness:    PAF_TARDY_ROWS.map(function(r){ return r[0] + ' = ' + r[1]; }).join('  &middot;  '),
       absences:     PAF_ABSENT_ROWS.map(function(r){ return r[0] + ' = ' + r[1]; }).join('  &middot;  ')
     };
     const guideLine = function(k){ return GUIDE[k] ? '<div class="gd">' + GUIDE[k] + '</div>' : ''; };
     let aRows = '';
-    PAF_GROUPS.forEach(function(grp, gi){
+    pafGroupsDef().forEach(function(grp, gi){
       if (grp.items.length === 1){
         const k = grp.items[0];
-        aRows += '<tr><td><b>' + (gi+1) + '. ' + esc(grp.label) + '</b><div class="sb">' + esc(PAF_ITEM[k].desc) + '</div>' + guideLine(k) + '</td><td class="c">' + rv(k, 'not entered') + '</td><td class="ex">' + g('ex_' + k) + '</td></tr>';
+        aRows += '<tr><td><b>' + (gi+1) + '. ' + esc(grp.label) + '</b><div class="sb">' + esc(pafItemsDef()[k].desc) + '</div>' + guideLine(k) + '</td><td class="c">' + rv(k, 'not entered') + '</td><td class="ex">' + g('ex_' + k) + '</td></tr>';
         return;
       }
       aRows += '<tr class="grp"><td>' + (gi+1) + '. ' + esc(grp.label) + '</td><td class="c">' + n2(SC.groups[gi]) + '</td><td></td></tr>';
       grp.items.forEach(function(k){
-        aRows += '<tr><td class="ind">' + esc(PAF_ITEM[k].label) + '<div class="sb">' + esc(PAF_ITEM[k].desc) + '</div>' + guideLine(k) + '</td><td class="c">' + rv(k, 'not entered') + '</td><td class="ex">' + g('ex_' + k) + '</td></tr>';
+        aRows += '<tr><td class="ind">' + esc(pafItemsDef()[k].label) + '<div class="sb">' + esc(pafItemsDef()[k].desc) + '</div>' + guideLine(k) + '</td><td class="c">' + rv(k, 'not entered') + '</td><td class="ex">' + g('ex_' + k) + '</td></tr>';
       });
     });
     aRows += '<tr class="tot"><td>SECTION A AVERAGE</td><td class="c">' + n2(SC.a) + '</td><td></td></tr>';
-    let bRows = PAF_B.map(function(r, i){
+    let bRows = pafBDef().map(function(r, i){
       const v = pafVal(r.key);
       return '<tr><td>' + (i+1) + '. ' + esc(r.label) + '<div class="sb">' + esc(r.desc) + '</div></td>'
         + '<td class="c">' + rv(r.key, 'not rated')
@@ -3283,9 +3634,11 @@
       + '</style></head><body>'
       + '<h1>PERFORMANCE APPRAISAL &mdash; SUMMARY OF RATINGS</h1>'
       + '<div class="sub">Scale: 5 Outstanding | 4 Exceeds Expectations | 3 Meets Expectations | 2 Needs Improvement | 1 Unacceptable<br>'
-      + 'Goals: ' + PAF_GOALS.showup + '% show-up rate | ' + PAF_GOALS.dcs + ' discovery calls per month</div>'
+      + (pafIsTl()
+          ? 'Team goals: ' + PAF_GOALS.showup + '% show-up rate | ' + PAF_GOALS.dcs + ' discovery calls per rep per month | every rep coached, 2 sessions a month each</div>'
+          : 'Goals: ' + PAF_GOALS.showup + '% show-up rate | ' + PAF_GOALS.dcs + ' discovery calls per month</div>')
       + '<table class="hdr"><tr><td><b>Employee:</b> ' + esc(M.name) + '</td><td><b>Review period:</b> ' + esc(pafPeriodLabel(M)) + '</td></tr>'
-      + '<tr><td><b>Position:</b> ' + esc(PAF_POSITION) + '</td><td><b>Rated by:</b> ' + esc(scTLName(M.teamId) || '') + '</td></tr>'
+      + '<tr><td><b>Position:</b> ' + esc(pafIsTl() ? (M.role || 'Team Leader') : PAF_POSITION) + '</td><td><b>Rated by:</b> ' + esc(pafIsTl() ? '' : (scTLName(M.teamId) || '')) + '</td></tr>'
       + '<tr><td><b>Department/LOB:</b> ' + esc(PAF_DEPT) + ' &middot; ' + esc(M.team) + '</td><td><b>Date appraised:</b> ' + new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}) + '</td></tr></table>'
       + '<table><tr><th colspan="3">A. PERFORMANCE OBJECTIVES AND RESULTS</th></tr>'
       + '<tr><th>Area</th><th>Rating</th><th>Specific examples</th></tr>' + aRows + '</table>'
@@ -3306,13 +3659,15 @@
         + '<p style="margin:0 0 6px"><b>Scale</b> 5 Outstanding &middot; 4 Exceeds Expectations &middot; 3 Meets Expectations &middot; 2 Needs Improvement &middot; 1 Unacceptable. '
         + '<b>Goals</b> ' + PAF_GOALS.showup + '% show-up rate, ' + PAF_GOALS.dcs + ' discovery calls per month. '
         + 'The goal and the pass line are different numbers: grade 3 is the pass line for each objective.</p>'
-        + '<p style="margin:0 0 8px"><b>How the score is computed.</b> Quality of Work, Productivity and Attendance carry equal weight, so attendance cannot outweigh output. '
-        + 'Attendance is the mean of tardiness and absences. Section A is the mean of the three objectives, Section B the mean of the four factors, and the final score the mean of the two sections. '
+        + '<p style="margin:0 0 8px"><b>How the score is computed.</b> ' + (pafIsTl()
+            ? 'Team Performance, Coaching and Attendance carry equal weight, so neither the team’s results nor the leader’s own attendance can outweigh the other. Team Performance is the mean of team show-up and team productivity, Coaching the mean of coverage and sessions delivered, and Attendance the mean of tardiness and absences. '
+            : 'Quality of Work, Productivity and Attendance carry equal weight, so attendance cannot outweigh output. Attendance is the mean of tardiness and absences. ')
+        + 'Section A is the mean of the three objectives, Section B the mean of the four factors, and the final score the mean of the two sections. '
         + '<b>3.00 is a gate, not a weighting:</b> at or above 3.00 passes, and below 3.00 does not, decided on the case rather than by rounding up.</p>'
-        + ['showup','productivity','tardiness','absences'].map(function(k){
-            return '<p style="margin:0 0 4px"><b>' + esc(PAF_ITEM[k].label) + '</b><br><span style="color:#555">' + GUIDE[k] + '</span></p>';
+        + pafAKeysDef().map(function(k){
+            return '<p style="margin:0 0 4px"><b>' + esc(pafItemsDef()[k].label) + '</b><br><span style="color:#555">' + GUIDE[k] + '</span></p>';
           }).join('')
-        + PAF_B.map(function(r){
+        + pafBDef().map(function(r){
             return '<p style="margin:8px 0 0"><b>' + esc(r.label) + '</b> &mdash; ' + esc(r.desc) + '<br>'
               + [5,4,3,2,1].map(function(gr){ return '<span style="color:#555"><b>' + gr + '</b> ' + esc(r.std[gr]) + '</span>'; }).join('<br>') + '</p>';
           }).join('')
