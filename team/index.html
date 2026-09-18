@@ -1580,6 +1580,42 @@
     { key:'invalid',   label:'Invalid',     match:function(o){ return o === 'invalid'; },               col:'var(--slate)' }
   ];
 
+  // Asked for once, when somebody first changes something, and remembered for the session. The
+  // page is open to anyone holding the link and this record is used to judge people, so a write
+  // still has to be authorised. What it does not have to be is a button pressed beforehand.
+  async function dcaPass(){
+    let pass = '';
+    try { pass = sessionStorage.getItem('oaDcaPass') || ''; } catch (e){}
+    if (pass) return pass;
+    const v = prompt('Passcode to change an outcome:');
+    if (v === null) return '';
+    const hex = await sha256Hex(v);
+    if (hex !== DCA_PASS_HASH){ alert('That passcode is not right.'); return ''; }
+    try { sessionStorage.setItem('oaDcaPass', v); } catch (e){}
+    _dcaUnlocked = true;
+    return v;
+  }
+
+  async function dcaSetOutcome(id, value){
+    if (!DCA_POST_URL){ alert('The assignment endpoint is not set up yet.'); return; }
+    const pass = await dcaPass();
+    // Nothing typed, or the wrong thing: redraw so the dropdown goes back to what is actually
+    // recorded, rather than sitting there showing a change that was never saved.
+    if (!pass){ renderDcHistory(); return; }
+    _dcaBusy = id; renderDcHistory();
+    try {
+      const res = await fetch(DCA_POST_URL, {
+        method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+        body: JSON.stringify({ record:'dcoutcome', eventId:id, outcome:value,
+                               outcomeBy:_dcaWho || 'dashboard', pass:pass })
+      });
+      const out = await res.json();
+      if (!out.ok) alert('Could not save: ' + (out.error || 'unknown error'));
+      else { const row = dcaRows.find(function(r){ return r.id === id; }); if (row) row.outcome = value; }
+    } catch (err){ alert('Could not save: ' + err.message); }
+    _dcaBusy = ''; renderDcHistory();
+  }
+
   function dcaCoverRecord(){
     const now = localIso(new Date()) + 'T' + new Date().toTimeString().slice(0, 5);
     const by = {};
@@ -1669,7 +1705,7 @@
   // asks who covers tomorrow; this one asks how the last lot went, and for whom. Filtering by
   // person is the point rather than a convenience: "how have Rommel's covers turned out" is the
   // question a leader actually has before handing him another.
-  let _histWho = '', _histDays = 60;
+  let _histWho = '', _histDays = 7;
 
   function dcaHistRows(){
     const now = localIso(new Date()) + 'T' + new Date().toTimeString().slice(0, 5);
@@ -1707,42 +1743,40 @@
       + '</select>'
       + '<select onchange="_histDays=Number(this.value);renderDcHistory()" '
         + 'style="border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;font-family:inherit">'
-        + [14, 30, 60, 120].map(function (d){
+        + [7, 14, 30, 60, 120].map(function (d){
             return '<option value="' + d + '"' + (_histDays === d ? ' selected' : '') + '>last '
               + d + ' days</option>'; }).join('')
       + '</select>'
-      + (_dcaUnlocked
-          ? '<input placeholder="Your name" value="' + esc(_dcaWho) + '" oninput="_dcaWho=this.value" '
-            + 'style="border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;font-family:inherit">'
-            + '<button class="pbtn" onclick="dcaLock()">Lock</button>'
-          : '<button class="pbtn" onclick="dcaUnlock()">Unlock to record outcomes</button>')
+      + '<input placeholder="Your name" value="' + esc(_dcaWho) + '" oninput="_dcaWho=this.value" '
+        + 'title="Recorded against any outcome you change"'
+        + 'style="border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;font-family:inherit">'
       + '</div></div>';
 
     const list = rows.length
       ? '<div class="board">'
         + '<div class="boardhead"><div class="boardtitle">'
           + (_histWho ? esc(_histWho) : 'Every covered call') + '</div>'
-        + '<div class="boardsub">Newest first. '
-        + (_dcaUnlocked ? 'Set how each one went.' : 'Unlock above to record how they went.')
-        + ' Cancellations come from the calendar; showed and no-show are recorded by a leader.'
-        + '</div></div>'
+        + '<div class="boardsub">Newest first. Outcomes come from HubSpot; change one here if it '
+        + 'is wrong and you will be asked for the passcode once.</div></div>'
         + rows.map(function (r){
             const st = dcaOutcomeStyle(r.outcome);
-            const pick = _dcaUnlocked
-              ? '<select onchange="dcaSetOutcome(' + "'" + esc(r.id) + "'" + ',this.value)" '
-                + (_dcaBusy === r.id ? 'disabled ' : '')
-                + 'style="width:140px;border:1px solid var(--border);border-radius:7px;'
-                + 'padding:4px 6px;font-size:11.5px;font-family:inherit">'
-                + '<option value="">how did it go?</option>'
-                + DCA_OUTCOMES.map(function (o){
-                    return '<option value="' + o.v + '"'
-                      + (String(r.outcome || '').toLowerCase() === o.v.toLowerCase() ? ' selected' : '')
-                      + '>' + o.v + '</option>'; }).join('')
-                + '</select>'
-              : (r.outcome
-                  ? '<span class="dcato" style="background:' + st.bg + ';color:' + st.c
-                    + ';border-color:' + st.bd + '">' + esc(r.outcome) + '</span>'
-                  : '<span class="dcanone">not recorded</span>');
+            // Always editable. Reading the record should not need a passcode, and correcting
+            // one wrong tag should not need a trip to another button first: the passcode is
+            // asked for once, at the moment somebody actually changes something.
+            const pick = '<select onchange="dcaSetOutcome(' + "'" + esc(r.id) + "'" + ',this.value)" '
+              + (_dcaBusy === r.id ? 'disabled ' : '')
+              + 'style="min-width:150px;border:1px solid ' + (r.outcome ? st.bd : 'var(--border)')
+              + ';background:' + (r.outcome ? st.bg : '#fff') + ';color:' + (r.outcome ? st.c : 'var(--slate)')
+              + ';font-weight:' + (r.outcome ? '700' : '400')
+              + ';border-radius:7px;padding:4px 6px;font-size:11.5px;font-family:inherit">'
+              + '<option value="">not recorded</option>'
+              + DCA_OUTCOMES.map(function (o){
+                  return '<option value="' + o.v + '"'
+                    + (String(r.outcome || '').toLowerCase() === o.v.toLowerCase() ? ' selected' : '')
+                    + '>' + o.v + '</option>'; }).join('')
+              + (r.outcome && !DCA_OUTCOMES.some(function (o){ return o.v.toLowerCase() === String(r.outcome).toLowerCase(); })
+                  ? '<option value="' + esc(r.outcome) + '" selected>' + esc(r.outcome) + '</option>' : '')
+              + '</select>';
             return '<div class="dca' + (r.outcome ? '' : ' gap') + '">'
               + '<div class="dcatime">' + esc(dcaFmtTime(r.start))
                 + '<span>' + esc(dcaFmtDay(r.start.slice(0, 10))) + '</span></div>'
