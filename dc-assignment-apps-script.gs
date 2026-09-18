@@ -691,16 +691,28 @@ const HS_MAX_PAGES  = 40;
 // here as itself instead of silently becoming nothing.
 function hsOutcome_(v) {
   const s = String(v || '').trim().toUpperCase();
-  if (!s || s === 'SCHEDULED') { return ''; }           // not yet happened
-  if (s.indexOf('BOTH ATTENDED') === 0 || s === 'COMPLETED' || s === 'ATTENDED') { return 'Showed'; }
-  // Three different failures, and the CRM distinguishes them, so this does too. Flattening them
-  // would hide which side let the meeting down, which is the whole reason anyone looks.
+  if (!s || s === 'SCHEDULED') { return ''; }              // has not happened yet
+
+  // Went ahead. Unqualified is kept apart: the call happened and the hour was spent, but it
+  // should not count as a win, and averaging it with the rest would quietly say it did.
+  if (s.indexOf('UNQUALIFIED') >= 0)    { return 'Showed, unqualified'; }
+  if (s.indexOf('BOTH ATTENDED') === 0) { return 'Showed'; }
+  if (s === 'COMPLETED' || s === 'ATTENDED') { return 'Showed'; }
+
+  // Did not go ahead, and which side failed is the point. Three different conversations.
   if (s.indexOf('BPO ATTENDED') === 0)  { return 'Lead no-show'; }      // partner came, lead did not
   if (s.indexOf('LEAD ATTENDED') === 0) { return 'Partner no-show'; }   // lead came, partner did not
-  if (s.indexOf('NO SHOW') >= 0 || s.indexOf('NO_SHOW') >= 0) { return 'No-show'; }  // neither
-  if (s.indexOf('CANCEL') === 0 || s.indexOf('CANCEL') > 0) { return 'Cancelled'; }
-  if (s.indexOf('RESCHEDUL') >= 0) { return 'Rescheduled'; }
-  return String(v || '').trim();
+  if (s.indexOf('NO SHOW') >= 0 || s.indexOf('NO_SHOW') >= 0) { return 'No-show'; }
+
+  // Called off, and by whom. A lead cancelling is a lead-quality signal; a partner cancelling
+  // is ours to answer for, and one number covering both hides the difference.
+  if (s.indexOf('CANCEL') >= 0 && s.indexOf('LEAD') >= 0)    { return 'Cancelled by lead'; }
+  if (s.indexOf('CANCEL') >= 0 && s.indexOf('PARTNER') >= 0) { return 'Cancelled by partner'; }
+  if (s.indexOf('CANCEL') >= 0)         { return 'Cancelled'; }
+
+  if (s.indexOf('RESCHEDUL') >= 0)      { return 'Rescheduled'; }
+  if (s === 'INVALID')                  { return 'Invalid'; }
+  return String(v || '').trim();          // something new in the CRM, shown as itself
 }
 
 function hsKey_(lead, partner, startIso) {

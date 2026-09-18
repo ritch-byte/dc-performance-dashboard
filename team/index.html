@@ -1546,59 +1546,57 @@
   // do not appear in that sheet at all, and matching on a surname puts Hartley against Hart. So
   // rather than compute something that would be wrong in ways nobody could see, the calendar
   // contributes the one fact it does know — that an event has gone — and a leader says the rest.
+  // The outcomes a leader can set by hand, matching the CRM's own vocabulary so a row recorded
+  // here and a row synced from HubSpot read the same.
   const DCA_OUTCOMES = [
-    { v:'Showed',      c:'var(--green)', bg:'var(--greenbg)', bd:'var(--greenbd)' },
-    { v:'Lead no-show',    c:'var(--red)',   bg:'var(--redbg)', bd:'#F4BFBF' },
-    { v:'Partner no-show', c:'var(--amber)', bg:'var(--amberbg)', bd:'var(--amberbd)' },
-    { v:'No-show',         c:'var(--red)',   bg:'var(--redbg)', bd:'#F4BFBF' },
-    { v:'Cancelled',   c:'var(--amber)', bg:'var(--amberbg)', bd:'var(--amberbd)' },
-    { v:'Rescheduled', c:'var(--slate)', bg:'#EEF0F5',        bd:'var(--border)' }
+    { v:'Showed',               c:'var(--green)', bg:'var(--greenbg)', bd:'var(--greenbd)' },
+    { v:'Showed, unqualified',  c:'var(--amber)', bg:'var(--amberbg)', bd:'var(--amberbd)' },
+    { v:'Lead no-show',         c:'var(--red)',   bg:'var(--redbg)',   bd:'#F4BFBF' },
+    { v:'Partner no-show',      c:'var(--red)',   bg:'var(--redbg)',   bd:'#F4BFBF' },
+    { v:'No-show',              c:'var(--red)',   bg:'var(--redbg)',   bd:'#F4BFBF' },
+    { v:'Cancelled by lead',    c:'var(--slate)', bg:'#EEF0F5',        bd:'var(--border)' },
+    { v:'Cancelled by partner', c:'var(--slate)', bg:'#EEF0F5',        bd:'var(--border)' },
+    { v:'Cancelled',            c:'var(--slate)', bg:'#EEF0F5',        bd:'var(--border)' },
+    { v:'Rescheduled',          c:'var(--slate)', bg:'#EEF0F5',        bd:'var(--border)' },
+    { v:'Invalid',              c:'var(--slate)', bg:'#EEF0F5',        bd:'var(--border)' }
   ];
   function dcaOutcomeStyle(v){
     const hit = DCA_OUTCOMES.find(function(o){ return o.v.toLowerCase() === String(v||'').toLowerCase(); });
     return hit || { v:v, c:'var(--slate)', bg:'#EEF0F5', bd:'var(--border)' };
   }
 
-  async function dcaSetOutcome(id, value){
-    if (!DCA_POST_URL){ alert('The assignment endpoint is not set up yet.'); return; }
-    let pass = '';
-    try { pass = sessionStorage.getItem('oaDcaPass') || ''; } catch (e){}
-    if (!pass){ alert('Unlock assigning first.'); return; }
-    _dcaBusy = id; renderDcAssign();
-    try {
-      const res = await fetch(DCA_POST_URL, {
-        method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' },
-        body: JSON.stringify({ record:'dcoutcome', eventId:id, outcome:value,
-                               outcomeBy:_dcaWho || '', pass:pass })
-      });
-      const out = await res.json();
-      if (!out.ok) alert('Could not save: ' + (out.error || 'unknown error'));
-      else { const row = dcaRows.find(function(r){ return r.id === id; }); if (row) row.outcome = value; }
-    } catch (err){ alert('Could not save: ' + err.message); }
-    _dcaBusy = ''; renderDcAssign(); renderDcHistory();
-  }
+  // The columns the record is counted into. Kept deliberately separate rather than summed into
+  // a single failure figure: whether the lead failed to appear, the partner did, or the call
+  // happened and turned out to be unqualified are three different conversations with three
+  // different people, and one number covering all of them would prompt none of them.
+  const DCA_BUCKETS = [
+    { key:'showed',    label:'Showed',      match:function(o){ return o === 'showed'; },               col:'var(--green)' },
+    { key:'unqual',    label:'Unqualified', match:function(o){ return o.indexOf('unqualified') >= 0; }, col:'var(--amber)' },
+    { key:'leadNo',    label:'Lead no-show',match:function(o){ return o === 'lead no-show'; },          col:'var(--red)' },
+    { key:'partnerNo', label:'Partner no-show', match:function(o){ return o === 'partner no-show'; },   col:'var(--red)' },
+    { key:'noShow',    label:'Nobody came', match:function(o){ return o === 'no-show'; },               col:'var(--red)' },
+    { key:'cancelled', label:'Cancelled',   match:function(o){ return o.indexOf('cancel') === 0; },     col:'var(--slate)' },
+    { key:'resched',   label:'Rescheduled', match:function(o){ return o.indexOf('reschedul') >= 0; },   col:'var(--slate)' },
+    { key:'invalid',   label:'Invalid',     match:function(o){ return o === 'invalid'; },               col:'var(--slate)' }
+  ];
 
-  // What each person's covered calls came to. Only meetings that have already happened count,
-  // because a call still in the diary says nothing about anybody, and a record padded with
-  // future bookings would flatter whoever has the fullest week ahead.
   function dcaCoverRecord(){
-    const now = localIso(new Date()) + 'T' + new Date().toTimeString().slice(0,5);
+    const now = localIso(new Date()) + 'T' + new Date().toTimeString().slice(0, 5);
     const by = {};
     dcaRows.forEach(function(r){
       const who = String(r.to || '').trim();
       if (!who) return;
-      if (!by[who]) by[who] = { name:who, done:0, upcoming:0, showed:0, noshow:0,
-                                cancelled:0, resched:0, unrecorded:0, last:'' };
+      if (!by[who]){
+        by[who] = { name:who, done:0, upcoming:0, unrecorded:0 };
+        DCA_BUCKETS.forEach(function(b){ by[who][b.key] = 0; });
+      }
       const b = by[who];
       if (r.start > now){ b.upcoming++; return; }
       b.done++;
-      if (r.start > b.last) b.last = r.start;
-      const o = String(r.outcome || '').toLowerCase();
-      if (o === 'showed') b.showed++;
-      else if (o === 'no-show' || o === 'lead no-show' || o === 'partner no-show') b.noshow++;
-      else if (o === 'cancelled') b.cancelled++;
-      else if (o === 'rescheduled') b.resched++;
-      else b.unrecorded++;
+      const o = String(r.outcome || '').toLowerCase().trim();
+      if (!o){ b.unrecorded++; return; }
+      const hit = DCA_BUCKETS.find(function(x){ return x.match(o); });
+      if (hit) b[hit.key]++; else b.unrecorded++;
     });
     return Object.keys(by).map(function(k){ return by[k]; })
       .sort(function(a,b){ return (b.done + b.upcoming) - (a.done + a.upcoming); });
@@ -1607,42 +1605,63 @@
   function renderCoverRecord(){
     const rec = dcaCoverRecord();
     if (!rec.length){
-      return '<div class="board" style="margin-bottom:12px"><div class="boardhead">'
+      return '<div class="board"><div class="boardhead">'
         + '<div class="boardtitle">Cover record</div>'
         + '<div class="boardsub">Nobody has been assigned a call yet. Once they have, how those '
         + 'calls went shows here.</div></div></div>';
     }
-    const rows = rec.map(function(b){
-      // Held is the denominator that means anything: a cancelled call was nobody's to attend.
-      const held = b.showed + b.noshow;
-      const pct  = held ? Math.round(b.showed / held * 100) : null;
-      const bits = [];
-      if (b.showed)     bits.push('<b style="color:var(--green)">' + b.showed + ' showed</b>');
-      if (b.noshow)     bits.push('<b style="color:var(--red)">' + b.noshow + ' did not go ahead</b>');
-      if (b.cancelled)  bits.push(b.cancelled + ' cancelled');
-      if (b.resched)    bits.push(b.resched + ' rescheduled');
-      if (b.unrecorded) bits.push('<span style="color:var(--amber)">' + b.unrecorded + ' not recorded yet</span>');
-      if (b.upcoming)   bits.push(b.upcoming + ' still to come');
-      return '<div class="dca">'
-        + '<div class="dcatime" style="width:auto;min-width:46px">'
-          + (pct === null ? '<span style="color:var(--mute)">—</span>'
-                          : '<span style="color:' + rateColor(pct, 80) + '">' + pct + '%</span>')
-          + '<span>' + (held ? b.showed + '/' + held + ' held' : 'none held') + '</span></div>'
-        + '<div class="dcamid"><div class="dcatitle">' + esc(b.name) + '</div>'
-        + '<div class="dcameta">' + (bits.join(' · ') || 'nothing recorded') + '</div></div>'
-        + '<div class="dcaright"><span class="dcanone">' + (b.done + b.upcoming) + ' covered</span></div>'
-        + '</div>';
+
+    // Only the columns that have happened to somebody. A table of zeroes for outcomes this floor
+    // never records would push the ones that matter off the side of the screen.
+    const live = DCA_BUCKETS.filter(function(b){
+      return rec.some(function(p){ return p[b.key] > 0; });
+    });
+
+    const head = '<tr><th>SDR</th><th class="num">Covered</th>'
+      + live.map(function(b){ return '<th class="num">' + esc(b.label) + '</th>'; }).join('')
+      + '<th class="num">Went ahead</th></tr>';
+
+    const body = rec.map(function(p){
+      // "Went ahead" is of the calls that actually took place, so a cancellation neither helps
+      // nor hurts: nobody was there to attend it.
+      const held = p.showed + p.unqual + p.leadNo + p.partnerNo + p.noShow;
+      const pct  = held ? Math.round((p.showed + p.unqual) / held * 100) : null;
+      return '<tr>'
+        + '<td class="spn">' + esc(p.name)
+          + (p.upcoming ? ' <span class="dcapartner">' + p.upcoming + ' ahead</span>' : '')
+          + (p.unrecorded ? ' <span class="dcapartner" style="background:var(--amberbg);color:var(--amber)">'
+             + p.unrecorded + ' unrecorded</span>' : '')
+          + '</td>'
+        + '<td class="num"><b>' + p.done + '</b></td>'
+        + live.map(function(b){
+            const n = p[b.key];
+            return '<td class="num"' + (n ? ' style="color:' + b.col + ';font-weight:700"' : ' style="color:var(--mute)"')
+              + '>' + (n || '·') + '</td>';
+          }).join('')
+        + '<td class="num" style="font-weight:800;color:' + (pct === null ? 'var(--mute)' : rateColor(pct, 70)) + '">'
+          + (pct === null ? '—' : pct + '%') + '</td>'
+        + '</tr>';
     }).join('');
 
-    const unrec = rec.reduce(function(a,b){ return a + b.unrecorded; }, 0);
-    return '<div class="board" style="margin-bottom:12px">'
-      + '<div class="boardhead"><div class="boardtitle">Cover record</div>'
-      + '<div class="boardsub">How the calls each person covered actually went. The percentage is '
-      + 'of meetings that were held, since a cancelled call was nobody&rsquo;s to attend.'
-      + (unrec ? ' <b style="color:var(--amber)">' + unrec + ' finished call'
-                 + (unrec === 1 ? ' has' : 's have') + ' no outcome recorded yet</b> — set them on '
-                 + 'the rows below and this fills in.' : '')
-      + '</div></div>' + rows + '</div>';
+    const tot = {};
+    DCA_BUCKETS.forEach(function(b){ tot[b.key] = rec.reduce(function(a,p){ return a + p[b.key]; }, 0); });
+    const done = rec.reduce(function(a,p){ return a + p.done; }, 0);
+    const held = tot.showed + tot.unqual + tot.leadNo + tot.partnerNo + tot.noShow;
+    const pct  = held ? Math.round((tot.showed + tot.unqual) / held * 100) : null;
+    const foot = '<tr style="background:#F8FAFD">'
+      + '<td class="spn"><b>Everyone</b></td><td class="num"><b>' + done + '</b></td>'
+      + live.map(function(b){ return '<td class="num"><b>' + (tot[b.key] || '·') + '</b></td>'; }).join('')
+      + '<td class="num"><b style="color:' + (pct === null ? 'var(--mute)' : rateColor(pct, 70)) + '">'
+        + (pct === null ? '—' : pct + '%') + '</b></td></tr>';
+
+    return '<div class="board"><div class="boardhead">'
+      + '<div class="boardtitle">Cover record</div>'
+      + '<div class="boardsub">Every covered call, counted by how it was tagged. '
+      + '<b>Went ahead</b> is of calls that actually took place, so a cancellation neither helps '
+      + 'nor hurts anybody: there was nothing to attend. Outcomes come from HubSpot; a leader can '
+      + 'override any of them on a row below.</div></div>'
+      + '<div class="tablewrap"><table class="sptable"><thead>' + head + '</thead>'
+      + '<tbody>' + body + foot + '</tbody></table></div></div>';
   }
 
   // ── Previously assigned ───────────────────────────────────────────────────
@@ -1741,7 +1760,9 @@
                       + 'the DC assignments tab and it will appear here once it has happened.')
         + '</div></div>';
 
-    host.innerHTML = bar + renderCoverRecord() + list;
+    // The calls first, the tally under them. Somebody opening this tab is usually looking for a
+    // particular call; the summary is what they read once they have found it.
+    host.innerHTML = bar + list + renderCoverRecord();
   }
 
   function renderDcAssign() {
