@@ -89,6 +89,20 @@ function sdrFrom_(emails) {
   return '';
 }
 
+/**
+ * A start or end read back out of the sheet, as the string the rest of this file expects.
+ *
+ * We write "2026-09-21T11:30" and Sheets recognises it as a datetime, so getValues hands back a
+ * Date object rather than that text. String(thatDate) is "Mon Sep 21 2026 11:30:00 GMT+0800",
+ * which sorts nowhere near an ISO string: every window comparison in the sync silently read a
+ * September meeting as beyond the range, and the backfill built a key that could never match the
+ * one from the mail. Normalised here so both sides speak the same language.
+ */
+function cellIso_(v) {
+  if (v instanceof Date) { return Utilities.formatDate(v, 'Asia/Manila', "yyyy-MM-dd'T'HH:mm"); }
+  return String(v || '').trim().replace(' ', 'T').slice(0, 16);
+}
+
 function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
@@ -185,7 +199,7 @@ function syncCalendars() {
   Object.keys(have).forEach(function (eid) {
     if (seen[eid]) { return; }
     const r = have[eid];
-    const start = String(r[5] || '');
+    const start = cellIso_(r[5]);
     if (!start || start < fromIso || start > toIso) { return; }
     if (!String(r[12] || '').trim()) {
       r[12] = 'Cancelled';
@@ -199,7 +213,7 @@ function syncCalendars() {
   order.forEach(function (eid) {
     const r = have[eid];
     if (!r) { return; }
-    const start = String(r[5] || '');
+    const start = cellIso_(r[5]);
     if (start && start < fromIso) { return; }
     out.push(r);
   });
@@ -623,7 +637,7 @@ function backfillAssignments() {
   let filled = 0, already = 0, unmatched = 0;
   const seen = {};
   rows.forEach(function (r) {
-    const k = bfKey_(String(r[5] || ''), String(r[2] || ''));
+    const k = bfKey_(cellIso_(r[5]), String(r[2] || ''));
     const hit = found[k];
     if (!hit) { return; }
     seen[k] = true;
