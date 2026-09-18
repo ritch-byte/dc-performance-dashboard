@@ -693,10 +693,11 @@ function hsOutcome_(v) {
   const s = String(v || '').trim().toUpperCase();
   if (!s || s === 'SCHEDULED') { return ''; }           // not yet happened
   if (s.indexOf('BOTH ATTENDED') === 0 || s === 'COMPLETED' || s === 'ATTENDED') { return 'Showed'; }
-  if (s.indexOf('NO SHOW') >= 0 || s.indexOf('NO_SHOW') >= 0) { return 'Lead no-show'; }
-  // The partner turned up and the lead did not. Its own outcome rather than folded into
-  // no-show, because on this floor it is a distinct thing that happened and gets said out loud.
-  if (s.indexOf('BPO ATTENDED') === 0) { return 'Lead no-show'; }
+  // Three different failures, and the CRM distinguishes them, so this does too. Flattening them
+  // would hide which side let the meeting down, which is the whole reason anyone looks.
+  if (s.indexOf('BPO ATTENDED') === 0)  { return 'Lead no-show'; }      // partner came, lead did not
+  if (s.indexOf('LEAD ATTENDED') === 0) { return 'Partner no-show'; }   // lead came, partner did not
+  if (s.indexOf('NO SHOW') >= 0 || s.indexOf('NO_SHOW') >= 0) { return 'No-show'; }  // neither
   if (s.indexOf('CANCEL') === 0 || s.indexOf('CANCEL') > 0) { return 'Cancelled'; }
   if (s.indexOf('RESCHEDUL') >= 0) { return 'Rescheduled'; }
   return String(v || '').trim();
