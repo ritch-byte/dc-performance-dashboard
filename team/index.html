@@ -1274,7 +1274,8 @@
           start: start, end: dcaNormIso(c[ix('end')]),
           mins: Number(c[ix('durationmin')] || 0) || 0,
           to: (c[ix('assignedto')] || '').trim(),
-          by: (c[ix('assignedby')] || '').trim()
+          by: (c[ix('assignedby')] || '').trim(),
+          outcome: (c[ix('outcome')] || '').trim()
         });
       }
       out.sort((a, b) => a.start.localeCompare(b.start));
@@ -1521,6 +1522,109 @@
     _dcaBusy = ''; renderDcAssign();
   }
 
+  // ── How the covered calls went ────────────────────────────────────────────
+  // The outcome is recorded by a person, not derived. The booking sheet knows whether a DC was
+  // held, but it and these calendars share no key that holds: the prospect addresses on an event
+  // do not appear in that sheet at all, and matching on a surname puts Hartley against Hart. So
+  // rather than compute something that would be wrong in ways nobody could see, the calendar
+  // contributes the one fact it does know — that an event has gone — and a leader says the rest.
+  const DCA_OUTCOMES = [
+    { v:'Showed',      c:'var(--green)', bg:'var(--greenbg)', bd:'var(--greenbd)' },
+    { v:'No-show',     c:'var(--red)',   bg:'var(--redbg)',   bd:'#F4BFBF' },
+    { v:'Cancelled',   c:'var(--amber)', bg:'var(--amberbg)', bd:'var(--amberbd)' },
+    { v:'Rescheduled', c:'var(--slate)', bg:'#EEF0F5',        bd:'var(--border)' }
+  ];
+  function dcaOutcomeStyle(v){
+    const hit = DCA_OUTCOMES.find(function(o){ return o.v.toLowerCase() === String(v||'').toLowerCase(); });
+    return hit || { v:v, c:'var(--slate)', bg:'#EEF0F5', bd:'var(--border)' };
+  }
+
+  async function dcaSetOutcome(id, value){
+    if (!DCA_POST_URL){ alert('The assignment endpoint is not set up yet.'); return; }
+    let pass = '';
+    try { pass = sessionStorage.getItem('oaDcaPass') || ''; } catch (e){}
+    if (!pass){ alert('Unlock assigning first.'); return; }
+    _dcaBusy = id; renderDcAssign();
+    try {
+      const res = await fetch(DCA_POST_URL, {
+        method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+        body: JSON.stringify({ record:'dcoutcome', eventId:id, outcome:value,
+                               outcomeBy:_dcaWho || '', pass:pass })
+      });
+      const out = await res.json();
+      if (!out.ok) alert('Could not save: ' + (out.error || 'unknown error'));
+      else { const row = dcaRows.find(function(r){ return r.id === id; }); if (row) row.outcome = value; }
+    } catch (err){ alert('Could not save: ' + err.message); }
+    _dcaBusy = ''; renderDcAssign();
+  }
+
+  // What each person's covered calls came to. Only meetings that have already happened count,
+  // because a call still in the diary says nothing about anybody, and a record padded with
+  // future bookings would flatter whoever has the fullest week ahead.
+  function dcaCoverRecord(){
+    const now = localIso(new Date()) + 'T' + new Date().toTimeString().slice(0,5);
+    const by = {};
+    dcaRows.forEach(function(r){
+      const who = String(r.to || '').trim();
+      if (!who) return;
+      if (!by[who]) by[who] = { name:who, done:0, upcoming:0, showed:0, noshow:0,
+                                cancelled:0, resched:0, unrecorded:0, last:'' };
+      const b = by[who];
+      if (r.start > now){ b.upcoming++; return; }
+      b.done++;
+      if (r.start > b.last) b.last = r.start;
+      const o = String(r.outcome || '').toLowerCase();
+      if (o === 'showed') b.showed++;
+      else if (o === 'no-show') b.noshow++;
+      else if (o === 'cancelled') b.cancelled++;
+      else if (o === 'rescheduled') b.resched++;
+      else b.unrecorded++;
+    });
+    return Object.keys(by).map(function(k){ return by[k]; })
+      .sort(function(a,b){ return (b.done + b.upcoming) - (a.done + a.upcoming); });
+  }
+
+  function renderCoverRecord(){
+    const rec = dcaCoverRecord();
+    if (!rec.length){
+      return '<div class="board" style="margin-bottom:12px"><div class="boardhead">'
+        + '<div class="boardtitle">Cover record</div>'
+        + '<div class="boardsub">Nobody has been assigned a call yet. Once they have, how those '
+        + 'calls went shows here.</div></div></div>';
+    }
+    const rows = rec.map(function(b){
+      // Held is the denominator that means anything: a cancelled call was nobody's to attend.
+      const held = b.showed + b.noshow;
+      const pct  = held ? Math.round(b.showed / held * 100) : null;
+      const bits = [];
+      if (b.showed)     bits.push('<b style="color:var(--green)">' + b.showed + ' showed</b>');
+      if (b.noshow)     bits.push('<b style="color:var(--red)">' + b.noshow + ' no-show</b>');
+      if (b.cancelled)  bits.push(b.cancelled + ' cancelled');
+      if (b.resched)    bits.push(b.resched + ' rescheduled');
+      if (b.unrecorded) bits.push('<span style="color:var(--amber)">' + b.unrecorded + ' not recorded yet</span>');
+      if (b.upcoming)   bits.push(b.upcoming + ' still to come');
+      return '<div class="dca">'
+        + '<div class="dcatime" style="width:auto;min-width:46px">'
+          + (pct === null ? '<span style="color:var(--mute)">—</span>'
+                          : '<span style="color:' + rateColor(pct, 80) + '">' + pct + '%</span>')
+          + '<span>' + (held ? b.showed + '/' + held + ' held' : 'none held') + '</span></div>'
+        + '<div class="dcamid"><div class="dcatitle">' + esc(b.name) + '</div>'
+        + '<div class="dcameta">' + (bits.join(' · ') || 'nothing recorded') + '</div></div>'
+        + '<div class="dcaright"><span class="dcanone">' + (b.done + b.upcoming) + ' covered</span></div>'
+        + '</div>';
+    }).join('');
+
+    const unrec = rec.reduce(function(a,b){ return a + b.unrecorded; }, 0);
+    return '<div class="board" style="margin-bottom:12px">'
+      + '<div class="boardhead"><div class="boardtitle">Cover record</div>'
+      + '<div class="boardsub">How the calls each person covered actually went. The percentage is '
+      + 'of meetings that were held, since a cancelled call was nobody&rsquo;s to attend.'
+      + (unrec ? ' <b style="color:var(--amber)">' + unrec + ' finished call'
+                 + (unrec === 1 ? ' has' : 's have') + ' no outcome recorded yet</b> — set them on '
+                 + 'the rows below and this fills in.' : '')
+      + '</div></div>' + rows + '</div>';
+  }
+
   function renderDcAssign() {
     const host = $('dcassign');
     if (!host) return;
@@ -1549,6 +1653,10 @@
     const limit = new Date(); limit.setDate(limit.getDate() + DCA_DAYS);
     const cut = localIso(limit);
     const rows = dcaRows.filter(r => r.start.slice(0, 10) >= today && r.start.slice(0, 10) <= cut);
+    // The days just gone, newest first: the calls whose outcome somebody still has to record.
+    const past = dcaRows.filter(function (r) {
+      return r.start.slice(0, 10) < today && r.to;
+    }).sort(function (a, b) { return b.start.localeCompare(a.start); }).slice(0, 40);
 
     const unassigned = rows.filter(r => !r.to).length;
     const needsCover = rows.filter(function (r) {
@@ -1660,7 +1768,46 @@
         + '</div></div>' + items + '</div>';
     }).join('');
 
-    host.innerHTML = bar + blocks;
+    // What has already happened, under what is coming. A leader marks how each covered call went
+    // here, and the record above is simply those marks added up.
+    const recent = past.length
+      ? '<div class="board" style="margin-top:16px">'
+        + '<div class="boardhead"><div class="boardtitle">Recently covered</div>'
+        + '<div class="boardsub">Calls that have been and gone. '
+        + (_dcaUnlocked ? 'Set how each one went.'
+                        : 'Unlock above to record how they went.') + '</div></div>'
+        + past.map(function (r) {
+            const st = dcaOutcomeStyle(r.outcome);
+            const pick = _dcaUnlocked
+              ? '<select onchange="dcaSetOutcome(' + "'" + esc(r.id) + "'" + ',this.value)" '
+                + (_dcaBusy === r.id ? 'disabled ' : '')
+                + 'style="width:140px;border:1px solid var(--border);border-radius:7px;'
+                + 'padding:4px 6px;font-size:11.5px;font-family:inherit">'
+                + '<option value="">how did it go?</option>'
+                + DCA_OUTCOMES.map(function (o) {
+                    return '<option value="' + o.v + '"'
+                      + (String(r.outcome || '').toLowerCase() === o.v.toLowerCase() ? ' selected' : '')
+                      + '>' + o.v + '</option>';
+                  }).join('')
+                + '</select>'
+              : (r.outcome
+                  ? '<span class="dcato" style="background:' + st.bg + ';color:' + st.c
+                    + ';border-color:' + st.bd + '">' + esc(r.outcome) + '</span>'
+                  : '<span class="dcanone">not recorded</span>');
+            return '<div class="dca' + (r.outcome ? '' : ' gap') + '">'
+              + '<div class="dcatime">' + esc(dcaFmtTime(r.start))
+                + '<span>' + esc(r.start.slice(5, 10).replace('-', '/')) + '</span></div>'
+              + '<div class="dcamid"><div class="dcatitle">' + esc(r.lead || r.partner)
+                + (r.lead && r.partner ? ' <span class="dcapartner">' + esc(r.partner) + '</span>' : '')
+                + '</div>'
+              + '<div class="dcameta">covered by <b>' + esc(r.to) + '</b>'
+                + (r.by ? ' · assigned by ' + esc(r.by) : '') + '</div></div>'
+              + '<div class="dcaright">' + pick + '</div></div>';
+          }).join('')
+        + '</div>'
+      : '';
+
+    host.innerHTML = bar + renderCoverRecord() + blocks + recent;
   }
 
   // ── Go ───────────────────────────────────────────────────────────────────

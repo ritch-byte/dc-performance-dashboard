@@ -48,9 +48,10 @@ const TAB          = 'DC Assignments';
 // what without anyone having to remember to forward it. Set to '' to stop copying anyone.
 const ASSIGN_CC    = 'sd-attendance@outsourceaccelerator.com';
 const DAYS_AHEAD   = 21;
-const DAYS_BEHIND  = 1;    // keep yesterday, so a meeting is still there to argue about
+const DAYS_BEHIND  = 120;  // months of history, because the point is to look back
 const HEADERS = ['eventId', 'calendar', 'partner', 'lead', 'sdrEmail', 'start', 'end',
-                 'durationMin', 'assignedTo', 'assignedBy', 'assignedAt', 'syncedAt'];
+                 'durationMin', 'assignedTo', 'assignedBy', 'assignedAt', 'syncedAt',
+                 'outcome', 'outcomeBy', 'outcomeAt'];
 
 /**
  * Who booked it, and for whom.
@@ -105,58 +106,98 @@ function sheet_() {
 }
 
 /**
- * Pull the calendars into the tab.
+ * Pull the calendars into the tab, keeping what is already there.
  *
- * Assignments are held in the same rows as the events, so the sync has to put back what it
- * found: a rewrite that dropped the assignee columns would silently unassign the whole floor
- * every half hour. Existing assignments are read first, keyed by event id, and restored.
+ * This used to clear every row and rewrite from the calendar, which was fine while the tab only
+ * ever looked forward. It cannot stay that way now the point is to look back: a meeting that has
+ * happened tells you nothing if its row was deleted the next morning, and a cancelled meeting
+ * simply stops coming back from the calendar, so a rewrite erases the very thing worth recording.
+ *
+ * So it merges. Rows already in the sheet are kept and updated; rows for events the calendar no
+ * longer returns are kept too, and marked Cancelled when they sit inside the window that was
+ * actually searched. A row missing because its date is outside that window is not cancelled, it
+ * is merely out of sight, and is left alone.
  */
 function syncCalendars() {
   const sh = sheet_();
   const now = new Date();
   const from = new Date(now.getTime() - DAYS_BEHIND * 864e5);
   const to   = new Date(now.getTime() + DAYS_AHEAD  * 864e5);
+  const iso  = function (d) { return Utilities.formatDate(d, 'Asia/Manila', "yyyy-MM-dd'T'HH:mm"); };
+  const fromIso = iso(from), toIso = iso(to);
 
-  // what is already assigned, so the sync does not throw it away
-  const kept = {};
+  // everything already recorded, keyed by event
+  const have = {};
+  const order = [];
   const last = sh.getLastRow();
   if (last > 1) {
-    const rows = sh.getRange(2, 1, last - 1, HEADERS.length).getValues();
-    rows.forEach(function (r) {
+    sh.getRange(2, 1, last - 1, HEADERS.length).getValues().forEach(function (r) {
       const id = String(r[0] || '').trim();
-      if (id && String(r[8] || '').trim()) {
-        kept[id] = { to: r[8], by: r[9], at: r[10] };
-      }
+      if (!id) { return; }
+      have[id] = r.slice();
+      order.push(id);
     });
   }
 
-  const out = [];
+  const seen = {};
   const missing = [];
-  CALENDARS.forEach(function (id) {
-    const cal = CalendarApp.getCalendarById(id);
-    if (!cal) { missing.push(id); return; }
+  CALENDARS.forEach(function (calId) {
+    const cal = CalendarApp.getCalendarById(calId);
+    if (!cal) { missing.push(calId); return; }
     cal.getEvents(from, to).forEach(function (ev) {
       const eid = ev.getId();
-      const a = kept[eid] || { to: '', by: '', at: '' };
+      seen[eid] = true;
       let guests = [];
       try { guests = ev.getGuestList().map(function (g) { return g.getEmail(); }); } catch (e) {}
       let creators = [];
       try { creators = ev.getCreators(); } catch (e) {}
       let partner = '';
-      creators.concat(guests).forEach(function (e) { if (!partner) partner = partnerFrom_(e); });
+      creators.concat(guests).forEach(function (e) { if (!partner) { partner = partnerFrom_(e); } });
       const title = String(ev.getTitle() || '').trim();
       const lm = title.match(LEAD_RE);
-      out.push([
-        eid, id, partner, (lm ? lm[1].trim() : title), sdrFrom_(guests),
-        Utilities.formatDate(ev.getStartTime(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm"),
-        Utilities.formatDate(ev.getEndTime(),   'Asia/Manila', "yyyy-MM-dd'T'HH:mm"),
+      const prev = have[eid];
+
+      const row = [
+        eid, calId, partner, (lm ? lm[1].trim() : title), sdrFrom_(guests),
+        iso(ev.getStartTime()), iso(ev.getEndTime()),
         Math.round((ev.getEndTime() - ev.getStartTime()) / 60000),
-        a.to, a.by, a.at,
-        Utilities.formatDate(now, 'Asia/Manila', "yyyy-MM-dd'T'HH:mm")
-      ]);
+        prev ? prev[8]  : '',      // assignedTo
+        prev ? prev[9]  : '',      // assignedBy
+        prev ? prev[10] : '',      // assignedAt
+        iso(now),
+        prev ? prev[12] : '',      // outcome, only ever set by a person
+        prev ? prev[13] : '',      // outcomeBy
+        prev ? prev[14] : ''       // outcomeAt
+      ];
+      if (!have[eid]) { order.push(eid); }
+      have[eid] = row;
     });
   });
 
+  // A row the calendar no longer returns, whose meeting sits inside the window we just searched,
+  // is a meeting that was cancelled or deleted. Recorded rather than dropped, because "it was
+  // cancelled" is an answer and a missing row is not. Never overwrites an outcome a person set.
+  Object.keys(have).forEach(function (eid) {
+    if (seen[eid]) { return; }
+    const r = have[eid];
+    const start = String(r[5] || '');
+    if (!start || start < fromIso || start > toIso) { return; }
+    if (!String(r[12] || '').trim()) {
+      r[12] = 'Cancelled';
+      r[13] = 'calendar';
+      r[14] = iso(now);
+    }
+  });
+
+  // Drop what is older than the window so the tab does not grow without limit.
+  const out = [];
+  order.forEach(function (eid) {
+    const r = have[eid];
+    if (!r) { return; }
+    const start = String(r[5] || '');
+    if (start && start < fromIso) { return; }
+    out.push(r);
+  });
   out.sort(function (a, b) { return String(a[5]).localeCompare(String(b[5])); });
 
   if (sh.getLastRow() > 1) {
@@ -170,7 +211,7 @@ function syncCalendars() {
     // because a silently absent calendar looks exactly like a quiet week.
     console.warn('No access to: ' + missing.join(', ') + ' — share them with this account.');
   }
-  return { written: out.length, missing: missing };
+  return { written: out.length, fromCalendar: Object.keys(seen).length, missing: missing };
 }
 
 /**
@@ -182,7 +223,8 @@ function syncCalendars() {
 function doPost(e) {
   try {
     const data = JSON.parse(e.postData.contents);
-    if (!data || data.record !== 'dcassign') {
+    const kind = data && data.record;
+    if (kind !== 'dcassign' && kind !== 'dcoutcome') {
       return json_({ ok: false, error: 'unknown record type' });
     }
     const want = PropertiesService.getScriptProperties().getProperty('DC_ASSIGN_PASS');
@@ -203,6 +245,18 @@ function doPost(e) {
       if (String(ids[i][0] || '').trim() !== eid) continue;
       const row = i + 2;
       const stamp = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm");
+
+      // How the meeting went. Recorded by a person, because it cannot be derived: the booking
+      // sheet and these calendars share no key that holds, so guessing an outcome would be
+      // inventing one. The calendar contributes the single fact it does know, that an event has
+      // gone, and everything else is somebody saying what happened.
+      if (kind === 'dcoutcome') {
+        const val = String(data.outcome || '');
+        sh.getRange(row, 13, 1, 3).setValues([[
+          val, val ? String(data.outcomeBy || '') : '', val ? stamp : ''
+        ]]);
+        return json_({ ok: true, row: row, outcome: val || '(cleared)' });
+      }
       // Clearing an assignment is a write like any other, so an empty name is allowed through
       // and blanks the row rather than being rejected as a mistake.
       sh.getRange(row, 9,  1, 3).setValues([[
