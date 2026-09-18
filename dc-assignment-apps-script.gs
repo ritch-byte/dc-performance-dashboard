@@ -546,3 +546,98 @@ function absPrettyWhen_(iso) {
   const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]));
   return Utilities.formatDate(d, 'Asia/Manila', 'EEEE d MMM, h:mm a');
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+ * BACKFILL — recover assignments the old sync destroyed
+ *
+ * Until the sync started merging, it cleared the tab and rewrote it from the calendar every half
+ * hour, keeping one day behind. Every assignment older than yesterday went with it, and by the
+ * time anyone looked the record showed six covers where there had been two hundred.
+ *
+ * The notification mail is the surviving copy. Each one names the assignee in its To line and
+ * carries the lead, the time, the partner and who booked it in the body, which between them
+ * identify the meeting precisely enough to put the assignment back on the right row.
+ *
+ * Safe to run more than once: it only ever fills a blank, so anything assigned since is left
+ * exactly as it stands.
+ * ════════════════════════════════════════════════════════════════════════════ */
+
+const BACKFILL_QUERY = 'in:sent subject:"You are covering a discovery call"';
+const BACKFILL_MAX   = 400;
+const BF_MONTHS = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+
+function bfField_(body, label) {
+  const m = String(body || '').match(new RegExp('^' + label + ':\\s*(.+)$', 'im'));
+  return m ? m[1].trim() : '';
+}
+
+// "Monday 21 Sep, 11:30 AM (30 min)" against the date the mail was sent, which supplies the year
+// the line leaves out. A meeting that lands well before the mail belongs to the following year,
+// which is what makes a December assignment for January work.
+function bfWhen_(when, sentAt) {
+  const m = String(when || '').match(/(\d{1,2})\s+([A-Za-z]{3,})[,\s]+(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+  if (!m) { return ''; }
+  const mi = BF_MONTHS.indexOf(m[2].slice(0, 3).toLowerCase());
+  if (mi < 0) { return ''; }
+  let hh = Number(m[3]) % 12;
+  if (/pm/i.test(m[5])) { hh += 12; }
+  let y = Number(Utilities.formatDate(sentAt, 'Asia/Manila', 'yyyy'));
+  let d = new Date(y, mi, Number(m[1]), hh, Number(m[4]));
+  if (d.getTime() < sentAt.getTime() - 60 * 864e5) { d = new Date(y + 1, mi, Number(m[1]), hh, Number(m[4])); }
+  return Utilities.formatDate(d, 'Asia/Manila', "yyyy-MM-dd'T'HH:mm");
+}
+
+function bfKey_(startIso, partner) {
+  return String(startIso || '') + '|' + String(partner || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function backfillAssignments() {
+  const sh = sheet_();
+  const last = sh.getLastRow();
+  if (last < 2) { return { error: 'nothing synced yet, run syncAll first' }; }
+
+  // What the mail says, newest last so a reassignment overwrites the earlier one.
+  const found = {};
+  let scanned = 0, parsed = 0;
+  GmailApp.search(BACKFILL_QUERY, 0, BACKFILL_MAX).forEach(function (thread) {
+    thread.getMessages().forEach(function (msg) {
+      scanned++;
+      let body = '';
+      try { body = msg.getPlainBody(); } catch (e) { return; }
+      if (body.indexOf('assigned to cover a discovery call') < 0) { return; }
+      const to = String(msg.getTo() || '').match(/[\w.\-+]+@[\w.\-]+/);
+      if (!to) { return; }
+      const start = bfWhen_(bfField_(body, 'When'), msg.getDate());
+      const partner = bfField_(body, 'Partner');
+      if (!start || !partner) { return; }
+      parsed++;
+      const k = bfKey_(start, partner);
+      const at = Utilities.formatDate(msg.getDate(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm");
+      if (!found[k] || found[k].at <= at) {
+        found[k] = { email: to[0].toLowerCase(), at: at, by: bfField_(body, 'Assigned by') };
+      }
+    });
+  });
+
+  const rows = sh.getRange(2, 1, last - 1, HEADERS.length).getValues();
+  let filled = 0, already = 0, unmatched = 0;
+  const seen = {};
+  rows.forEach(function (r) {
+    const k = bfKey_(String(r[5] || ''), String(r[2] || ''));
+    const hit = found[k];
+    if (!hit) { return; }
+    seen[k] = true;
+    if (String(r[8] || '').trim()) { already++; return; }   // never overwrite a live assignment
+    r[8] = hit.email;
+    r[9] = hit.by || 'restored from sent mail';
+    r[10] = hit.at;
+    filled++;
+  });
+  Object.keys(found).forEach(function (k) { if (!seen[k]) { unmatched++; } });
+
+  if (filled) { sh.getRange(2, 1, rows.length, HEADERS.length).setValues(rows); }
+  console.log('scanned ' + scanned + ' sent mails, ' + parsed + ' were assignments, '
+    + filled + ' rows filled, ' + already + ' already assigned, '
+    + unmatched + ' mails matched no row in the sheet');
+  return { scanned: scanned, parsed: parsed, filled: filled, already: already, unmatched: unmatched };
+}

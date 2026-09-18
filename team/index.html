@@ -1282,7 +1282,15 @@
           sdrEmail: (c[ix('sdremail')] || '').trim(),
           start: start, end: dcaNormIso(c[ix('end')]),
           mins: Number(c[ix('durationmin')] || 0) || 0,
-          to: (c[ix('assignedto')] || '').trim(),
+          // The backfill writes the address the mail went to, since that is what the mail knows.
+          // Resolved to a name here so one person cannot appear twice in the record, once as
+          // "Alvin Bayhon" and once as "ali@outsourceaccelerator.com".
+          to: (function (v) {
+            v = (v || '').trim();
+            if (v.indexOf('@') < 0) return v;
+            const who = dcaSdr(v);
+            return (who && who.id) ? who.name : v;
+          })(c[ix('assignedto')]),
           by: (c[ix('assignedby')] || '').trim(),
           outcome: (c[ix('outcome')] || '').trim()
         });
