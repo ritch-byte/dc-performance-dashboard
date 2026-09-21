@@ -49,6 +49,17 @@ const TAB          = 'DC Assignments';
 const ASSIGN_CC    = 'sd-attendance@outsourceaccelerator.com';
 const DAYS_AHEAD   = 21;
 const DAYS_BEHIND  = 120;  // months of history, because the point is to look back
+// How far back each run actually re-reads the calendar, which is a different question from how
+// much history the tab keeps. Reading it is the expensive half: CalendarApp fetches the guest
+// list and the creators of every event one round trip at a time, so the cost is the number of
+// events in the window, not the number that changed. At 120 days behind that was roughly 2,800
+// events and about 22,000 round trips, which ran for the full thirty minutes Apps Script allows
+// and was killed twice in two days.
+//
+// A meeting three weeks past is settled: it will not be moved, renamed or cancelled again. So
+// only the recent past is re-read, while DAYS_BEHIND above still governs what the tab retains.
+// Nothing older is dropped or forgotten, it simply is not asked about again.
+const REFRESH_BEHIND = 14;
 const HEADERS = ['eventId', 'calendar', 'partner', 'lead', 'sdrEmail', 'start', 'end',
                  'durationMin', 'assignedTo', 'assignedBy', 'assignedAt', 'syncedAt',
                  'outcome', 'outcomeBy', 'outcomeAt'];
@@ -135,10 +146,14 @@ function sheet_() {
 function syncCalendars() {
   const sh = sheet_();
   const now = new Date();
-  const from = new Date(now.getTime() - DAYS_BEHIND * 864e5);
+  const from = new Date(now.getTime() - REFRESH_BEHIND * 864e5);
   const to   = new Date(now.getTime() + DAYS_AHEAD  * 864e5);
   const iso  = function (d) { return Utilities.formatDate(d, 'Asia/Manila', "yyyy-MM-dd'T'HH:mm"); };
   const fromIso = iso(from), toIso = iso(to);
+  // The retention edge, which is older than the refresh edge and is the only thing that decides
+  // whether a row is dropped. Keeping these two apart is the whole point: a row can be kept
+  // without being re-read.
+  const keepFromIso = iso(new Date(now.getTime() - DAYS_BEHIND * 864e5));
 
   // everything already recorded, keyed by event
   const have = {};
@@ -208,13 +223,16 @@ function syncCalendars() {
     }
   });
 
-  // Drop what is older than the window so the tab does not grow without limit.
+  // Drop what is older than the retention window so the tab does not grow without limit. This
+  // deliberately uses keepFromIso and not fromIso: measured against the refresh edge it would
+  // delete every row older than a fortnight, which is most of the history the Previously
+  // assigned tab exists to show.
   const out = [];
   order.forEach(function (eid) {
     const r = have[eid];
     if (!r) { return; }
     const start = cellIso_(r[5]);
-    if (start && start < fromIso) { return; }
+    if (start && start < keepFromIso) { return; }
     out.push(r);
   });
   out.sort(function (a, b) { return String(a[5]).localeCompare(String(b[5])); });
