@@ -1195,3 +1195,119 @@ function syncBookingEmails() {
   return { threads: threads.length, parsed: parsed, added: added,
            updated: updated, rows: out.length };
 }
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * WHAT THE MAILBOX KNOWS ABOUT WHETHER A MEETING HAPPENED — READ-ONLY SCAN
+ *
+ * The confirmation emails settled whether a DC was booked. The open question
+ * is whether anything in the same mailbox settles whether it went ahead, which
+ * would be worth a great deal: HubSpot carries an outcome on 3% of meetings,
+ * so almost any email signal would be a better witness than the CRM.
+ *
+ * This guesses at nothing. It reads what is there and reports the vocabulary:
+ *
+ *   PART 1  every subject prefix in recent mail, counted. If the floor sends
+ *           "Meeting Rescheduled:" or "No Show:" this is where it appears,
+ *           named by the floor rather than by me.
+ *
+ *   PART 2  the messages that arrive AFTER a confirmation, on confirmation
+ *           threads whose meeting date has already passed. That is where a
+ *           "the lead did not join" would land, and it is the single most
+ *           likely place for a real outcome signal to be hiding.
+ *
+ * Writes nothing. Run it, read the log, and then we know what can be built
+ * instead of hoping.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+var OSCAN_DAYS        = 45;
+var OSCAN_MAX_THREADS = 150;
+var OSCAN_SAMPLE      = 25;   // threads to read bodies from, kept small for runtime
+
+// The text before the first colon, which is how this floor labels a mail type.
+function oscanPrefix_(subject) {
+  var s = String(subject || '').replace(/^\s*(?:re:|fwd?:)\s*/i, '').trim();
+  var i = s.indexOf(':');
+  if (i > 0 && i < 40) { return s.slice(0, i).trim(); }
+  return '(no prefix) ' + s.slice(0, 34);
+}
+
+function scanOutcomeSignals() {
+  Logger.log('=== PART 1: what kinds of mail are in here ===');
+  var prefixes = {}, examples = {};
+  var broad = GmailApp.search('newer_than:' + OSCAN_DAYS + 'd -category:promotions', 0, OSCAN_MAX_THREADS);
+  broad.forEach(function (th) {
+    var subj = th.getFirstMessageSubject();
+    var p = oscanPrefix_(subj);
+    prefixes[p] = (prefixes[p] || 0) + 1;
+    if (!examples[p]) { examples[p] = subj; }
+  });
+  var keys = Object.keys(prefixes).sort(function (a, b) { return prefixes[b] - prefixes[a]; });
+  Logger.log('sampled ' + broad.length + ' threads from the last ' + OSCAN_DAYS + ' days');
+  keys.slice(0, 25).forEach(function (k) {
+    Logger.log('   ' + pad_(String(prefixes[k]), 5) + pad_(k, 34) + ' e.g. ' + String(examples[k]).slice(0, 70));
+  });
+  Logger.log('');
+
+  // Anything whose wording suggests a meeting did or did not happen.
+  Logger.log('=== subject words that would signal an outcome ===');
+  ['no show', 'no-show', 'did not', 'didn\'t', 'reschedul', 'cancel', 'recap',
+   'follow up', 'follow-up', 'missed', 'summary'].forEach(function (w) {
+    var n = GmailApp.search('subject:"' + w + '" newer_than:' + OSCAN_DAYS + 'd', 0, 50);
+    if (n.length) {
+      Logger.log('   ' + pad_('"' + w + '"', 16) + pad_(String(n.length) + (n.length >= 50 ? '+' : ''), 6)
+                 + ' e.g. ' + String(n[0].getFirstMessageSubject()).slice(0, 68));
+    }
+  });
+  Logger.log('');
+
+  // ── PART 2 ───────────────────────────────────────────────────────────────
+  Logger.log('=== PART 2: what follows a confirmation, once the meeting is past ===');
+  var today = Utilities.formatDate(new Date(), 'Asia/Manila', 'yyyy-MM-dd');
+  var threads = GmailApp.search(SCAN_QUERY_SUBJECT + ' newer_than:' + OSCAN_DAYS + 'd',
+                                0, OSCAN_MAX_THREADS);
+
+  var past = [], withExtra = 0, totalExtra = 0;
+  threads.forEach(function (th) {
+    var p = scanParseSubject_(th.getFirstMessageSubject());
+    if (!p) { return; }
+    p.meetingDate = scanMeetingDate_(p.whenRaw);
+    if (!p.meetingDate || p.meetingDate >= today) { return; }   // not finished yet
+    var n = th.getMessageCount();
+    if (n > 1) { withExtra++; totalExtra += (n - 1); }
+    past.push({ th: th, p: p, extra: n - 1 });
+  });
+
+  Logger.log('confirmation threads whose meeting is past : ' + past.length);
+  Logger.log('   of those, ones with a later message      : ' + withExtra
+             + '   (' + totalExtra + ' later messages in total)');
+  Logger.log('   with nothing after the confirmation      : ' + (past.length - withExtra));
+  Logger.log('');
+  if (!withExtra) {
+    Logger.log('   Nothing follows a confirmation once the meeting is done, so the mailbox');
+    Logger.log('   cannot tell us whether it went ahead. Show-up has to come from elsewhere.');
+    return { past: past.length, withExtra: 0 };
+  }
+
+  Logger.log('READING THE LATER MESSAGES ON UP TO ' + OSCAN_SAMPLE + ' OF THEM');
+  Logger.log('');
+  var shown = 0;
+  past.forEach(function (row) {
+    if (shown >= OSCAN_SAMPLE || !row.extra) { return; }
+    shown++;
+    var msgs = row.th.getMessages();
+    Logger.log('[' + row.p.meetingDate + '] ' + row.p.lead + '  /  ' + row.p.partner
+               + '   (' + row.extra + ' later message' + (row.extra === 1 ? '' : 's') + ')');
+    msgs.slice(1).forEach(function (m) {
+      var who = String(m.getFrom() || '').match(/[\w.\-+]+@[\w.\-]+/);
+      var body = '';
+      try { body = String(m.getPlainBody() || '').replace(/\s+/g, ' ').trim(); } catch (e) {}
+      Logger.log('      ' + Utilities.formatDate(m.getDate(), 'Asia/Manila', 'MM-dd HH:mm')
+                 + '  from ' + (who ? who[0] : '?'));
+      Logger.log('      subj: ' + String(m.getSubject() || '').slice(0, 90));
+      Logger.log('      body: ' + body.slice(0, 160));
+    });
+    Logger.log('');
+  });
+
+  return { past: past.length, withExtra: withExtra, laterMessages: totalExtra };
+}
