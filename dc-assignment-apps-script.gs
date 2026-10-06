@@ -881,3 +881,189 @@ function applyPastedOutcomes() {
     + kept + ' left as a person or HubSpot recorded them, ' + noMatch + ' matched no meeting');
   return { read: read, set: set, kept: kept, noMatch: noMatch };
 }
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * BOOKING CONFIRMATION EMAILS — READ-ONLY SCAN
+ *
+ * Run scanBookingEmails() and read the log. It writes nothing anywhere: the
+ * point is to find out whether these emails can be counted as booked DCs
+ * before any code depends on them being able to.
+ *
+ * Three things it is actually testing, each of which would quietly produce
+ * wrong numbers if assumed:
+ *
+ *  1. Reminders. A confirmation thread carries a courtesy reminder with the
+ *     SAME subject, sometimes days later. Counting messages would count the
+ *     booking twice. This keys on partner + lead + meeting date and keeps the
+ *     EARLIEST message, so a reminder collapses into the booking it reminds
+ *     about whether it sits in the same thread or a new one.
+ *
+ *  2. Which date. The date in the subject is when the MEETING happens; the
+ *     message date is when it was booked. The DC Dashboard counts by booking
+ *     date, so that is what the per-day figure uses, and the scan prints both
+ *     so the gap between them is visible rather than assumed away.
+ *
+ *  3. Coverage. Override leads get the confirmation only once the lead
+ *     accepts, so some DCs have no email or a late one. The scan cannot see
+ *     what was never sent, but comparing its daily counts against the booking
+ *     sheet shows the size of the hole.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+var SCAN_QUERY_SUBJECT = 'subject:"Meeting Confirmation:"';
+var SCAN_DAYS          = 30;
+var SCAN_MAX_THREADS   = 400;
+
+// "Meeting Confirmation: VA Platinum <> Jamie Harawira - October 7, 2026"
+// The separator is the literal "<>" the floor types between partner and lead.
+var SCAN_SUBJ_RE = /^\s*(?:re:|fwd?:)*\s*Meeting\s+Confirmation:\s*(.+?)\s*<>\s*(.+?)\s*[-–]\s*(.+?)\s*$/i;
+
+function scanParseSubject_(subject) {
+  var m = String(subject || '').match(SCAN_SUBJ_RE);
+  if (!m) { return null; }
+  return { partner: m[1].trim(), lead: m[2].trim(), whenRaw: m[3].trim() };
+}
+
+function scanIsoDay_(d) {
+  return Utilities.formatDate(d, 'Asia/Manila', 'yyyy-MM-dd');
+}
+
+// "October 7, 2026" -> 2026-10-07. Read off the string directly rather than
+// through Date.parse: that returns an instant, and an instant formatted in
+// another timezone slides to the day before. Here the day is just three
+// numbers and never becomes a moment in time, so it cannot drift. It matters
+// more than it looks: the meeting date is part of the dedupe key, so a
+// one-day slide would stop a reminder matching its own confirmation and
+// double-count the booking.
+var SCAN_MONTHS = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12 };
+function scanMeetingDate_(raw) {
+  var s = String(raw || '').replace(/\(.*?\)/g, ' ').replace(/(\d+)(st|nd|rd|th)/gi, '$1').trim();
+  var mon = 0, day = 0, year = 0, m;
+
+  // "October 7, 2026" / "Oct 7 2026"
+  m = s.match(/([A-Za-z]{3,})\.?\s+(\d{1,2})\s*,?\s*(\d{4})/);
+  if (m) { mon = SCAN_MONTHS[m[1].slice(0,3).toLowerCase()]; day = +m[2]; year = +m[3]; }
+
+  // "7 October 2026"
+  if (!mon) {
+    m = s.match(/(\d{1,2})\s+([A-Za-z]{3,})\.?\s*,?\s*(\d{4})/);
+    if (m) { day = +m[1]; mon = SCAN_MONTHS[m[2].slice(0,3).toLowerCase()]; year = +m[3]; }
+  }
+
+  // "10/7/2026", read month-first the way the booking sheet writes it
+  if (!mon) {
+    m = s.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+    if (m) { mon = +m[1]; day = +m[2]; year = +m[3]; }
+  }
+
+  if (!mon || !day || !year || mon > 12 || day > 31) { return ''; }
+  return year + '-' + (mon < 10 ? '0' : '') + mon + '-' + (day < 10 ? '0' : '') + day;
+}
+
+function scanKey_(p) {
+  var n = function (x) { return String(x || '').toLowerCase().replace(/[^a-z0-9]/g, ''); };
+  return n(p.partner) + '|' + n(p.lead) + '|' + (p.meetingDate || n(p.whenRaw));
+}
+
+function scanBookingEmails() {
+  var query = SCAN_QUERY_SUBJECT + ' newer_than:' + SCAN_DAYS + 'd';
+  var threads = GmailApp.search(query, 0, SCAN_MAX_THREADS);
+
+  var seen = {};            // dedupe key -> the earliest message for that booking
+  var msgTotal = 0, unparsed = [], parsedMsgs = 0;
+
+  threads.forEach(function (th) {
+    th.getMessages().forEach(function (msg) {
+      msgTotal++;
+      var p = scanParseSubject_(msg.getSubject());
+      if (!p) {
+        if (unparsed.length < 10) { unparsed.push(msg.getSubject()); }
+        return;
+      }
+      parsedMsgs++;
+      p.meetingDate = scanMeetingDate_(p.whenRaw);
+      var from = String(msg.getFrom() || '');
+      var hit  = from.match(/[\w.\-+]+@[\w.\-]+/);
+      p.sender = hit ? hit[0].toLowerCase() : from;
+      p.sent   = msg.getDate();
+      p.sentDay = scanIsoDay_(p.sent);
+
+      var k = scanKey_(p);
+      if (!seen[k] || p.sent < seen[k].sent) { seen[k] = p; }
+    });
+  });
+
+  var rows = Object.keys(seen).map(function (k) { return seen[k]; });
+
+  // ── what it found ──────────────────────────────────────────────────────
+  Logger.log('QUERY: ' + query);
+  Logger.log('threads matched        : ' + threads.length
+             + (threads.length >= SCAN_MAX_THREADS ? '  *** CAPPED, raise SCAN_MAX_THREADS ***' : ''));
+  Logger.log('messages inside them   : ' + msgTotal);
+  Logger.log('subjects that parsed   : ' + parsedMsgs);
+  Logger.log('distinct bookings      : ' + rows.length
+             + '   (' + (parsedMsgs - rows.length) + ' were reminders or duplicates of one of these)');
+  Logger.log('');
+
+  if (unparsed.length) {
+    Logger.log('SUBJECTS THAT DID NOT PARSE (first ' + unparsed.length + '):');
+    unparsed.forEach(function (s) { Logger.log('   ' + s); });
+    Logger.log('');
+  }
+
+  var noDate = rows.filter(function (r) { return !r.meetingDate; });
+  if (noDate.length) {
+    Logger.log(noDate.length + ' booking(s) had a meeting date that could not be read, e.g. "'
+               + noDate[0].whenRaw + '"');
+    Logger.log('');
+  }
+
+  // ── who sent them ──────────────────────────────────────────────────────
+  var bySender = {};
+  rows.forEach(function (r) { bySender[r.sender] = (bySender[r.sender] || 0) + 1; });
+  var senders = Object.keys(bySender).sort(function (a, b) { return bySender[b] - bySender[a]; });
+  Logger.log('BOOKINGS PER SENDER (' + senders.length + ' senders)');
+  senders.forEach(function (s) { Logger.log('   ' + pad_(s, 44) + bySender[s]); });
+  Logger.log('');
+
+  // ── per day, by the date it was SENT, which is the booking date ────────
+  var byDay = {};
+  rows.forEach(function (r) { byDay[r.sentDay] = (byDay[r.sentDay] || 0) + 1; });
+  var days = Object.keys(byDay).sort();
+  Logger.log('BOOKINGS PER DAY, by the day the confirmation was sent');
+  days.forEach(function (d) { Logger.log('   ' + d + '   ' + byDay[d]); });
+  Logger.log('');
+
+  // ── how far ahead meetings are booked, which is why the two dates differ
+  var lead = [], sameDay = 0;
+  rows.forEach(function (r) {
+    if (!r.meetingDate) { return; }
+    var a = new Date(r.sentDay + 'T00:00:00Z').getTime();
+    var b = new Date(r.meetingDate + 'T00:00:00Z').getTime();
+    var days = Math.round((b - a) / 864e5);
+    lead.push(days);
+    if (days === 0) { sameDay++; }
+  });
+  if (lead.length) {
+    lead.sort(function (x, y) { return x - y; });
+    Logger.log('GAP BETWEEN BOOKING AND MEETING (days)');
+    Logger.log('   soonest ' + lead[0] + ', median ' + lead[Math.floor(lead.length / 2)]
+               + ', furthest ' + lead[lead.length - 1] + ', same-day ' + sameDay);
+    Logger.log('   This is why "per day" has to say which date it means.');
+    Logger.log('');
+  }
+
+  // ── a few whole rows, so the parse can be eyeballed ────────────────────
+  Logger.log('FIRST 8 BOOKINGS AS PARSED');
+  rows.slice(0, 8).forEach(function (r) {
+    Logger.log('   sent ' + r.sentDay + ' | meet ' + (r.meetingDate || '??')
+               + ' | ' + pad_(r.partner, 24) + ' | ' + pad_(r.lead, 22) + ' | ' + r.sender);
+  });
+
+  return { threads: threads.length, messages: msgTotal, bookings: rows.length, senders: senders.length };
+}
+
+function pad_(s, n) {
+  s = String(s === null || s === undefined ? '' : s);
+  while (s.length < n) { s += ' '; }
+  return s.length > n ? s.slice(0, n) : s;
+}
