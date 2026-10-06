@@ -487,6 +487,11 @@ function syncAll() {
   const token = PropertiesService.getScriptProperties().getProperty('HUBSPOT_TOKEN');
   if (token) { out.outcomes = syncOutcomes(); }
   out.pasted = applyPastedOutcomes();
+  // The confirmation emails, which are a record of booked DCs independent of the booking sheet.
+  // Wrapped because a failure here must not take the calendar and absence syncs down with it:
+  // those two are what the assignment board runs on, and this one is a second opinion.
+  try { out.bookings = syncBookingEmails(); }
+  catch (err) { out.bookings = { error: String(err) }; console.warn('booking email sync: ' + err); }
   return out;
 }
 
@@ -1080,4 +1085,113 @@ function pad_(s, n) {
   s = String(s === null || s === undefined ? '' : s);
   while (s.length < n) { s += ' '; }
   return s.length > n ? s.slice(0, n) : s;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * BOOKING CONFIRMATION EMAILS — WRITE TO A TAB
+ *
+ * The scan proved the shape: one confirmation per partner per lead, sender is
+ * the SDR, subject carries partner, lead and meeting date. So one email is one
+ * booked DC, which is the same unit the booking sheet counts in its SP 1 and
+ * SP 2 columns.
+ *
+ * This writes those bookings to a "Bookings" tab for the dashboard to read.
+ * It does NOT replace the booking sheet. It sits beside it, because the two
+ * will disagree and the disagreement is the useful part:
+ *
+ *   - An email with no sheet row is a DC somebody booked and never logged.
+ *   - A sheet row with no email is an override lead whose confirmation has not
+ *     gone out yet, or a booking that was logged but never confirmed.
+ *
+ * Neither is automatically the truth, so neither is silently preferred.
+ *
+ * Merges rather than rewrites, like the calendar sync: the Gmail query only
+ * reaches back SCAN_DAYS, and a tab that forgot everything older every run
+ * would be useless for exactly the ranges the dashboard is built to show.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+var BOOK_TAB     = 'Bookings';
+var BOOK_HEADERS = ['key', 'bookedOn', 'meetingDate', 'partner', 'lead', 'sdrEmail', 'syncedAt'];
+var BOOK_KEEP_DAYS = 400;   // how much history the tab retains, not how far the query reads
+
+function syncBookingEmails() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) { return { error: 'this script is not attached to a spreadsheet' }; }
+  var sh = ss.getSheetByName(BOOK_TAB);
+  if (!sh) { sh = ss.insertSheet(BOOK_TAB); }
+  if (sh.getLastRow() === 0) { sh.appendRow(BOOK_HEADERS); }
+  sh.getRange(1, 1, 1, BOOK_HEADERS.length).setValues([BOOK_HEADERS]);
+
+  // What the tab already holds, so history older than the query window survives.
+  var have = {}, order = [];
+  var last = sh.getLastRow();
+  if (last > 1) {
+    sh.getRange(2, 1, last - 1, BOOK_HEADERS.length).getValues().forEach(function (r) {
+      var k = String(r[0] || '').trim();
+      if (!k) { return; }
+      have[k] = r.slice();
+      order.push(k);
+    });
+  }
+
+  var now = new Date();
+  var stamp = Utilities.formatDate(now, 'Asia/Manila', "yyyy-MM-dd'T'HH:mm");
+  var query = SCAN_QUERY_SUBJECT + ' newer_than:' + SCAN_DAYS + 'd';
+  var threads = GmailApp.search(query, 0, SCAN_MAX_THREADS);
+
+  var fresh = {}, parsed = 0, skipped = 0;
+  threads.forEach(function (th) {
+    var p = scanParseSubject_(th.getFirstMessageSubject());
+    if (!p) { skipped++; return; }
+    p.meetingDate = scanMeetingDate_(p.whenRaw);
+
+    var first = th.getMessages()[0];
+    if (!first) { return; }
+    var hit = String(first.getFrom() || '').match(/[\w.\-+]+@[\w.\-]+/);
+    p.sender  = hit ? hit[0].toLowerCase() : '';
+    p.sent    = first.getDate();
+    p.sentDay = scanIsoDay_(p.sent);
+    parsed++;
+
+    var k = scanKey_(p);
+    // The earliest confirmation is the booking; a later one under the same key
+    // is a reminder or a resend and must not become a second DC.
+    if (!fresh[k] || p.sent < fresh[k].sent) { fresh[k] = p; }
+  });
+
+  var added = 0, updated = 0;
+  Object.keys(fresh).forEach(function (k) {
+    var p = fresh[k];
+    var row = [k, p.sentDay, p.meetingDate, p.partner, p.lead, p.sender, stamp];
+    if (!have[k]) { order.push(k); added++; }
+    else if (String(have[k][1]) !== p.sentDay || String(have[k][5]) !== p.sender) { updated++; }
+    have[k] = row;
+  });
+
+  // Trim only by age, never by whether the query still returns it: a booking
+  // from two months ago is absent from the search window and still true.
+  var cutoff = Utilities.formatDate(new Date(now.getTime() - BOOK_KEEP_DAYS * 864e5),
+                                    'Asia/Manila', 'yyyy-MM-dd');
+  var out = [], dropped = 0;
+  order.forEach(function (k) {
+    var r = have[k];
+    if (!r) { return; }
+    var d = String(r[1] || '');
+    if (d && d < cutoff) { dropped++; return; }
+    out.push(r);
+  });
+  out.sort(function (a, b) { return String(a[1]).localeCompare(String(b[1])); });
+
+  if (sh.getLastRow() > 1) {
+    sh.getRange(2, 1, sh.getLastRow() - 1, BOOK_HEADERS.length).clearContent();
+  }
+  if (out.length) {
+    sh.getRange(2, 1, out.length, BOOK_HEADERS.length).setValues(out);
+  }
+
+  console.log('Bookings: ' + threads.length + ' threads, ' + parsed + ' parsed, '
+    + skipped + ' subjects ignored, ' + added + ' new, ' + updated + ' updated, '
+    + out.length + ' rows on the tab' + (dropped ? ', ' + dropped + ' aged out' : ''));
+  return { threads: threads.length, parsed: parsed, added: added,
+           updated: updated, rows: out.length };
 }
