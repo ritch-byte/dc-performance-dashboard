@@ -968,28 +968,39 @@ function scanBookingEmails() {
   var query = SCAN_QUERY_SUBJECT + ' newer_than:' + SCAN_DAYS + 'd';
   var threads = GmailApp.search(query, 0, SCAN_MAX_THREADS);
 
-  var seen = {};            // dedupe key -> the earliest message for that booking
+  // Only the first message of each thread is read. That message IS the
+  // confirmation; every courtesy reminder is a later one under the same
+  // subject, so skipping them is both the cheap path and the correct one.
+  // It also keeps the Gmail calls down to roughly one per thread instead of
+  // one per message, which matters on a script that has hit the execution
+  // ceiling before.
+  var seen = {};            // dedupe key -> the earliest confirmation seen
   var msgTotal = 0, unparsed = [], parsedMsgs = 0;
 
   threads.forEach(function (th) {
-    th.getMessages().forEach(function (msg) {
-      msgTotal++;
-      var p = scanParseSubject_(msg.getSubject());
-      if (!p) {
-        if (unparsed.length < 10) { unparsed.push(msg.getSubject()); }
-        return;
-      }
-      parsedMsgs++;
-      p.meetingDate = scanMeetingDate_(p.whenRaw);
-      var from = String(msg.getFrom() || '');
-      var hit  = from.match(/[\w.\-+]+@[\w.\-]+/);
-      p.sender = hit ? hit[0].toLowerCase() : from;
-      p.sent   = msg.getDate();
-      p.sentDay = scanIsoDay_(p.sent);
+    msgTotal++;
+    var subject = th.getFirstMessageSubject();
+    var p = scanParseSubject_(subject);
+    if (!p) {
+      if (unparsed.length < 10) { unparsed.push(subject); }
+      return;
+    }
+    parsedMsgs++;
+    p.meetingDate = scanMeetingDate_(p.whenRaw);
 
-      var k = scanKey_(p);
-      if (!seen[k] || p.sent < seen[k].sent) { seen[k] = p; }
-    });
+    var first = th.getMessages()[0];
+    if (!first) { return; }
+    var from = String(first.getFrom() || '');
+    var hit  = from.match(/[\w.\-+]+@[\w.\-]+/);
+    p.sender  = hit ? hit[0].toLowerCase() : from;
+    p.sent    = first.getDate();
+    p.sentDay = scanIsoDay_(p.sent);
+    p.inThread = th.getMessageCount();
+
+    // A reminder sent as its own thread rather than a reply still lands on the
+    // same key, so the earliest one wins and the booking is counted once.
+    var k = scanKey_(p);
+    if (!seen[k] || p.sent < seen[k].sent) { seen[k] = p; }
   });
 
   var rows = Object.keys(seen).map(function (k) { return seen[k]; });
@@ -998,10 +1009,13 @@ function scanBookingEmails() {
   Logger.log('QUERY: ' + query);
   Logger.log('threads matched        : ' + threads.length
              + (threads.length >= SCAN_MAX_THREADS ? '  *** CAPPED, raise SCAN_MAX_THREADS ***' : ''));
-  Logger.log('messages inside them   : ' + msgTotal);
   Logger.log('subjects that parsed   : ' + parsedMsgs);
   Logger.log('distinct bookings      : ' + rows.length
-             + '   (' + (parsedMsgs - rows.length) + ' were reminders or duplicates of one of these)');
+             + '   (' + (parsedMsgs - rows.length) + ' duplicate thread(s) collapsed)');
+  var reminders = 0;
+  rows.forEach(function (r) { reminders += Math.max(0, (r.inThread || 1) - 1); });
+  Logger.log('reminders skipped      : ' + reminders
+             + '   (later messages under the same subject, never counted)');
   Logger.log('');
 
   if (unparsed.length) {
