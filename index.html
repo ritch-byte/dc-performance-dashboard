@@ -664,6 +664,14 @@
       </svg>
       Acknowledgements
     </a>
+    <a class="nav-item" id="navHubspot" href="#" onclick="showPage('hubspot');return false;">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="8" cy="8" r="2.2"/><circle cx="13" cy="3.5" r="1.6"/>
+        <path d="M8 5.8V3M8 10.2V13M5.8 8H3M10.2 8h1.6"/>
+      </svg>
+      HubSpot outcomes
+      <span style="margin-left:auto;font-size:8.5px;letter-spacing:.4px;background:rgba(255,255,255,.14);padding:2px 5px;border-radius:3px">STAGING</span>
+    </a>
     <a class="nav-item" id="navReports" href="#" onclick="showPage('reports');return false;">
       <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
         <path d="M2 12l3-4 3 3 2.5-5 3 4"/>
@@ -1435,6 +1443,22 @@
       <div style="padding:0 24px 32px"><div id="ackBody"></div></div>
     </div>
 
+    <div id="hubspotSection" style="display:none;">
+      <div class="content-header">
+        <div class="page-title">HubSpot outcomes <span style="font-size:11px;font-weight:600;letter-spacing:.4px;color:#B7791F;background:#FDF6E7;border:1px solid #F0DFB8;padding:2px 7px;border-radius:4px;vertical-align:middle;margin-left:6px">STAGING &middot; NOT ON THE TEAM VIEW</span></div>
+        <div class="ch-right" style="display:flex;gap:8px;align-items:center">
+          <select id="hsTeamFilter" class="cl-input" style="width:auto" onchange="hsSetTeam(this.value)"></select>
+          <select id="hsRange" class="cl-input" style="width:auto" onchange="hsSetDays(Number(this.value))">
+            <option value="30">last 30 days</option>
+            <option value="90" selected>last 90 days</option>
+            <option value="0">everything on file</option>
+          </select>
+          <button class="view-btn" onclick="hsRefresh()">Refresh</button>
+        </div>
+      </div>
+      <div style="padding:0 24px 32px"><div id="hubspotBody"></div></div>
+    </div>
+
   </main>
 </div>
 
@@ -1456,16 +1480,16 @@
       id: 'dijumhon', name: 'JumHon', color: '#1A2DB5',  // 9PM-8AM (4x11) · TL Jumar · SMEs Diana, Alvin B
       members: [
         { id: 'anos',          display: 'Marc Anos',             ln: 'anos' },
-        { id: 'demayo',        display: 'Devi Demayo',           ln: 'demayo' },
-        { id: 'saminado',      display: 'Jervin Saminado',       ln: 'saminado' },
-        { id: 'verastigue',    display: 'Bedier Verastigue',     ln: 'verastigue', hidden: true },
-        { id: 'velasco',       display: 'Edward Velasco',        ln: 'velasco' },
-        { id: 'petras',        display: 'Art Joseph Petras',     ln: 'petras' },
-        { id: 'fortez',        display: 'Charlie Fortez',        ln: 'fortez' },
+        { id: 'demayo',        display: 'Devi Demayo',           ln: 'demayo', email: 'j.demayo@outsourceaccelerator.com' },
+        { id: 'saminado',      display: 'Jervin Saminado',       ln: 'saminado', email: 'jervin@outsourceaccelerator.com' },
+        { id: 'verastigue',    display: 'Bedier Verastigue',     ln: 'verastigue', email: 'b.verastigue@outsourceaccelerator.com', hidden: true },
+        { id: 'velasco',       display: 'Edward Velasco',        ln: 'velasco', email: 'e.velasco@outsourceaccelerator.com' },
+        { id: 'petras',        display: 'Art Joseph Petras',     ln: 'petras', email: 'a.petras@outsourceaccelerator.com' },
+        { id: 'fortez',        display: 'Charlie Fortez',        ln: 'fortez', email: 'c.fortez@outsourceaccelerator.com' },
         { id: 'ramirez',       display: 'Mark Lauren Ramirez',   ln: 'ramirez', hidden: true },
-        { id: 'sarmiento_j',   display: 'Julius Sarmiento',      ln: 'sarmiento', fn: 'julius' },
+        { id: 'sarmiento_j',   display: 'Julius Sarmiento',      ln: 'sarmiento', fn: 'julius', email: 'j.sarmiento@outsourceaccelerator.com' },
         { id: 'arespacochaga', display: 'Mervin Arespacochaga',  ln: 'arespacochaga', hidden: true },
-        { id: 'aurelio',       display: 'Raymond Aurelio',       ln: 'aurelio' },
+        { id: 'aurelio',       display: 'Raymond Aurelio',       ln: 'aurelio', email: 'r.aurelio@outsourceaccelerator.com' },
         { id: 'ronquillo',     display: 'Joremie Ronquillo',     ln: 'ronquillo', hidden: true },
         { id: 'cajayon',       display: 'Bryan Cajayon',         ln: 'cajayon', hidden: true },
         { id: 'sanchez',       display: 'Maria Angelica Sanchez',ln: 'sanchez', hidden: true },
@@ -1479,56 +1503,56 @@
       id: 'meloace', name: 'MeloAce', color: '#059669',  // 10PM-9AM (4x11) · TL Angelica · SME Alvin Melo
       members: [
         { id: 'silang',     display: 'Gian Carlo Silang',     ln: 'silang' },
-        { id: 'galoso',     display: 'Lawrence Galoso',       ln: 'galoso' },
-        { id: 'silva',      display: 'Godwin Silva',          ln: 'silva' },
-        { id: 'bautista',   display: 'Dan Mark Anthony Bautista', ln: 'bautista' },
-        { id: 'baliuag',    display: 'Charlon Baliuag',       ln: 'baliuag' },
-        { id: 'malavega',   display: 'Jose Carlos Malavega',  ln: 'malavega' },
-        { id: 'villaruel',  display: 'Lance Villaruel',       ln: 'villaruel' },
-        { id: 'cubol',      display: 'Jesley Cubol',          ln: 'cubol' },
+        { id: 'galoso',     display: 'Lawrence Galoso',       ln: 'galoso', email: 'l.galoso@outsourceaccelerator.com' },
+        { id: 'silva',      display: 'Godwin Silva',          ln: 'silva', email: 'g.silva@outsourceaccelerator.com' },
+        { id: 'bautista',   display: 'Dan Mark Anthony Bautista', ln: 'bautista', email: 'd.bautista@outsourceaccelerator.com' },
+        { id: 'baliuag',    display: 'Charlon Baliuag',       ln: 'baliuag', email: 'c.baliuag@outsourceaccelerator.com' },
+        { id: 'malavega',   display: 'Jose Carlos Malavega',  ln: 'malavega', email: 'j.malavega@outsourceaccelerator.com' },
+        { id: 'villaruel',  display: 'Lance Villaruel',       ln: 'villaruel', email: 'l.villaruel@outsourceaccelerator.com' },
+        { id: 'cubol',      display: 'Jesley Cubol',          ln: 'cubol', email: 'j.cubol@outsourceaccelerator.com' },
         { id: 'monticarlo', display: 'John Vic Monticarlo',   ln: 'monticarlo', hidden: true },
         { id: 'aridi',      display: 'Hadi Aridi',            ln: 'aridi', hidden: true },
-        { id: 'ramos_j',    display: 'Jennifer Ramos',        ln: 'ramos',   fn: 'jennifer' },
+        { id: 'ramos_j',    display: 'Jennifer Ramos',        ln: 'ramos',   fn: 'jennifer', email: 'j.ramos@outsourceaccelerator.com' },
         { id: 'cardell',    display: 'Donald Cardell',        ln: 'cardell', hidden: true },
         { id: 'tormon',     display: 'Michael Anthony Tormon',ln: 'tormon', hidden: true },
-        { id: 'jerusalem',  display: 'Danilo Jerusalem',      ln: 'jerusalem', hidden: true },
+        { id: 'jerusalem',  display: 'Danilo Jerusalem',      ln: 'jerusalem', email: 'd.jerusalem@outsourceaccelerator.com', hidden: true },
       ]
     },
     {
       id: 'ev', name: 'DEV', color: '#d97706',  // 11PM-10AM (4x11) · TL Jonathan · SME Vincent
       members: [
         { id: 'catolico',   display: 'Pedro Catolico',        ln: 'catolico' },
-        { id: 'tupaz',      display: 'Rommel Tupaz',          ln: 'tupaz' },
+        { id: 'tupaz',      display: 'Rommel Tupaz',          ln: 'tupaz', email: 'r.tupaz@outsourceaccelerator.com' },
         { id: 'lavares',    display: 'Gian Lavares',          ln: 'lavares', hidden: true },
-        { id: 'arcena',     display: 'Charlito Arcena',       ln: 'arcena' },
-        { id: 'benjamin',   display: 'Russell Benjamin',      ln: 'benjamin' },
+        { id: 'arcena',     display: 'Charlito Arcena',       ln: 'arcena', email: 'charlito@outsourceaccelerator.com' },
+        { id: 'benjamin',   display: 'Russell Benjamin',      ln: 'benjamin', email: 'r.benjamin@outsourceaccelerator.com' },
         { id: 'susana',     display: 'John Christian Susana', ln: 'susana', hidden: true },
-        { id: 'tungol',     display: 'Lorenzo Luiz Tungol',   ln: 'tungol' },
-        { id: 'magtalas',   display: 'Ayesha Magtalas',       ln: 'magtalas', hidden: true },
-        { id: 'balbido',    display: 'Justine Balbido',       ln: 'balbido' },
-        { id: 'decastro',   display: 'Catherine de Castro',   ln: 'castro',  ln2: 'de castro' },
+        { id: 'tungol',     display: 'Lorenzo Luiz Tungol',   ln: 'tungol', email: 'l.tungol@outsourceaccelerator.com' },
+        { id: 'magtalas',   display: 'Ayesha Magtalas',       ln: 'magtalas', email: 'o.magtalas@outsourceaccelerator.com', hidden: true },
+        { id: 'balbido',    display: 'Justine Balbido',       ln: 'balbido', email: 'j.balbido@outsourceaccelerator.com' },
+        { id: 'decastro',   display: 'Catherine de Castro',   ln: 'castro', email: 'c.decastro@outsourceaccelerator.com',  ln2: 'de castro' },
         { id: 'caguimbal',  display: 'Divinamor Caguimbal',   ln: 'caguimbal', hidden: true },
         { id: 'ramos_i',    display: 'Ma. Isabel Ramos',      ln: 'ramos',   fn: 'isabel', hidden: true },
-        { id: 'tiu',        display: 'Regine Theresa Tiu',    ln: 'tiu' },
+        { id: 'tiu',        display: 'Regine Theresa Tiu',    ln: 'tiu', email: 'r.tiu@outsourceaccelerator.com' },
       ]
     },
     {
       id: 'bridge', name: 'Bridge', color: '#0891b2',  // 10AM-9PM daytime coverage · TL Angelica
       members: [
         { id: 'rampas',     display: 'Desiree Rampas',        ln: 'rampas', hidden: true },
-        { id: 'bascos',     display: 'Jessica Bascos',        ln: 'bascos' },
-        { id: 'jaraula',    display: 'Jezza Jezreel Jaraula', ln: 'jaraula' },
+        { id: 'bascos',     display: 'Jessica Bascos',        ln: 'bascos', email: 'j.bascos@outsourceaccelerator.com' },
+        { id: 'jaraula',    display: 'Jezza Jezreel Jaraula', ln: 'jaraula', email: 'j.jaraula@outsourceaccelerator.com' },
       ]
     },
     {
       id: 'poc', name: 'POC TEAM', color: '#7c3aed',
       members: [
         { id: 'tanate',   display: 'Angelica Tanate',  ln: 'tanate' },
-        { id: 'gadier',   display: 'Vincent Gadier',   ln: 'gadier' },
-        { id: 'bayhon',   display: 'Alvin Bayhon',     ln: 'bayhon' },
-        { id: 'jumar',    display: 'Jumar Vere',       ln: 'vere'   },
-        { id: 'vosotros', display: 'Diana Vosotros',   ln: 'vosotros' },
-        { id: 'melo',     display: 'Alvin Melo',       ln: 'melo' },
+        { id: 'gadier',   display: 'Vincent Gadier',   ln: 'gadier', email: 'vincent@outsourceaccelerator.com' },
+        { id: 'bayhon',   display: 'Alvin Bayhon',     ln: 'bayhon', email: 'ali@outsourceaccelerator.com' },
+        { id: 'jumar',    display: 'Jumar Vere',       ln: 'vere', email: 'j.vere@outsourceaccelerator.com'   },
+        { id: 'vosotros', display: 'Diana Vosotros',   ln: 'vosotros', email: 'diana@outsourceaccelerator.com' },
+        { id: 'melo',     display: 'Alvin Melo',       ln: 'melo', email: 'alvin@outsourceaccelerator.com' },
       ]
     }
   ];
@@ -2145,6 +2169,7 @@
     $('pafSection').style.display          = page === 'paf'         ? '' : 'none';
     $('scorecardSection').style.display    = page === 'scorecard'   ? '' : 'none';
     $('ackSection').style.display          = page === 'ack'         ? '' : 'none';
+    $('hubspotSection').style.display      = page === 'hubspot'     ? '' : 'none';
     $('navDashboard').classList.toggle('active',   page === 'dashboard');
     $('navTeam').classList.toggle('active',        page === 'team');
     $('navReports').classList.toggle('active',     page === 'reports');
@@ -2159,12 +2184,14 @@
     $('navPaf').classList.toggle('active',          page === 'paf');
     $('navScorecard').classList.toggle('active',    page === 'scorecard');
     $('navAck').classList.toggle('active',          page === 'ack');
+    $('navHubspot').classList.toggle('active',      page === 'hubspot');
     if (page === 'team')       renderTeamRoster();
     if (page === 'leaders')    renderTeamLeaders();
     if (page === 'impact')     { liBuildMonths(); renderLeaderImpact(); }
     if (page === 'paf')        renderPaf();
     if (page === 'scorecard')  scInit();
     if (page === 'ack')        renderAckTracker();
+    if (page === 'hubspot')    hsInit();
     if (page === 'reports')    { buildReportMonthSelect(); renderReports(); }
     if (page === 'sheet')      { buildSheetWeekSelect(); renderSheet(); if (!_attLoaded && !_attLoading) loadAttendanceData(); }
     // Render either way. When the data is not in yet this paints the loading or failed state,
@@ -2174,6 +2201,290 @@
     if (page === 'tracker')    { buildTrackMonthSelect(); loadCoachingLogs(false); }
     if (page === 'dcmon')      dcmonInit();
     if (page === 'schedule')   renderSchedule();
+  }
+
+  // ── HUBSPOT-CONNECTED PERFORMANCE ────────────────────────────────────────
+  // Staged deliberately. What this shows is only ever as good as what the CRM was told, and on
+  // this floor most meetings are never tagged at all, so the honest thing is to put the coverage
+  // in front of the result rather than behind it. A 100% show-up built on two tagged meetings is
+  // not a good month, it is two tagged meetings, and a table that cannot say which is worse than
+  // no table.
+  //
+  // The sheet carries outcomes from three different places and they are not interchangeable:
+  //   hubspot   - a person tagged the meeting in the CRM. This is the evidence.
+  //   calendar  - the event title began "Canceled:", so the sync inferred it. Real, but it is an
+  //               inference about one outcome only, and counting it as CRM data would let 393
+  //               auto-detected cancellations pose as a tagged record.
+  //   a name    - a leader set it by hand on the assignment tab.
+  // Only the first counts toward coverage. The others are shown apart so they are not invisible.
+  const HS_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRuS9DSz6faT_IUDKyHdf-gwNpuqETpeD9GtT5Y0BJ6XitofvuB869TjK_NksUcVTsik7u7_dvQhPwS/pub?gid=1198498882&single=true&output=csv';
+  const HS_THIN = 5;            // below this many tagged meetings a rate is not worth reading
+  let _hsRows = [], _hsLoaded = false, _hsLoading = false, _hsErr = '';
+  let _hsDays = 90, _hsTeam = '';
+
+  // Outcome buckets. Kept apart rather than summed into one failure number: whether the lead
+  // failed to appear, the partner did, or the call happened and the lead was unqualified are
+  // three different conversations with three different people.
+  const HS_BUCKETS = [
+    { key:'showed',    label:'Showed',         test:function(o){ return o === 'showed'; } },
+    { key:'unqual',    label:'Unqualified',    test:function(o){ return o.indexOf('unqualified') >= 0; } },
+    { key:'leadNo',    label:'Lead no-show',   test:function(o){ return o === 'lead no-show'; } },
+    { key:'partnerNo', label:'Partner no-show',test:function(o){ return o === 'partner no-show'; } },
+    { key:'noShow',    label:'Nobody came',    test:function(o){ return o === 'no-show'; } },
+    { key:'cancelled', label:'Cancelled',      test:function(o){ return o.indexOf('cancel') === 0; } },
+    { key:'resched',   label:'Rescheduled',    test:function(o){ return o.indexOf('reschedul') >= 0; } }
+  ];
+
+  // Address book off the rosters, so an SDR is named rather than left as an email.
+  function hsBook(){
+    const by = {};
+    TEAMS.forEach(function(t){
+      t.members.forEach(function(m){
+        if (m.email) by[m.email.toLowerCase()] = { id:m.id, name:m.display, team:t.name, hidden:!!m.hidden };
+      });
+    });
+    return by;
+  }
+  function hsWho(email, book){
+    const e = String(email || '').trim().toLowerCase();
+    if (!e) return null;
+    if (book[e]) return book[e];
+    // Not on the directory. Guess from the local part, and only claim a person when the first
+    // initial agrees, because a surname-only match once put one Bautista's meetings against
+    // another. Being told the owner is unknown is recoverable; being told the wrong one is not.
+    const parts = String(e.split('@')[0]).split(/[._-]+/).filter(Boolean);
+    if (!parts.length) return null;
+    const guess = parts.map(function(x){ return x.charAt(0).toUpperCase() + x.slice(1); }).join(' ');
+    let id = resolveAgent(guess);
+    // Plenty of addresses here are a bare given name, vincent@ and diana@ rather than v.gadier@,
+    // and between them they account for hundreds of meetings. resolveAgent reads the last token
+    // as a surname so those find nobody. Match a lone token against given names instead, and only
+    // when exactly one person answers to it: alvin@ could be Alvin Melo or Alvin Bayhon, and a
+    // meeting credited to the wrong Alvin is worse than one credited to nobody.
+    if (!id && parts.length === 1){
+      const want = parts[0].toLowerCase(), hits = [];
+      TEAMS.forEach(function(t){ t.members.forEach(function(m){
+        if (m.display.split(/\s+/)[0].toLowerCase() === want) hits.push(m.id);
+      }); });
+      if (hits.length === 1) id = hits[0];
+    }
+    // A surname written as two words defeats the lookup: c.decastro@ against "Catherine de
+    // Castro". Compare against the whole name with its spaces removed, still demanding the
+    // initial agrees.
+    if (!id && parts.length > 1){
+      const flat = parts.join('').toLowerCase(), tail = parts[parts.length-1].toLowerCase(), hits = [];
+      TEAMS.forEach(function(t){ t.members.forEach(function(m){
+        const name = m.display.toLowerCase().replace(/[^a-z]/g, '');
+        if (m.display.charAt(0).toLowerCase() === parts[0].charAt(0).toLowerCase()
+            && name.slice(-tail.length) === tail) hits.push(m.id);
+        else if (name === flat) hits.push(m.id);
+      }); });
+      if (hits.length === 1) id = hits[0];
+    }
+    if (!id) return { id:null, name:guess, team:'', hidden:false };
+    let found = null;
+    TEAMS.forEach(function(t){ t.members.forEach(function(m){ if (m.id === id) found = { m:m, t:t }; }); });
+    if (!found) return { id:null, name:guess, team:'', hidden:false };
+    // The guard exists because resolveAgent matches on surname alone, which once put one
+    // Bautista's meetings against another. It only applies to an address that carries a surname:
+    // for a bare given name the first letter is the given name's own, and comparing it against
+    // itself proves nothing while rejecting nobody.
+    if (parts.length > 1 && found.m.display.charAt(0).toLowerCase() !== parts[0].charAt(0).toLowerCase())
+      return { id:null, name:guess, team:'', hidden:false };
+    return { id:found.m.id, name:found.m.display, team:found.t.name, hidden:!!found.m.hidden };
+  }
+
+  async function hsLoad(force){
+    if (_hsLoading) return;
+    if (_hsLoaded && !force) return;
+    _hsLoading = true; _hsErr = ''; renderHubspot();
+    try {
+      const res = await fetch(HS_CSV_URL + '&_=' + Date.now());
+      // splitCsvRows hands back raw lines, not cells. splitLine turns each into columns and
+      // honours quoting; without it every row here was a string and the header lookup found nothing.
+      const rows = splitCsvRows(await res.text()).map(splitLine);
+      const head = (rows[0] || []).map(function(h){ return String(h).trim(); });
+      const ix = {};
+      ['sdrEmail','start','outcome','outcomeBy','partner','lead'].forEach(function(k){ ix[k] = head.indexOf(k); });
+      _hsRows = rows.slice(1).filter(function(r){ return r && r.length > ix.start; }).map(function(r){
+        return {
+          sdrEmail: String(r[ix.sdrEmail] || '').trim(),
+          start:    String(r[ix.start]    || '').trim().replace(' ', 'T').slice(0,16),
+          outcome:  String(r[ix.outcome]  || '').trim(),
+          by:       String(r[ix.outcomeBy]|| '').trim().toLowerCase(),
+          partner:  String(r[ix.partner]  || '').trim(),
+          lead:     String(r[ix.lead]     || '').trim()
+        };
+      }).filter(function(r){ return r.start; });
+      _hsLoaded = true;
+    } catch (e) {
+      _hsErr = String(e && e.message || e);
+    }
+    _hsLoading = false;
+    renderHubspot();
+  }
+
+  function hsStats(){
+    const book = hsBook();
+    const now = new Date();
+    const cut = _hsDays ? localIso(new Date(now.getTime() - _hsDays * 864e5)) : '0000-00-00';
+    const nowIso = localIso(now) + 'T' + now.toTimeString().slice(0,5);
+    const by = {};
+    const tot = { meetings:0, past:0, hs:0, cal:0, hand:0, none:0, upcoming:0, unknown:0 };
+
+    _hsRows.forEach(function(r){
+      if (r.start.slice(0,10) < cut) return;
+      const who = hsWho(r.sdrEmail, book);
+      tot.meetings++;
+      if (!who || !who.id){ tot.unknown++; return; }
+      if (_hsTeam && who.team !== _hsTeam) { tot.meetings--; return; }
+      if (!by[who.id]){
+        by[who.id] = { id:who.id, name:who.name, team:who.team, meetings:0, past:0,
+                       hs:0, cal:0, hand:0, none:0, upcoming:0 };
+        HS_BUCKETS.forEach(function(b){ by[who.id][b.key] = 0; });
+      }
+      const s = by[who.id];
+      s.meetings++;
+      if (r.start > nowIso){ s.upcoming++; tot.upcoming++; return; }
+      s.past++; tot.past++;
+      const o = r.outcome.toLowerCase();
+      if (!o){ s.none++; tot.none++; return; }
+      if (r.by === 'hubspot'){
+        s.hs++; tot.hs++;
+        const hit = HS_BUCKETS.find(function(b){ return b.test(o); });
+        if (hit) s[hit.key]++;
+      }
+      else if (r.by === 'calendar'){ s.cal++; tot.cal++; }
+      else { s.hand++; tot.hand++; }
+    });
+
+    const list = Object.keys(by).map(function(k){ return by[k]; })
+      .sort(function(a,b){ return b.hs - a.hs || b.meetings - a.meetings; });
+    return { list:list, tot:tot };
+  }
+
+  function renderHubspot(){
+    const box = $('hubspotBody'); if (!box) return;
+    if (_hsLoading && !_hsLoaded){ box.innerHTML = '<div class="board"><div class="boardhead">'
+      + '<div class="boardtitle">Reading the assignment sheet…</div></div></div>'; return; }
+    if (_hsErr){ box.innerHTML = '<div class="board"><div class="boardhead">'
+      + '<div class="boardtitle">Could not read the sheet</div>'
+      + '<div class="boardsub">' + esc(_hsErr) + '</div></div></div>'; return; }
+    if (!_hsLoaded){ box.innerHTML = ''; return; }
+
+    const S = hsStats(), T = S.tot;
+    const pct = function(n, d){ return d ? Math.round(n / d * 100) : null; };
+    const cov = pct(T.hs, T.past);
+    const NAVY = '#0D1A6E', SLATE = '#5B6678';
+
+    // Coverage first, and stated plainly. Everything under it is read through this number.
+    const covCol = cov == null ? SLATE : (cov >= 60 ? '#0E9F6E' : cov >= 25 ? '#B7791F' : '#C00000');
+    let html = '<div class="board"><div class="boardhead">'
+      + '<div class="boardtitle">How much of this is actually in HubSpot</div>'
+      + '<div class="boardsub">Only a meeting somebody tagged in the CRM counts as evidence here. '
+      + 'Cancellations the sync read off a calendar title are shown apart, because an inference '
+      + 'about one outcome is not a tagged record, and counting them together would make the CRM '
+      + 'look far better filled in than it is.</div></div>'
+      + '<div style="display:flex;flex-wrap:wrap;gap:14px;padding:4px 2px 2px">'
+      + [['Meetings in range', T.meetings, SLATE],
+         ['Already happened', T.past, SLATE],
+         ['Tagged in HubSpot', T.hs, covCol],
+         ['Cancelled, read off the calendar', T.cal, SLATE],
+         ['Set by a leader by hand', T.hand, SLATE],
+         ['No outcome at all', T.none, T.none ? '#C00000' : SLATE]].map(function(t){
+          return '<div style="min-width:132px"><div style="font-size:9.5px;letter-spacing:.5px;'
+            + 'text-transform:uppercase;color:' + SLATE + '">' + esc(t[0]) + '</div>'
+            + '<div style="font-size:21px;font-weight:800;color:' + t[2] + '">' + t[1] + '</div></div>';
+        }).join('')
+      + '</div>'
+      + '<div style="margin-top:10px;padding:10px 14px;border-radius:6px;background:'
+        + (cov != null && cov < 25 ? '#FDF1F1' : '#F3F5FC') + ';border-left:4px solid ' + covCol + ';'
+        + 'font-size:12.5px;color:var(--ink);line-height:1.55">'
+      + (T.past === 0
+          ? 'No meetings in this range have happened yet, so there is nothing to judge.'
+          : '<b>' + (cov == null ? '—' : cov + '%') + ' coverage</b> — ' + T.hs + ' of ' + T.past
+            + ' meetings that have already happened carry a HubSpot outcome.'
+            + (cov != null && cov < 25
+                ? ' That is too thin to read as performance. The figures below are shown so you can '
+                  + 'see what exists, not so they can be acted on. Until meetings are tagged in the '
+                  + 'CRM, this section measures the tagging and not the selling.'
+                : ''))
+      + '</div></div>';
+
+    if (!S.list.length){
+      html += '<div class="board"><div class="boardhead"><div class="boardtitle">Nobody to show</div>'
+        + '<div class="boardsub">No meeting in this range resolved to an SDR on the roster.</div>'
+        + '</div></div>';
+      box.innerHTML = html; return;
+    }
+
+    const live = HS_BUCKETS.filter(function(b){ return S.list.some(function(p){ return p[b.key] > 0; }); });
+    const head = '<tr><th>SDR</th><th class="num">Tagged / happened</th>'
+      + live.map(function(b){ return '<th class="num">' + esc(b.label) + '</th>'; }).join('')
+      + '<th class="num">Went ahead</th></tr>';
+
+    const body = S.list.map(function(p){
+      // Of the calls that actually took place. A cancellation neither helps nor hurts: there was
+      // nothing to attend.
+      const held = p.showed + p.unqual + p.leadNo + p.partnerNo + p.noShow;
+      const rate = held ? Math.round((p.showed + p.unqual) / held * 100) : null;
+      const thin = p.hs < HS_THIN;
+      const c = p.past ? Math.round(p.hs / p.past * 100) : null;
+      return '<tr>'
+        + '<td class="spn">' + esc(p.name)
+          + '<div style="font-size:10.5px;color:' + SLATE + '">' + esc(p.team)
+            + (p.upcoming ? ' · ' + p.upcoming + ' ahead' : '') + '</div></td>'
+        + '<td class="num"><b>' + p.hs + '</b> <span style="color:' + SLATE + '">/ ' + p.past + '</span>'
+          + (c == null ? '' : ' <span style="font-size:10.5px;color:'
+             + (c >= 60 ? '#0E9F6E' : c >= 25 ? '#B7791F' : '#C00000') + '">' + c + '%</span>') + '</td>'
+        + live.map(function(b){
+            const n = p[b.key];
+            return '<td class="num" style="color:' + (n ? 'var(--ink);font-weight:700' : SLATE) + '">'
+              + (n || '·') + '</td>';
+          }).join('')
+        + '<td class="num">'
+          + (rate == null
+              ? '<span style="color:' + SLATE + '">no tagged calls</span>'
+              : '<b style="color:' + (thin ? SLATE : (rate >= 70 ? '#0E9F6E' : rate >= 50 ? '#B7791F' : '#C00000'))
+                + '">' + rate + '%</b>'
+                + (thin ? '<div style="font-size:10px;color:' + SLATE + '">too thin to read</div>' : ''))
+          + '</td></tr>';
+    }).join('');
+
+    html += '<div class="board"><div class="boardhead">'
+      + '<div class="boardtitle">Why meetings did not go ahead, per SDR</div>'
+      + '<div class="boardsub">Counted only from meetings tagged in HubSpot. <b>Lead no-show</b> means '
+      + 'the partner turned up and the lead did not, which is a lead-quality signal; <b>Partner '
+      + 'no-show</b> is the other way round and is ours to answer for. <b>Went ahead</b> is of calls '
+      + 'that actually took place, so a cancellation neither helps nor hurts anybody. A row with '
+      + 'fewer than ' + HS_THIN + ' tagged meetings is marked rather than scored.</div></div>'
+      + '<div class="tablewrap"><table class="sptable"><thead>' + head + '</thead><tbody>'
+      + body + '</tbody></table></div></div>';
+
+    if (T.unknown){
+      html += '<div class="board"><div class="boardhead">'
+        + '<div class="boardtitle">' + T.unknown + ' meeting' + (T.unknown === 1 ? '' : 's')
+          + ' could not be matched to an SDR</div>'
+        + '<div class="boardsub">The booking address on the calendar invite is not on the roster '
+        + 'directory and could not be resolved safely. They are left out rather than guessed at, '
+        + 'because attributing a meeting to the wrong person is worse than not attributing it.'
+        + '</div></div></div>';
+    }
+    box.innerHTML = html;
+  }
+
+  function hsSetDays(d){ _hsDays = d; renderHubspot(); }
+  function hsSetTeam(v){ _hsTeam = v; renderHubspot(); }
+  function hsRefresh(){ hsLoad(true); }
+  function hsInit(){
+    const sel = $('hsTeamFilter');
+    if (sel && !sel.options.length){
+      sel.innerHTML = '<option value="">All teams</option>'
+        + TEAMS.filter(function(t){ return t.id !== 'poc'; })
+               .map(function(t){ return '<option value="' + esc(t.name) + '">' + esc(t.name) + '</option>'; }).join('');
+    }
+    hsLoad(false);
+    renderHubspot();
   }
 
   // ── Reports ──
