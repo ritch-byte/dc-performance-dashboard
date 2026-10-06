@@ -1311,3 +1311,43 @@ function scanOutcomeSignals() {
 
   return { past: past.length, withExtra: withExtra, laterMessages: totalExtra };
 }
+
+/**
+ * Which spreadsheet is this script actually attached to, and what is on it?
+ *
+ * Run this first when a tab you expected is not there. A script created from a
+ * new sheet is bound to THAT sheet, not to the one the dashboard reads, so the
+ * code can run perfectly and write its tab somewhere nobody is looking. This
+ * prints the URL to open and the tabs that exist, which settles it in one run.
+ */
+function whereAmI() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) {
+    Logger.log('This script is NOT attached to any spreadsheet.');
+    Logger.log('It is a standalone project, so syncCalendars, syncAbsences and');
+    Logger.log('syncBookingEmails have nowhere to write. Paste this code into the');
+    Logger.log('Apps Script project that belongs to the DC Assignments sheet instead:');
+    Logger.log('open that sheet, then Extensions > Apps Script.');
+    return { bound: false };
+  }
+  Logger.log('ATTACHED TO : ' + ss.getName());
+  Logger.log('URL         : ' + ss.getUrl());
+  Logger.log('');
+  var names = ss.getSheets().map(function (s) { return s.getName(); });
+  Logger.log('TABS ON IT  : ' + names.join(' | '));
+  Logger.log('');
+  var want = [TAB, ABS_TAB, BOOK_TAB];
+  want.forEach(function (w) {
+    var hit = names.indexOf(w) >= 0;
+    var sh = hit ? ss.getSheetByName(w) : null;
+    Logger.log('   ' + pad_(w, 18) + (hit ? 'yes, ' + Math.max(0, sh.getLastRow() - 1) + ' rows'
+                                          : 'MISSING'));
+  });
+  Logger.log('');
+  if (names.indexOf(TAB) < 0) {
+    Logger.log('There is no "' + TAB + '" tab here, so this is NOT the sheet the dashboard');
+    Logger.log('reads. Open the right spreadsheet, go to Extensions > Apps Script, and');
+    Logger.log('paste the code there. Publishing a tab from this one would publish nothing.');
+  }
+  return { bound: true, name: ss.getName(), url: ss.getUrl(), tabs: names };
+}
