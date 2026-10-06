@@ -664,6 +664,13 @@
       </svg>
       Acknowledgements
     </a>
+    <a class="nav-item" id="navBooked" href="#" onclick="showPage('booked');return false;">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="2" y="3" width="12" height="11" rx="1"/><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3"/>
+        <path d="M5 9.5h2M9 9.5h2M5 12h2"/>
+      </svg>
+      Booked DCs by range
+    </a>
     <a class="nav-item" id="navHubspot" href="#" onclick="showPage('hubspot');return false;">
       <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
         <circle cx="8" cy="8" r="2.2"/><circle cx="13" cy="3.5" r="1.6"/>
@@ -1443,6 +1450,25 @@
       <div style="padding:0 24px 32px"><div id="ackBody"></div></div>
     </div>
 
+    <div id="bookedSection" style="display:none;">
+      <div class="content-header">
+        <div class="page-title">Booked DCs by range</div>
+        <div class="ch-right" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <button class="view-btn" onclick="bdPreset('7')">7d</button>
+          <button class="view-btn" onclick="bdPreset('30')">30d</button>
+          <button class="view-btn" onclick="bdPreset('90')">90d</button>
+          <button class="view-btn" onclick="bdPreset('mtd')">This month</button>
+          <button class="view-btn" onclick="bdPreset('lastmonth')">Last month</button>
+          <input type="date" id="bdFrom" class="cl-input" style="width:auto" onchange="bdSetFrom(this.value)">
+          <span style="color:var(--slate);font-size:12px">to</span>
+          <input type="date" id="bdTo" class="cl-input" style="width:auto" onchange="bdSetTo(this.value)">
+          <select id="bdTeamFilter" class="cl-input" style="width:auto" onchange="bdSetTeam(this.value)"></select>
+          <button class="view-btn" id="bdRefreshBtn" onclick="bdRefresh()">Refresh</button>
+        </div>
+      </div>
+      <div style="padding:0 24px 32px"><div id="bookedBody"></div></div>
+    </div>
+
     <div id="hubspotSection" style="display:none;">
       <div class="content-header">
         <div class="page-title">HubSpot outcomes <span style="font-size:11px;font-weight:600;letter-spacing:.4px;color:#B7791F;background:#FDF6E7;border:1px solid #F0DFB8;padding:2px 7px;border-radius:4px;vertical-align:middle;margin-left:6px">STAGING &middot; NOT ON THE TEAM VIEW</span></div>
@@ -2170,6 +2196,7 @@
     $('scorecardSection').style.display    = page === 'scorecard'   ? '' : 'none';
     $('ackSection').style.display          = page === 'ack'         ? '' : 'none';
     $('hubspotSection').style.display      = page === 'hubspot'     ? '' : 'none';
+    $('bookedSection').style.display       = page === 'booked'      ? '' : 'none';
     $('navDashboard').classList.toggle('active',   page === 'dashboard');
     $('navTeam').classList.toggle('active',        page === 'team');
     $('navReports').classList.toggle('active',     page === 'reports');
@@ -2185,6 +2212,7 @@
     $('navScorecard').classList.toggle('active',    page === 'scorecard');
     $('navAck').classList.toggle('active',          page === 'ack');
     $('navHubspot').classList.toggle('active',      page === 'hubspot');
+    $('navBooked').classList.toggle('active',       page === 'booked');
     if (page === 'team')       renderTeamRoster();
     if (page === 'leaders')    renderTeamLeaders();
     if (page === 'impact')     { liBuildMonths(); renderLeaderImpact(); }
@@ -2192,6 +2220,7 @@
     if (page === 'scorecard')  scInit();
     if (page === 'ack')        renderAckTracker();
     if (page === 'hubspot')    hsInit();
+    if (page === 'booked')     bdInit();
     if (page === 'reports')    { buildReportMonthSelect(); renderReports(); }
     if (page === 'sheet')      { buildSheetWeekSelect(); renderSheet(); if (!_attLoaded && !_attLoading) loadAttendanceData(); }
     // Render either way. When the data is not in yet this paints the loading or failed state,
@@ -2201,6 +2230,238 @@
     if (page === 'tracker')    { buildTrackMonthSelect(); loadCoachingLogs(false); }
     if (page === 'dcmon')      dcmonInit();
     if (page === 'schedule')   renderSchedule();
+  }
+
+  // ── BOOKED DCs, ANY DATE RANGE ───────────────────────────────────────────
+  // Every figure here comes from aggregateForDate and aggregateLeadsForDate, the same two
+  // functions the DC Dashboard counts with, summed across whatever days the range covers. That
+  // is deliberate and it is the whole design: a second way of counting booked DCs would
+  // eventually disagree with the first, and then nobody could say which number was the real one.
+  // So this section owns the date arithmetic and nothing else.
+  //
+  // One honest difference from the Month-to-date view. That view walks business days only, so a
+  // DC booked on a Saturday is invisible in it. A range you picked by hand should contain what
+  // you picked, so this counts every day in it, and says so on screen when a weekend is included
+  // and actually carried bookings.
+  let _bdFrom = '', _bdTo = '', _bdTeam = '';
+
+  function bdDefaults(){
+    if (_bdFrom && _bdTo) return;
+    const to = new Date(), from = new Date(to.getTime() - 29 * 864e5);
+    _bdFrom = localIso(from); _bdTo = localIso(to);
+  }
+  function bdDates(){
+    const out = [];
+    if (!_bdFrom || !_bdTo) return out;
+    let a = _bdFrom, b = _bdTo;
+    if (a > b){ const t = a; a = b; b = t; }          // picked backwards, read it the way meant
+    const [y, m, d] = a.split('-').map(Number);
+    const cur = new Date(y, m - 1, d), end = new Date(b + 'T23:59:59');
+    let guard = 0;
+    while (cur <= end && guard++ < 1200){ out.push(localIso(cur)); cur.setDate(cur.getDate() + 1); }
+    return out;
+  }
+  function bdPreset(kind){
+    const today = new Date();
+    if (kind === 'mtd'){
+      _bdFrom = localIso(new Date(today.getFullYear(), today.getMonth(), 1));
+      _bdTo = localIso(today);
+    } else if (kind === 'lastmonth'){
+      const f = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      _bdFrom = localIso(f);
+      _bdTo = localIso(new Date(today.getFullYear(), today.getMonth(), 0));
+    } else {
+      _bdFrom = localIso(new Date(today.getTime() - (Number(kind) - 1) * 864e5));
+      _bdTo = localIso(today);
+    }
+    bdSyncInputs(); renderBooked();
+  }
+  function bdSyncInputs(){
+    const f = $('bdFrom'), t = $('bdTo');
+    if (f) f.value = _bdFrom;
+    if (t) t.value = _bdTo;
+  }
+  function bdSetFrom(v){ _bdFrom = v; renderBooked(); }
+  function bdSetTo(v){ _bdTo = v; renderBooked(); }
+  function bdSetTeam(v){ _bdTeam = v; renderBooked(); }
+  async function bdRefresh(){
+    const b = $('bdRefreshBtn');
+    if (b){ b.disabled = true; b.textContent = 'Refreshing…'; }
+    await loadData();
+    if (b){ b.disabled = false; b.textContent = 'Refresh'; }
+    renderBooked();
+  }
+
+  // Bookings whose date cannot be read as a real one. There are 21 of these in the sheet today,
+  // years typed as 0206 and 3036 and 2006, and each one takes its DCs out of every report
+  // silently. Surfaced rather than quietly repaired: guessing that 0206 meant 2026 is almost
+  // certainly right and still not mine to decide, and a count on screen gets the sheet fixed
+  // where a silent correction would hide the problem forever.
+  function bdUnreadable(){
+    const bad = [];
+    rawRows.forEach(function(r){
+      const iso = normalizeDate(r.rawDate);
+      const dcs = (r.sp1 ? 1 : 0) + (r.sp2 ? 1 : 0);
+      if (!dcs) return;
+      const y = iso ? Number(String(iso).slice(0,4)) : 0;
+      if (!iso || y < 2020 || y > 2030) bad.push({ raw:r.rawDate, agent:r.agent, dcs:dcs });
+    });
+    return bad;
+  }
+
+  function bdStats(){
+    const dates = bdDates();
+    const counts = {}, leads = {};
+    dates.forEach(function(d){
+      const c = aggregateForDate(d);
+      Object.keys(c).forEach(function(id){ counts[id] = (counts[id] || 0) + c[id]; });
+      const l = aggregateLeadsForDate(d);
+      Object.keys(l).forEach(function(id){ leads[id] = (leads[id] || 0) + l[id]; });
+    });
+    const showup = aggregateShowupForDates(dates);
+    let biz = 0, wknd = 0;
+    dates.forEach(function(d){
+      const dow = new Date(d + 'T00:00:00').getDay();
+      if (dow === 0 || dow === 6){ if (Object.keys(aggregateForDate(d)).length) wknd++; }
+      else biz++;
+    });
+    return { dates:dates, counts:counts, leads:leads, showup:showup, biz:biz, wkndWithBookings:wknd };
+  }
+
+  function renderBooked(){
+    const box = $('bookedBody'); if (!box) return;
+    bdDefaults();
+    if (!rawRows.length){
+      box.innerHTML = '<div class="board"><div class="boardhead">'
+        + '<div class="boardtitle">No booking data loaded yet</div>'
+        + '<div class="boardsub">Press Refresh, or open the DC Dashboard once to pull the feed.</div>'
+        + '</div></div>';
+      return;
+    }
+
+    const S = bdStats();
+    const target = S.biz * DAILY_TARGET;      // pro-rated over the business days in the range
+    const SLATE = '#5B6678';
+
+    let totDc = 0, totLead = 0;
+    Object.keys(S.counts).forEach(function(k){ totDc += S.counts[k]; });
+    Object.keys(S.leads).forEach(function(k){ totLead += S.leads[k]; });
+
+    const fmt = function(iso){
+      return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+    };
+    let sYes = 0, sHap = 0;
+    TEAMS.forEach(function(t){ t.members.forEach(function(m){
+      const s = S.showup[m.id]; if (s){ sYes += s.yes; sHap += s.happened; }
+    }); });
+    const suStr = sHap ? Math.round(sYes / sHap * 100) + '%' : '—';
+
+    let html = '<div class="day-summary">'
+      + '<span class="day-summary-label">' + esc(fmt(S.dates[0] || _bdFrom)) + ' &ndash; '
+        + esc(fmt(S.dates[S.dates.length-1] || _bdTo)) + '</span>'
+      + '<div class="day-summary-stat"><span class="day-summary-num">' + totDc + '</span>'
+        + '<span class="day-summary-sub">DCs booked</span></div>'
+      + '<div class="day-summary-divider"></div>'
+      + '<div class="day-summary-stat"><span class="day-summary-num">' + totLead + '</span>'
+        + '<span class="day-summary-sub">leads</span></div>'
+      + '<div class="day-summary-divider"></div>'
+      + '<div class="day-summary-stat"><span class="day-summary-num">' + suStr + '</span>'
+        + '<span class="day-summary-sub">show-up' + (sHap ? ' (' + sYes + '/' + sHap + ')' : '') + '</span></div>'
+      + '<div class="day-summary-divider"></div>'
+      + '<div class="day-summary-stat"><span class="day-summary-num">' + S.dates.length + '</span>'
+        + '<span class="day-summary-sub">days, ' + S.biz + ' of them working</span></div>'
+      + '</div>';
+
+    if (S.wkndWithBookings){
+      html += '<div style="margin:0 0 14px;padding:9px 13px;border-radius:6px;background:#F3F5FC;'
+        + 'border-left:4px solid ' + SLATE + ';font-size:12.5px;color:var(--ink);line-height:1.5">'
+        + 'This range includes ' + S.wkndWithBookings + ' weekend day'
+        + (S.wkndWithBookings === 1 ? '' : 's') + ' that carried bookings, and they are counted. '
+        + 'Month to date walks working days only, so its total for the same period is lower by '
+        + 'those DCs. Neither is wrong; they are answering different questions.</div>';
+    }
+
+    const bad = bdUnreadable();
+    if (bad.length){
+      const n = bad.reduce(function(a,b){ return a + b.dcs; }, 0);
+      html += '<div style="margin:0 0 14px;padding:9px 13px;border-radius:6px;background:#FDF1F1;'
+        + 'border-left:4px solid #C00000;font-size:12.5px;color:var(--ink);line-height:1.5">'
+        + '<b>' + bad.length + ' booking' + (bad.length === 1 ? '' : 's') + ' carrying ' + n + ' DC'
+        + (n === 1 ? '' : 's') + ' have a date that cannot be read</b> &mdash; years typed as '
+        + esc(bad.slice(0,4).map(function(b){ return b.raw; }).filter(function(v,i,a){ return a.indexOf(v) === i; }).join(', '))
+        + '. They fall outside every range, this one included, so they are missing from this '
+        + 'dashboard and from the appraisal figures. Fixing the year in the booking sheet brings '
+        + 'them back on the next refresh.</div>';
+    }
+
+    let shown = 0;
+    TEAMS.forEach(function(team){
+      if (_bdTeam && team.name !== _bdTeam) return;
+      const rows = team.members.filter(function(m){ return !m.hidden; })
+        .map(function(m){ return { m:m, dcs:S.counts[m.id] || 0, leads:S.leads[m.id] || 0,
+                                   su:S.showup[m.id] || { yes:0, happened:0 } }; })
+        .sort(function(a,b){ return b.dcs - a.dcs; });
+      if (!rows.length) return;
+      shown += rows.length;
+
+      const tDc  = rows.reduce(function(a,r){ return a + r.dcs; }, 0);
+      const hits = rows.filter(function(r){ return target && r.dcs >= target; }).length;
+      const tY = rows.reduce(function(a,r){ return a + r.su.yes; }, 0);
+      const tH = rows.reduce(function(a,r){ return a + r.su.happened; }, 0);
+
+      html += '<div class="team-section"><div class="team-header"><div class="team-label">'
+        + '<div class="team-accent" style="background:' + esc(team.color) + '"></div>'
+        + '<div class="team-name">' + esc(team.name) + '</div></div><div class="team-stats">'
+        + '<span class="stat-pill stat-total">' + tDc + ' DCs</span>'
+        + '<span class="stat-pill stat-hits">' + hits + ' / ' + rows.length + ' on pace</span>'
+        + (tH ? '<span class="stat-pill stat-showup">' + Math.round(tY/tH*100) + '% show-up</span>' : '')
+        + '</div></div><div class="member-grid">';
+
+      rows.forEach(function(r){
+        const pct = target ? Math.round(r.dcs / target * 100) : 0;
+        const col = target && r.dcs >= target ? '#16a34a'
+                  : target && r.dcs >= target / 2 ? '#ea580c' : '#dc2626';
+        const badge = target && r.dcs >= target ? 'dc-wtd-green'
+                    : target && r.dcs >= target / 2 ? 'dc-wtd-orange' : 'dc-wtd-red';
+        const labelColor = pct >= 40 ? 'white' : col;
+        const su = r.su.happened ? Math.round(r.su.yes / r.su.happened * 100) + '% show-up' : '';
+        const sub = r.leads
+          ? r.leads + ' lead' + (r.leads === 1 ? '' : 's') + (su ? ' &middot; ' + su : '')
+          : (su || 'nothing booked');
+        html += '<div class="member-card" onclick="openProfile(\'' + esc(r.m.id) + '\')">'
+          + '<div class="member-info"><div class="member-name">' + esc(r.m.display) + '</div>'
+          + '<div class="bar-outer"><div class="bar-fill" style="width:' + Math.min(pct,100) + '%;background:' + col + '"></div>'
+          + '<span class="bar-pct-label" style="color:' + labelColor + '">' + pct + '%</span></div>'
+          + '<div class="showup-rate">' + sub + '</div></div>'
+          + '<div class="dc-badge ' + badge + '">' + r.dcs + '</div></div>';
+      });
+      html += '</div></div>';
+    });
+
+    if (!shown){
+      html += '<div class="board"><div class="boardhead"><div class="boardtitle">Nobody to show</div>'
+        + '<div class="boardsub">No team matches that filter.</div></div></div>';
+    }
+
+    html += '<div style="margin-top:4px;font-size:11.5px;color:' + SLATE + ';line-height:1.5">'
+      + 'The bar is progress against ' + DAILY_TARGET + ' DCs per working day, which over the '
+      + S.biz + ' working day' + (S.biz === 1 ? '' : 's') + ' in this range comes to <b>' + target
+      + '</b>. DCs are counted the way the DC Dashboard counts them, one per source partner on a '
+      + 'booking, so a lead booked to two partners is two DCs.</div>';
+
+    box.innerHTML = html;
+  }
+
+  function bdInit(){
+    bdDefaults();
+    const sel = $('bdTeamFilter');
+    if (sel && !sel.options.length){
+      sel.innerHTML = '<option value="">All teams</option>'
+        + TEAMS.map(function(t){ return '<option value="' + esc(t.name) + '">' + esc(t.name) + '</option>'; }).join('');
+    }
+    bdSyncInputs();
+    if (!rawRows.length) { loadData().then(renderBooked); return; }
+    renderBooked();
   }
 
   // ── HUBSPOT-CONNECTED PERFORMANCE ────────────────────────────────────────
