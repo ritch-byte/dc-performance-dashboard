@@ -2360,7 +2360,7 @@
 
     const list = Object.keys(by).map(function(k){ return by[k]; })
       .sort(function(a,b){ return b.hs - a.hs || b.meetings - a.meetings; });
-    return { list:list, tot:tot };
+    return { list:list, byId:by, tot:tot };
   }
 
   function renderHubspot(){
@@ -2372,105 +2372,162 @@
       + '<div class="boardsub">' + esc(_hsErr) + '</div></div></div>'; return; }
     if (!_hsLoaded){ box.innerHTML = ''; return; }
 
-    const S = hsStats(), T = S.tot;
-    const pct = function(n, d){ return d ? Math.round(n / d * 100) : null; };
-    const cov = pct(T.hs, T.past);
-    const NAVY = '#0D1A6E', SLATE = '#5B6678';
+    const S = hsStats(), T = S.tot, byId = S.byId;
+    const SLATE = '#5B6678';
+    const cov = T.past ? Math.round(T.hs / T.past * 100) : null;
+    const covCol = cov == null ? SLATE : (cov >= 60 ? '#16a34a' : cov >= 25 ? '#ea580c' : '#dc2626');
 
-    // Coverage first, and stated plainly. Everything under it is read through this number.
-    const covCol = cov == null ? SLATE : (cov >= 60 ? '#0E9F6E' : cov >= 25 ? '#B7791F' : '#C00000');
-    let html = '<div class="board"><div class="boardhead">'
-      + '<div class="boardtitle">How much of this is actually in HubSpot</div>'
-      + '<div class="boardsub">Only a meeting somebody tagged in the CRM counts as evidence here. '
-      + 'Cancellations the sync read off a calendar title are shown apart, because an inference '
-      + 'about one outcome is not a tagged record, and counting them together would make the CRM '
-      + 'look far better filled in than it is.</div></div>'
-      + '<div style="display:flex;flex-wrap:wrap;gap:14px;padding:4px 2px 2px">'
-      + [['Meetings in range', T.meetings, SLATE],
-         ['Already happened', T.past, SLATE],
-         ['Tagged in HubSpot', T.hs, covCol],
-         ['Cancelled, read off the calendar', T.cal, SLATE],
-         ['Set by a leader by hand', T.hand, SLATE],
-         ['No outcome at all', T.none, T.none ? '#C00000' : SLATE]].map(function(t){
-          return '<div style="min-width:132px"><div style="font-size:9.5px;letter-spacing:.5px;'
-            + 'text-transform:uppercase;color:' + SLATE + '">' + esc(t[0]) + '</div>'
-            + '<div style="font-size:21px;font-weight:800;color:' + t[2] + '">' + t[1] + '</div></div>';
-        }).join('')
-      + '</div>'
-      + '<div style="margin-top:10px;padding:10px 14px;border-radius:6px;background:'
+    // The summary band, same shape as the DC dashboard's. The middle figure is deliberately
+    // coverage rather than a performance number: on this data it is the only one that can be
+    // trusted, and putting a show-up rate in the hero slot would give a figure built on 37
+    // tagged meetings the same weight as one built on two thousand.
+    let html = '<div class="day-summary">'
+      + '<span class="day-summary-label">' + esc(_hsRangeLabel()) + '</span>'
+      + '<div class="day-summary-stat"><span class="day-summary-num">' + T.past + '</span>'
+        + '<span class="day-summary-sub">meetings held</span></div>'
+      + '<div class="day-summary-divider"></div>'
+      + '<div class="day-summary-stat"><span class="day-summary-num">' + T.hs + '</span>'
+        + '<span class="day-summary-sub">tagged in HubSpot</span></div>'
+      + '<div class="day-summary-divider"></div>'
+      + '<div class="day-summary-stat"><span class="day-summary-num">' + (cov == null ? '—' : cov + '%') + '</span>'
+        + '<span class="day-summary-sub">CRM coverage' + (T.past ? ' (' + T.hs + '/' + T.past + ')' : '') + '</span></div>'
+      + '</div>';
+
+    // The health warning stays above the cards. A reader who scrolls past this and reads a 100%
+    // as a good month has been misled by the page, not by their own carelessness.
+    if (T.past){
+      html += '<div style="margin:0 0 14px;padding:10px 14px;border-radius:6px;background:'
         + (cov != null && cov < 25 ? '#FDF1F1' : '#F3F5FC') + ';border-left:4px solid ' + covCol + ';'
         + 'font-size:12.5px;color:var(--ink);line-height:1.55">'
-      + (T.past === 0
-          ? 'No meetings in this range have happened yet, so there is nothing to judge.'
-          : '<b>' + (cov == null ? '—' : cov + '%') + ' coverage</b> — ' + T.hs + ' of ' + T.past
-            + ' meetings that have already happened carry a HubSpot outcome.'
-            + (cov != null && cov < 25
-                ? ' That is too thin to read as performance. The figures below are shown so you can '
-                  + 'see what exists, not so they can be acted on. Until meetings are tagged in the '
-                  + 'CRM, this section measures the tagging and not the selling.'
-                : ''))
-      + '</div></div>';
+        + '<b>' + (cov == null ? '—' : cov + '%') + ' of meetings carry a HubSpot outcome.</b> '
+        + 'The bar on each card is that person’s coverage, not their performance. '
+        + (cov != null && cov < 25
+            ? 'At this level the outcome figures below are shown so you can see what exists, not so '
+              + 'they can be acted on: until meetings are tagged in the CRM this section measures '
+              + 'the tagging and not the selling.'
+            : 'A card showing fewer than ' + HS_THIN + ' tagged meetings is marked rather than rated.')
+        + ' ' + T.cal + ' further meeting' + (T.cal === 1 ? ' was' : 's were') + ' marked cancelled from a '
+        + 'calendar title, which is an inference and is counted separately.'
+        + '</div>';
+    }
 
-    if (!S.list.length){
+    // Team sections, in roster order, matching the DC dashboard.
+    let shown = 0;
+    TEAMS.forEach(function(team){
+      if (_hsTeam && team.name !== _hsTeam) return;
+      const rows = team.members.filter(function(m){ return !m.hidden && byId[m.id]; })
+        .map(function(m){ return byId[m.id]; })
+        .filter(function(p){ return p.meetings > 0; })
+        .sort(function(a,b){ return b.hs - a.hs || b.past - a.past; });
+      if (!rows.length) return;
+      shown += rows.length;
+
+      const tHs   = rows.reduce(function(a,p){ return a + p.hs; }, 0);
+      const tPast = rows.reduce(function(a,p){ return a + p.past; }, 0);
+      const tCov  = tPast ? Math.round(tHs / tPast * 100) : null;
+      let held = 0, good = 0;
+      rows.forEach(function(p){
+        held += p.showed + p.unqual + p.leadNo + p.partnerNo + p.noShow;
+        good += p.showed + p.unqual;
+      });
+      const tRate = held >= HS_THIN ? Math.round(good / held * 100) + '%' : '';
+
+      html += '<div class="team-section">'
+        + '<div class="team-header"><div class="team-label">'
+        + '<div class="team-accent" style="background:' + esc(team.color) + '"></div>'
+        + '<div class="team-name">' + esc(team.name) + '</div></div>'
+        + '<div class="team-stats">'
+        + '<span class="stat-pill stat-total">' + tHs + ' tagged</span>'
+        + '<span class="stat-pill stat-hits">' + tPast + ' held'
+          + (tCov == null ? '' : ' &middot; ' + tCov + '% covered') + '</span>'
+        + (tRate ? '<span class="stat-pill stat-showup">' + tRate + ' went ahead</span>' : '')
+        + '</div></div><div class="member-grid">';
+
+      rows.forEach(function(p){
+        // The bar is coverage. The badge is how many of this person's meetings are actually
+        // evidenced in the CRM, which is the number that decides whether anything else on the
+        // card means anything.
+        const c = p.past ? Math.round(p.hs / p.past * 100) : 0;
+        const col = c >= 60 ? '#16a34a' : c >= 25 ? '#ea580c' : '#dc2626';
+        const badge = c >= 60 ? 'dc-wtd-green' : c >= 25 ? 'dc-wtd-orange' : 'dc-wtd-red';
+        const labelColor = c >= 40 ? 'white' : col;
+        const heldP = p.showed + p.unqual + p.leadNo + p.partnerNo + p.noShow;
+        const rate  = heldP ? Math.round((p.showed + p.unqual) / heldP * 100) : null;
+        const sub = p.hs === 0
+          ? 'nothing tagged of ' + p.past
+          : (p.hs < HS_THIN
+              ? p.hs + ' of ' + p.past + ' tagged, too thin to rate'
+              : (rate == null ? p.hs + ' of ' + p.past + ' tagged'
+                              : rate + '% went ahead &middot; ' + p.hs + ' of ' + p.past + ' tagged'));
+        html += '<div class="member-card" onclick="openProfile(\'' + esc(p.id) + '\')">'
+          + '<div class="member-info"><div class="member-name">' + esc(p.name) + '</div>'
+          + '<div class="bar-outer"><div class="bar-fill" style="width:' + Math.min(c,100) + '%;background:' + col + '"></div>'
+          + '<span class="bar-pct-label" style="color:' + labelColor + '">' + c + '%</span></div>'
+          + '<div class="showup-rate">' + sub + '</div></div>'
+          + '<div class="dc-badge ' + badge + '">' + p.hs + '</div></div>';
+      });
+      html += '</div></div>';
+    });
+
+    if (!shown){
       html += '<div class="board"><div class="boardhead"><div class="boardtitle">Nobody to show</div>'
         + '<div class="boardsub">No meeting in this range resolved to an SDR on the roster.</div>'
         + '</div></div>';
-      box.innerHTML = html; return;
     }
 
-    const live = HS_BUCKETS.filter(function(b){ return S.list.some(function(p){ return p[b.key] > 0; }); });
-    const head = '<tr><th>SDR</th><th class="num">Tagged / happened</th>'
-      + live.map(function(b){ return '<th class="num">' + esc(b.label) + '</th>'; }).join('')
-      + '<th class="num">Went ahead</th></tr>';
-
-    const body = S.list.map(function(p){
-      // Of the calls that actually took place. A cancellation neither helps nor hurts: there was
-      // nothing to attend.
-      const held = p.showed + p.unqual + p.leadNo + p.partnerNo + p.noShow;
-      const rate = held ? Math.round((p.showed + p.unqual) / held * 100) : null;
-      const thin = p.hs < HS_THIN;
-      const c = p.past ? Math.round(p.hs / p.past * 100) : null;
-      return '<tr>'
-        + '<td class="spn">' + esc(p.name)
-          + '<div style="font-size:10.5px;color:' + SLATE + '">' + esc(p.team)
-            + (p.upcoming ? ' · ' + p.upcoming + ' ahead' : '') + '</div></td>'
-        + '<td class="num"><b>' + p.hs + '</b> <span style="color:' + SLATE + '">/ ' + p.past + '</span>'
-          + (c == null ? '' : ' <span style="font-size:10.5px;color:'
-             + (c >= 60 ? '#0E9F6E' : c >= 25 ? '#B7791F' : '#C00000') + '">' + c + '%</span>') + '</td>'
-        + live.map(function(b){
-            const n = p[b.key];
-            return '<td class="num" style="color:' + (n ? 'var(--ink);font-weight:700' : SLATE) + '">'
-              + (n || '·') + '</td>';
-          }).join('')
-        + '<td class="num">'
-          + (rate == null
-              ? '<span style="color:' + SLATE + '">no tagged calls</span>'
-              : '<b style="color:' + (thin ? SLATE : (rate >= 70 ? '#0E9F6E' : rate >= 50 ? '#B7791F' : '#C00000'))
-                + '">' + rate + '%</b>'
-                + (thin ? '<div style="font-size:10px;color:' + SLATE + '">too thin to read</div>' : ''))
+    // The breakdown a card cannot carry: which side failed to turn up. This is the thing HubSpot
+    // knows that the existing show-up figures do not, so it stays, underneath the overview.
+    const withTags = S.list.filter(function(p){ return p.hs > 0; });
+    if (withTags.length){
+      const live = HS_BUCKETS.filter(function(b){ return withTags.some(function(p){ return p[b.key] > 0; }); });
+      const head = '<tr><th>SDR</th><th class="num">Tagged</th>'
+        + live.map(function(b){ return '<th class="num">' + esc(b.label) + '</th>'; }).join('')
+        + '<th class="num">Went ahead</th></tr>';
+      const rows = withTags.map(function(p){
+        const heldP = p.showed + p.unqual + p.leadNo + p.partnerNo + p.noShow;
+        const rate = heldP ? Math.round((p.showed + p.unqual) / heldP * 100) : null;
+        const thin = p.hs < HS_THIN;
+        return '<tr><td class="spn">' + esc(p.name)
+          + '<div style="font-size:10.5px;color:' + SLATE + '">' + esc(p.team) + '</div></td>'
+          + '<td class="num"><b>' + p.hs + '</b></td>'
+          + live.map(function(b){
+              const n = p[b.key];
+              return '<td class="num" style="color:' + (n ? 'var(--ink);font-weight:700' : SLATE) + '">'
+                + (n || '·') + '</td>';
+            }).join('')
+          + '<td class="num">' + (rate == null ? '<span style="color:' + SLATE + '">—</span>'
+              : '<b style="color:' + (thin ? SLATE : (rate >= 70 ? '#16a34a' : rate >= 50 ? '#ea580c' : '#dc2626'))
+                + '">' + rate + '%</b>' + (thin ? ' <span style="font-size:10px;color:' + SLATE + '">thin</span>' : ''))
           + '</td></tr>';
-    }).join('');
-
-    html += '<div class="board"><div class="boardhead">'
-      + '<div class="boardtitle">Why meetings did not go ahead, per SDR</div>'
-      + '<div class="boardsub">Counted only from meetings tagged in HubSpot. <b>Lead no-show</b> means '
-      + 'the partner turned up and the lead did not, which is a lead-quality signal; <b>Partner '
-      + 'no-show</b> is the other way round and is ours to answer for. <b>Went ahead</b> is of calls '
-      + 'that actually took place, so a cancellation neither helps nor hurts anybody. A row with '
-      + 'fewer than ' + HS_THIN + ' tagged meetings is marked rather than scored.</div></div>'
-      + '<div class="tablewrap"><table class="sptable"><thead>' + head + '</thead><tbody>'
-      + body + '</tbody></table></div></div>';
+      }).join('');
+      html += '<div class="board"><div class="boardhead">'
+        + '<div class="boardtitle">Which side did not turn up</div>'
+        + '<div class="boardsub">Only the ' + T.hs + ' meeting' + (T.hs === 1 ? '' : 's') + ' tagged in HubSpot. '
+        + '<b>Lead no-show</b> means the partner turned up and the lead did not, which is a '
+        + 'lead-quality signal; <b>Partner no-show</b> is the other way round and is ours to answer '
+        + 'for. <b>Went ahead</b> is of calls that actually took place, so a cancellation neither '
+        + 'helps nor hurts anybody.</div></div>'
+        + '<div class="tablewrap"><table class="sptable"><thead>' + head + '</thead><tbody>'
+        + rows + '</tbody></table></div></div>';
+    }
 
     if (T.unknown){
       html += '<div class="board"><div class="boardhead">'
         + '<div class="boardtitle">' + T.unknown + ' meeting' + (T.unknown === 1 ? '' : 's')
           + ' could not be matched to an SDR</div>'
-        + '<div class="boardsub">The booking address on the calendar invite is not on the roster '
-        + 'directory and could not be resolved safely. They are left out rather than guessed at, '
+        + '<div class="boardsub">The booking address on the invite is not on the roster directory, '
+        + 'or is ambiguous: alvin@ could be either Alvin. They are left out rather than guessed at, '
         + 'because attributing a meeting to the wrong person is worse than not attributing it.'
         + '</div></div></div>';
     }
     box.innerHTML = html;
+  }
+
+  function _hsRangeLabel(){
+    if (!_hsDays) return 'Everything on file';
+    const to = new Date(), from = new Date(to.getTime() - _hsDays * 864e5);
+    const f = function(d){ return d.toLocaleDateString('en-US', { month:'short', day:'numeric' }); };
+    return 'Last ' + _hsDays + ' days — ' + f(from) + ' – ' + f(to);
   }
 
   function hsSetDays(d){ _hsDays = d; renderHubspot(); }
