@@ -916,7 +916,31 @@ function applyPastedOutcomes() {
 
 var SCAN_QUERY_SUBJECT = 'subject:"Meeting Confirmation:"';
 var SCAN_DAYS          = 30;
-var SCAN_MAX_THREADS   = 400;
+var SCAN_MAX_THREADS   = 400;   // per page, and also what the read-only scan samples
+var SCAN_PAGE          = 400;   // GmailApp.search caps a single call at 500
+var SCAN_MAX_PAGES     = 8;     // 3,200 threads, far more than a month has ever held
+
+/**
+ * Every thread the query matches, not just the first pageful.
+ *
+ * GmailApp.search returns at most what you ask for, and asking for 400 when
+ * 400 exist tells you nothing about whether there were 401. The first run of
+ * writeBookingsTab came back with exactly 400, which is the shape of a number
+ * that has been truncated rather than counted, and every booking past it was
+ * being dropped silently. So this pages until a short page arrives, which is
+ * the only reliable signal that the end was actually reached.
+ */
+function scanSearchAll_(query) {
+  var all = [], page = 0;
+  while (page < SCAN_MAX_PAGES) {
+    var batch = GmailApp.search(query, page * SCAN_PAGE, SCAN_PAGE);
+    all = all.concat(batch);
+    if (batch.length < SCAN_PAGE) { return { threads: all, complete: true }; }
+    page++;
+  }
+  // Ran out of pages before running out of mail: say so rather than pretend.
+  return { threads: all, complete: false };
+}
 
 // "Meeting Confirmation: VA Platinum <> Jamie Harawira - October 7, 2026"
 // The separator is the literal "<>" the floor types between partner and lead.
@@ -1137,7 +1161,8 @@ function writeBookingsTab() {
   var now = new Date();
   var stamp = Utilities.formatDate(now, 'Asia/Manila', "yyyy-MM-dd'T'HH:mm");
   var query = SCAN_QUERY_SUBJECT + ' newer_than:' + SCAN_DAYS + 'd';
-  var threads = GmailApp.search(query, 0, SCAN_MAX_THREADS);
+  var found = scanSearchAll_(query);
+  var threads = found.threads;
 
   var fresh = {}, parsed = 0, skipped = 0;
   threads.forEach(function (th) {
@@ -1189,7 +1214,9 @@ function writeBookingsTab() {
     sh.getRange(2, 1, out.length, BOOK_HEADERS.length).setValues(out);
   }
 
-  console.log('Bookings: ' + threads.length + ' threads, ' + parsed + ' parsed, '
+  console.log('Bookings: ' + threads.length + ' threads'
+    + (found.complete ? '' : ' *** STILL CAPPED, raise SCAN_MAX_PAGES ***')
+    + ', ' + parsed + ' parsed, '
     + skipped + ' subjects ignored, ' + added + ' new, ' + updated + ' updated, '
     + out.length + ' rows on the tab' + (dropped ? ', ' + dropped + ' aged out' : ''));
   return { threads: threads.length, parsed: parsed, added: added,
