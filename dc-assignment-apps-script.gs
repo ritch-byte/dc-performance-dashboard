@@ -490,7 +490,7 @@ function syncAll() {
   // The confirmation emails, which are a record of booked DCs independent of the booking sheet.
   // Wrapped because a failure here must not take the calendar and absence syncs down with it:
   // those two are what the assignment board runs on, and this one is a second opinion.
-  try { out.bookings = syncBookingEmails(); }
+  try { out.bookings = writeBookingsTab(); }
   catch (err) { out.bookings = { error: String(err) }; console.warn('booking email sync: ' + err); }
   return out;
 }
@@ -1114,7 +1114,7 @@ var BOOK_TAB     = 'Bookings';
 var BOOK_HEADERS = ['key', 'bookedOn', 'meetingDate', 'partner', 'lead', 'sdrEmail', 'syncedAt'];
 var BOOK_KEEP_DAYS = 400;   // how much history the tab retains, not how far the query reads
 
-function syncBookingEmails() {
+function writeBookingsTab() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   if (!ss) { return { error: 'this script is not attached to a spreadsheet' }; }
   var sh = ss.getSheetByName(BOOK_TAB);
@@ -1325,7 +1325,7 @@ function whereAmI() {
   if (!ss) {
     Logger.log('This script is NOT attached to any spreadsheet.');
     Logger.log('It is a standalone project, so syncCalendars, syncAbsences and');
-    Logger.log('syncBookingEmails have nowhere to write. Paste this code into the');
+    Logger.log('writeBookingsTab have nowhere to write. Paste this code into the');
     Logger.log('Apps Script project that belongs to the DC Assignments sheet instead:');
     Logger.log('open that sheet, then Extensions > Apps Script.');
     return { bound: false };
