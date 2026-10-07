@@ -1457,8 +1457,10 @@
           <div class="view-toggle">
             <button class="view-btn" id="bdBtnMtd"   onclick="bdPreset('mtd')">Month to Date</button>
             <button class="view-btn" id="bdBtnLast"  onclick="bdPreset('lastmonth')">Last Month</button>
+            <button class="view-btn" id="bdBtnPer"   onclick="bdPreset('permonth')">Per Month</button>
           </div>
           <select id="bdTeamFilter" class="week-select" onchange="bdSetTeam(this.value)"></select>
+          <select id="bdMonthSelect" class="week-select" style="display:none" onchange="bdSetMonth(this.value)"></select>
           <input type="date" id="bdDate" class="week-select" onchange="bdSetDate(this.value)">
           <div class="view-toggle"><button class="view-btn" id="bdRefreshBtn" onclick="bdRefresh()">↻ Refresh</button></div>
         </div>
@@ -2243,7 +2245,7 @@
   // One date and a window, rather than two endpoints to keep in step with each other.
   // The date is the END of the range, which is what makes the picker read the way the
   // DC Dashboard's does: move it and the whole view moves with it.
-  let _bdDate = '', _bdTeam = '', _bdPreset = 'mtd';
+  let _bdDate = '', _bdTeam = '', _bdPreset = 'mtd', _bdMonth = '';
 
   function bdDefaults(){
     if (!_bdDate) _bdDate = localIso(new Date());
@@ -2258,6 +2260,14 @@
     if (_bdPreset === 'lastmonth'){
       return { from: localIso(new Date(p[0], p[1] - 2, 1)),
                to:   localIso(new Date(p[0], p[1] - 1, 0)) };
+    }
+    // A whole named month, start to finish, whether or not it has finished. The
+    // dashboard's own Per Month does the same, so a part-month reads as a part
+    // month rather than being quietly trimmed to today.
+    if (_bdPreset === 'permonth'){
+      const q = (_bdMonth || _bdDate.slice(0,7)).split('-').map(Number);
+      return { from: localIso(new Date(q[0], q[1] - 1, 1)),
+               to:   localIso(new Date(q[0], q[1], 0)) };
     }
     // Anything else means month to date, which is also the default.
     return { from: localIso(new Date(p[0], p[1] - 1, 1)), to: _bdDate };
@@ -2280,12 +2290,40 @@
     _bdDate = v;
     bdSyncInputs(); renderBooked();
   }
+  function bdSetMonth(v){
+    if (!v) return;
+    _bdMonth = v;
+    bdSyncInputs(); renderBooked();
+  }
+  // Every month from January 2026 to the one we are in, newest first.
+  function bdBuildMonths(){
+    const sel = $('bdMonthSelect'); if (!sel) return;
+    if (!_bdMonth) _bdMonth = localIso(new Date()).slice(0, 7);
+    let html = '';
+    const parts = localIso(new Date()).split('-').map(Number);
+    let y = parts[0], m = parts[1];
+    while (y > 2026 || (y === 2026 && m >= 1)){
+      const ym = y + '-' + String(m).padStart(2, '0');
+      html += '<option value="' + ym + '"' + (ym === _bdMonth ? ' selected' : '') + '>'
+        + esc(new Date(y, m - 1, 1).toLocaleDateString('en-US', { month:'long', year:'numeric' }))
+        + '</option>';
+      m--; if (m === 0){ m = 12; y--; }
+    }
+    sel.innerHTML = html;
+    sel.value = _bdMonth;
+  }
   function bdSyncInputs(){
     bdDefaults();
     const d = $('bdDate'); if (d) d.value = _bdDate;
-    [['bdBtnMtd','mtd'],['bdBtnLast','lastmonth']].forEach(function(p){
+    [['bdBtnMtd','mtd'],['bdBtnLast','lastmonth'],['bdBtnPer','permonth']].forEach(function(p){
       const b = $(p[0]); if (b) b.classList.toggle('active', _bdPreset === p[1]);
     });
+    // Per Month is driven by the month list, the others by the date, so only the
+    // control that actually does anything is on screen.
+    const per = _bdPreset === 'permonth';
+    if (per) bdBuildMonths();
+    const ms = $('bdMonthSelect'); if (ms) ms.style.display = per ? '' : 'none';
+    if (d) d.style.display = per ? 'none' : '';
   }
   function bdSetTeam(v){ _bdTeam = v; renderBooked(); }
   async function bdRefresh(){
@@ -2793,6 +2831,10 @@
   }
 
   function _bdRangeLabel(){
+    if (_bdPreset === 'permonth'){
+      const q = (_bdMonth || _bdDate.slice(0,7)).split('-').map(Number);
+      return new Date(q[0], q[1] - 1, 1).toLocaleDateString('en-US', { month:'long', year:'numeric' });
+    }
     return { 'mtd':'Month to Date', 'lastmonth':'Last Month' }[_bdPreset] || 'Month to Date';
   }
   function _hsRangeLabel(){
