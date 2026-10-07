@@ -1460,14 +1460,9 @@
             <button class="view-btn" id="bdBtn90"    onclick="bdPreset('90')">90 Days</button>
             <button class="view-btn" id="bdBtnMtd"   onclick="bdPreset('mtd')">Month to Date</button>
             <button class="view-btn" id="bdBtnLast"  onclick="bdPreset('lastmonth')">Last Month</button>
-            <button class="view-btn" id="bdBtnCustom" onclick="bdPreset('custom')">Custom</button>
-          </div>
-          <div id="bdCustomWrap" style="display:none;align-items:center;gap:6px">
-            <input type="date" id="bdFrom" class="week-select" onchange="bdSetFrom(this.value)">
-            <span style="font-size:11px;font-weight:700;color:var(--gray);letter-spacing:.5px">TO</span>
-            <input type="date" id="bdTo" class="week-select" onchange="bdSetTo(this.value)">
           </div>
           <select id="bdTeamFilter" class="week-select" onchange="bdSetTeam(this.value)"></select>
+          <input type="date" id="bdDate" class="week-select" onchange="bdSetDate(this.value)">
           <div class="view-toggle"><button class="view-btn" id="bdRefreshBtn" onclick="bdRefresh()">↻ Refresh</button></div>
         </div>
       </div>
@@ -2248,62 +2243,55 @@
   // DC booked on a Saturday is invisible in it. A range you picked by hand should contain what
   // you picked, so this counts every day in it, and says so on screen when a weekend is included
   // and actually carried bookings.
-  let _bdFrom = '', _bdTo = '', _bdTeam = '', _bdPreset = '30';
+  // One date and a window, rather than two endpoints to keep in step with each other.
+  // The date is the END of the range, which is what makes the picker read the way the
+  // DC Dashboard's does: move it and the whole view moves with it.
+  let _bdDate = '', _bdTeam = '', _bdPreset = '30';
 
   function bdDefaults(){
-    if (_bdFrom && _bdTo) return;
-    const to = new Date(), from = new Date(to.getTime() - 29 * 864e5);
-    _bdFrom = localIso(from); _bdTo = localIso(to);
+    if (!_bdDate) _bdDate = localIso(new Date());
+  }
+  // The window the chosen preset puts around the chosen date.
+  function bdSpan(){
+    bdDefaults();
+    const p = _bdDate.split('-').map(Number);
+    const anchor = new Date(p[0], p[1] - 1, p[2]);
+    if (_bdPreset === 'mtd'){
+      return { from: localIso(new Date(p[0], p[1] - 1, 1)), to: _bdDate };
+    }
+    if (_bdPreset === 'lastmonth'){
+      return { from: localIso(new Date(p[0], p[1] - 2, 1)),
+               to:   localIso(new Date(p[0], p[1] - 1, 0)) };
+    }
+    const n = Number(_bdPreset) || 30;
+    return { from: localIso(new Date(anchor.getTime() - (n - 1) * 864e5)), to: _bdDate };
   }
   function bdDates(){
-    const out = [];
-    if (!_bdFrom || !_bdTo) return out;
-    let a = _bdFrom, b = _bdTo;
-    if (a > b){ const t = a; a = b; b = t; }          // picked backwards, read it the way meant
-    const [y, m, d] = a.split('-').map(Number);
-    const cur = new Date(y, m - 1, d), end = new Date(b + 'T23:59:59');
+    const sp = bdSpan(), out = [];
+    if (!sp.from || !sp.to) return out;
+    const p = sp.from.split('-').map(Number);
+    const cur = new Date(p[0], p[1] - 1, p[2]), end = new Date(sp.to + 'T23:59:59');
     let guard = 0;
     while (cur <= end && guard++ < 1200){ out.push(localIso(cur)); cur.setDate(cur.getDate() + 1); }
     return out;
   }
   function bdPreset(kind){
-    const today = new Date();
     _bdPreset = kind;
-    if (kind === 'custom'){
-      // Keep whatever range is on screen and just reveal the pickers, so choosing
-      // Custom never silently moves the dates out from under what is being read.
-      bdSyncInputs(); renderBooked(); return;
-    }
-    if (kind === 'mtd'){
-      _bdFrom = localIso(new Date(today.getFullYear(), today.getMonth(), 1));
-      _bdTo = localIso(today);
-    } else if (kind === 'lastmonth'){
-      const f = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-      _bdFrom = localIso(f);
-      _bdTo = localIso(new Date(today.getFullYear(), today.getMonth(), 0));
-    } else {
-      _bdFrom = localIso(new Date(today.getTime() - (Number(kind) - 1) * 864e5));
-      _bdTo = localIso(today);
-    }
+    bdSyncInputs(); renderBooked();
+  }
+  function bdSetDate(v){
+    if (!v) return;
+    _bdDate = v;
     bdSyncInputs(); renderBooked();
   }
   function bdSyncInputs(){
-    const f = $('bdFrom'), t = $('bdTo');
-    if (f) f.value = _bdFrom;
-    if (t) t.value = _bdTo;
-    [['bdBtn7','7'],['bdBtn30','30'],['bdBtn90','90'],['bdBtnMtd','mtd'],
-     ['bdBtnLast','lastmonth'],['bdBtnCustom','custom']].forEach(function(p){
+    bdDefaults();
+    const d = $('bdDate'); if (d) d.value = _bdDate;
+    [['bdBtn7','7'],['bdBtn30','30'],['bdBtn90','90'],
+     ['bdBtnMtd','mtd'],['bdBtnLast','lastmonth']].forEach(function(p){
       const b = $(p[0]); if (b) b.classList.toggle('active', _bdPreset === p[1]);
     });
-    // The pickers belong to Custom. Shown for any hand-typed range too, because a
-    // range nobody can see the ends of is worse than one extra control on screen.
-    const w = $('bdCustomWrap');
-    if (w) w.style.display = (_bdPreset === 'custom') ? 'flex' : 'none';
   }
-  // Typing a date means this is no longer one of the presets, so nothing stays lit
-  // claiming it is.
-  function bdSetFrom(v){ _bdFrom = v; _bdPreset = 'custom'; bdSyncInputs(); renderBooked(); }
-  function bdSetTo(v){ _bdTo = v; _bdPreset = 'custom'; bdSyncInputs(); renderBooked(); }
   function bdSetTeam(v){ _bdTeam = v; renderBooked(); }
   async function bdRefresh(){
     const b = $('bdRefreshBtn');
@@ -2382,7 +2370,7 @@
     let html = '<div class="day-summary">'
       + '<span class="day-summary-label">' + esc(_bdRangeLabel()) + '</span>'
       + '<span style="font-size:11px;color:rgba(255,255,255,.65);margin:0 14px 0 -6px;letter-spacing:.2px">'
-        + esc(fmt(S.dates[0] || _bdFrom)) + ' &ndash; ' + esc(fmt(S.dates[S.dates.length-1] || _bdTo))
+        + esc(fmt(S.dates[0] || _bdDate)) + ' &ndash; ' + esc(fmt(S.dates[S.dates.length-1] || _bdDate))
         + '</span>'
       + '<div class="day-summary-stat"><span class="day-summary-num">' + totDc + '</span>'
         + '<span class="day-summary-sub">DCs booked</span></div>'
@@ -2810,8 +2798,8 @@
   }
 
   function _bdRangeLabel(){
-    return { '7':'Last 7 Days', '30':'Last 30 Days', '90':'Last 90 Days',
-             'mtd':'Month to Date', 'lastmonth':'Last Month', 'custom':'Custom Range' }[_bdPreset] || '';
+    return { '7':'7 Days', '30':'30 Days', '90':'90 Days',
+             'mtd':'Month to Date', 'lastmonth':'Last Month' }[_bdPreset] || '';
   }
   function _hsRangeLabel(){
     if (!_hsDays) return 'Everything on file';
