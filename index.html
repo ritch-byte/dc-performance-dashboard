@@ -1455,6 +1455,7 @@
         <div class="page-title" id="bdHeading">Booked DCs</div>
         <div class="ch-right">
           <div class="view-toggle">
+            <button class="view-btn" id="bdBtnDay"   onclick="bdPreset('daily')">Daily</button>
             <button class="view-btn" id="bdBtnMtd"   onclick="bdPreset('mtd')">Month to Date</button>
             <button class="view-btn" id="bdBtnLast"  onclick="bdPreset('lastmonth')">Last Month</button>
             <button class="view-btn" id="bdBtnPer"   onclick="bdPreset('permonth')">Per Month</button>
@@ -2254,6 +2255,8 @@
   function bdSpan(){
     bdDefaults();
     const p = _bdDate.split('-').map(Number);
+    // The one day that was picked, and nothing either side of it.
+    if (_bdPreset === 'daily'){ return { from: _bdDate, to: _bdDate }; }
     if (_bdPreset === 'mtd'){
       return { from: localIso(new Date(p[0], p[1] - 1, 1)), to: _bdDate };
     }
@@ -2315,7 +2318,8 @@
   function bdSyncInputs(){
     bdDefaults();
     const d = $('bdDate'); if (d) d.value = _bdDate;
-    [['bdBtnMtd','mtd'],['bdBtnLast','lastmonth'],['bdBtnPer','permonth']].forEach(function(p){
+    [['bdBtnDay','daily'],['bdBtnMtd','mtd'],['bdBtnLast','lastmonth'],
+     ['bdBtnPer','permonth']].forEach(function(p){
       const b = $(p[0]); if (b) b.classList.toggle('active', _bdPreset === p[1]);
     });
     // Per Month is driven by the month list, the others by the date, so only the
@@ -2413,9 +2417,11 @@
       + '<div class="day-summary-divider"></div>'
       + '<div class="day-summary-stat"><span class="day-summary-num">' + suStr + '</span>'
         + '<span class="day-summary-sub">show-up' + (sHap ? ' (' + sYes + '/' + sHap + ')' : '') + '</span></div>'
-      + '<div class="day-summary-divider"></div>'
-      + '<div class="day-summary-stat"><span class="day-summary-num">' + S.dates.length + '</span>'
-        + '<span class="day-summary-sub">days, ' + S.biz + ' of them working</span></div>'
+      + (S.dates.length > 1
+          ? '<div class="day-summary-divider"></div>'
+            + '<div class="day-summary-stat"><span class="day-summary-num">' + S.dates.length + '</span>'
+            + '<span class="day-summary-sub">days, ' + S.biz + ' of them working</span></div>'
+          : '')
       + '</div>';
 
     if (S.wkndWithBookings){
@@ -2834,6 +2840,10 @@
     if (_bdPreset === 'permonth'){
       const q = (_bdMonth || _bdDate.slice(0,7)).split('-').map(Number);
       return new Date(q[0], q[1] - 1, 1).toLocaleDateString('en-US', { month:'long', year:'numeric' });
+    }
+    if (_bdPreset === 'daily'){
+      const d = new Date(_bdDate + 'T00:00:00');
+      return d.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' });
     }
     return { 'mtd':'Month to Date', 'lastmonth':'Last Month' }[_bdPreset] || 'Month to Date';
   }
