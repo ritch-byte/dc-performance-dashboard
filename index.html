@@ -1452,18 +1452,23 @@
 
     <div id="bookedSection" style="display:none;">
       <div class="content-header">
-        <div class="page-title">Booked DCs by range</div>
-        <div class="ch-right" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-          <button class="view-btn" onclick="bdPreset('7')">7d</button>
-          <button class="view-btn" onclick="bdPreset('30')">30d</button>
-          <button class="view-btn" onclick="bdPreset('90')">90d</button>
-          <button class="view-btn" onclick="bdPreset('mtd')">This month</button>
-          <button class="view-btn" onclick="bdPreset('lastmonth')">Last month</button>
-          <input type="date" id="bdFrom" class="cl-input" style="width:auto" onchange="bdSetFrom(this.value)">
-          <span style="color:var(--slate);font-size:12px">to</span>
-          <input type="date" id="bdTo" class="cl-input" style="width:auto" onchange="bdSetTo(this.value)">
-          <select id="bdTeamFilter" class="cl-input" style="width:auto" onchange="bdSetTeam(this.value)"></select>
-          <button class="view-btn" id="bdRefreshBtn" onclick="bdRefresh()">Refresh</button>
+        <div class="page-title" id="bdHeading">Booked DCs</div>
+        <div class="ch-right">
+          <div class="view-toggle">
+            <button class="view-btn" id="bdBtn7"     onclick="bdPreset('7')">7 Days</button>
+            <button class="view-btn" id="bdBtn30"    onclick="bdPreset('30')">30 Days</button>
+            <button class="view-btn" id="bdBtn90"    onclick="bdPreset('90')">90 Days</button>
+            <button class="view-btn" id="bdBtnMtd"   onclick="bdPreset('mtd')">Month to Date</button>
+            <button class="view-btn" id="bdBtnLast"  onclick="bdPreset('lastmonth')">Last Month</button>
+            <button class="view-btn" id="bdBtnCustom" onclick="bdPreset('custom')">Custom</button>
+          </div>
+          <div id="bdCustomWrap" style="display:none;align-items:center;gap:6px">
+            <input type="date" id="bdFrom" class="week-select" onchange="bdSetFrom(this.value)">
+            <span style="font-size:11px;font-weight:700;color:var(--gray);letter-spacing:.5px">TO</span>
+            <input type="date" id="bdTo" class="week-select" onchange="bdSetTo(this.value)">
+          </div>
+          <select id="bdTeamFilter" class="week-select" onchange="bdSetTeam(this.value)"></select>
+          <div class="view-toggle"><button class="view-btn" id="bdRefreshBtn" onclick="bdRefresh()">↻ Refresh</button></div>
         </div>
       </div>
       <div style="padding:0 24px 32px"><div id="bookedBody"></div></div>
@@ -2243,7 +2248,7 @@
   // DC booked on a Saturday is invisible in it. A range you picked by hand should contain what
   // you picked, so this counts every day in it, and says so on screen when a weekend is included
   // and actually carried bookings.
-  let _bdFrom = '', _bdTo = '', _bdTeam = '';
+  let _bdFrom = '', _bdTo = '', _bdTeam = '', _bdPreset = '30';
 
   function bdDefaults(){
     if (_bdFrom && _bdTo) return;
@@ -2263,6 +2268,12 @@
   }
   function bdPreset(kind){
     const today = new Date();
+    _bdPreset = kind;
+    if (kind === 'custom'){
+      // Keep whatever range is on screen and just reveal the pickers, so choosing
+      // Custom never silently moves the dates out from under what is being read.
+      bdSyncInputs(); renderBooked(); return;
+    }
     if (kind === 'mtd'){
       _bdFrom = localIso(new Date(today.getFullYear(), today.getMonth(), 1));
       _bdTo = localIso(today);
@@ -2280,9 +2291,19 @@
     const f = $('bdFrom'), t = $('bdTo');
     if (f) f.value = _bdFrom;
     if (t) t.value = _bdTo;
+    [['bdBtn7','7'],['bdBtn30','30'],['bdBtn90','90'],['bdBtnMtd','mtd'],
+     ['bdBtnLast','lastmonth'],['bdBtnCustom','custom']].forEach(function(p){
+      const b = $(p[0]); if (b) b.classList.toggle('active', _bdPreset === p[1]);
+    });
+    // The pickers belong to Custom. Shown for any hand-typed range too, because a
+    // range nobody can see the ends of is worse than one extra control on screen.
+    const w = $('bdCustomWrap');
+    if (w) w.style.display = (_bdPreset === 'custom') ? 'flex' : 'none';
   }
-  function bdSetFrom(v){ _bdFrom = v; renderBooked(); }
-  function bdSetTo(v){ _bdTo = v; renderBooked(); }
+  // Typing a date means this is no longer one of the presets, so nothing stays lit
+  // claiming it is.
+  function bdSetFrom(v){ _bdFrom = v; _bdPreset = 'custom'; bdSyncInputs(); renderBooked(); }
+  function bdSetTo(v){ _bdTo = v; _bdPreset = 'custom'; bdSyncInputs(); renderBooked(); }
   function bdSetTeam(v){ _bdTeam = v; renderBooked(); }
   async function bdRefresh(){
     const b = $('bdRefreshBtn');
@@ -2340,6 +2361,8 @@
     }
 
     const S = bdStats();
+    const head = $('bdHeading');
+    if (head) head.textContent = 'Booked DCs — ' + _bdRangeLabel();
     const target = S.biz * DAILY_TARGET;      // pro-rated over the business days in the range
     const SLATE = '#5B6678';
 
@@ -2357,8 +2380,10 @@
     const suStr = sHap ? Math.round(sYes / sHap * 100) + '%' : '—';
 
     let html = '<div class="day-summary">'
-      + '<span class="day-summary-label">' + esc(fmt(S.dates[0] || _bdFrom)) + ' &ndash; '
-        + esc(fmt(S.dates[S.dates.length-1] || _bdTo)) + '</span>'
+      + '<span class="day-summary-label">' + esc(_bdRangeLabel()) + '</span>'
+      + '<span style="font-size:11px;color:rgba(255,255,255,.65);margin:0 14px 0 -6px;letter-spacing:.2px">'
+        + esc(fmt(S.dates[0] || _bdFrom)) + ' &ndash; ' + esc(fmt(S.dates[S.dates.length-1] || _bdTo))
+        + '</span>'
       + '<div class="day-summary-stat"><span class="day-summary-num">' + totDc + '</span>'
         + '<span class="day-summary-sub">DCs booked</span></div>'
       + '<div class="day-summary-divider"></div>'
@@ -2784,6 +2809,10 @@
     box.innerHTML = html;
   }
 
+  function _bdRangeLabel(){
+    return { '7':'Last 7 Days', '30':'Last 30 Days', '90':'Last 90 Days',
+             'mtd':'Month to Date', 'lastmonth':'Last Month', 'custom':'Custom Range' }[_bdPreset] || '';
+  }
   function _hsRangeLabel(){
     if (!_hsDays) return 'Everything on file';
     const to = new Date(), from = new Date(to.getTime() - _hsDays * 864e5);
