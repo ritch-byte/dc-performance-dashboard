@@ -359,7 +359,12 @@ function absStatus_(subject) {
   // against, shift changes and rebookings, are named directly and still caught.
   if (/shift change|rebook|fulfillment|coaching-log/.test(s)) return '';
   if (/absen/.test(s))                                       return 'Absent';
-  if (/\bleave\b|\bvl\b|\bsl\b|vacation|sick leave/.test(s))  return 'On leave';
+  // PTO and half-day were missing entirely, so "Half-Day PTO Request" read as not an
+  // attendance notice at all. Tardiness is deliberately NOT added: the mailbox also
+  // carries "Request for Guidance on Issuance of NTE - Habitual Tardiness", which is a
+  // disciplinary matter ABOUT somebody rather than that person saying they will be
+  // late, and catching it would mark the wrong person off on the wrong day.
+  if (/\bleave\b|\bvl\b|\bsl\b|\bpto\b|half[-\s]?day|vacation|sick leave/.test(s)) return 'On leave';
   if (/under\s*time/.test(s))                                 return 'Undertime';
   if (/\blate\b|tardy/.test(s))                               return 'Late';
   return '';
