@@ -1,37 +1,59 @@
 /**
- * ABSENCE SUBJECT DIAGNOSTIC — add as a SECOND file, not a replacement
+ * ABSENCE SUBJECT DIAGNOSTIC — a SECOND file, not a replacement
  * ---------------------------------------------------------------------
- * In the Apps Script editor click the + beside Files, choose Script, name it
- * Absences, and paste this in. Apps Script files share one scope, so this can
- * use ABS_QUERY, ABS_MAX and absStatus_ from Code.gs without anything being
- * moved or duplicated. Kept separate because the main file is now 1,400 lines
- * and pasting it whole has truncated three times.
+ * Ctrl+A then paste over everything, including the myFunction stub Apps
+ * Script puts in a new file. Then run scanAbsenceSubjects(). It writes
+ * nothing.
  *
- * Then run scanAbsenceSubjects() and read the log. It writes nothing.
+ * The first version printed every ignored subject, and the list was mostly
+ * our own assignment mails: ASSIGN_CC copies "You are covering a discovery
+ * call" to sd-attendance@, so that mailbox is full of them and the real
+ * answer was buried.
  *
- * Why this exists: a notice the classifier does not recognise is dropped in
- * silence, and a dropped notice looks exactly like a day nobody was off. The
- * last run scanned 303 messages and recognised 68, so if real absences are
- * being missed they are among the other 235, and the only way to know is to
- * read the subjects rather than guess at them.
+ * So this sorts the ignored subjects into three piles. Known noise is counted
+ * and not listed. Anything carrying a word people actually use when they will
+ * be off — can't make it, unable, emergency, hospital, typhoon, half day,
+ * early out, WFH — is listed FIRST, because that is where a missed notice
+ * will be. Everything else follows, in case the wording is something nobody
+ * would have guessed.
  */
+
+// Mail that is definitely not an attendance notice. Counted, never listed.
+var ABSD_NOISE = [
+  'you are covering a discovery call',
+  'meeting confirmation:',
+  'equipment inventory',
+  'fulfillment', 'fulfilment',
+  'coaching-log', 'coaching log',
+  'shift change', 'rebook'
+];
+
+// Words somebody uses when they will not be at their desk. None of these are
+// in the classifier today, which is the point: if a missed notice exists, it
+// says one of these and absStatus_ never looked for it.
+var ABSD_HINTS = [
+  'cant make', "can't make", 'cannot make', 'unable to', 'will not be', "won't be",
+  'not be able', 'off today', 'day off', 'offline', 'out of office', 'ooo',
+  'emergency', 'hospital', 'clinic', 'doctor', 'medical', 'sick', 'ill ', 'fever',
+  'typhoon', 'flood', 'storm', 'brownout', 'power outage', 'no internet', 'outage',
+  'half day', 'halfday', 'early out', 'early-out', 'wfh', 'work from home',
+  'bereavement', 'funeral', 'family', 'maternity', 'paternity',
+  'notification', 'notice', 'advisory', 'excuse', 'permission'
+];
 
 function scanAbsenceSubjects() {
   var threads = GmailApp.search(ABS_QUERY, 0, ABS_MAX);
-  var seen = {}, order = [], kept = 0, dropped = 0;
+  var seen = {}, order = [], kept = 0, noise = 0, hinted = [], other = [];
 
   threads.forEach(function (th) {
     th.getMessages().forEach(function (msg) {
-      var subj = String(msg.getSubject() || '').trim();
-      if (!subj) { subj = '(no subject)'; }
+      var subj = String(msg.getSubject() || '').trim() || '(no subject)';
       if (seen[subj]) { seen[subj].n++; return; }
       var from = String(msg.getFrom() || '').match(/[\w.\-+]+@[\w.\-]+/);
-      var st = absStatus_(subj);
-      seen[subj] = { n: 1, st: st,
+      seen[subj] = { n: 1, st: absStatus_(subj),
                      from: from ? from[0].toLowerCase() : '?',
                      when: Utilities.formatDate(msg.getDate(), 'Asia/Manila', 'MM-dd') };
       order.push(subj);
-      if (st) { kept++; } else { dropped++; }
     });
   });
 
@@ -40,29 +62,40 @@ function scanAbsenceSubjects() {
     while (s.length < n) { s += ' '; }
     return s.length > n ? s.slice(0, n) : s;
   };
+  var has = function (hay, list) {
+    for (var i = 0; i < list.length; i++) { if (hay.indexOf(list[i]) >= 0) { return true; } }
+    return false;
+  };
 
-  Logger.log('QUERY : ' + ABS_QUERY);
+  order.forEach(function (s) {
+    var r = seen[s], low = s.toLowerCase();
+    if (r.st) { kept++; return; }
+    if (has(low, ABSD_NOISE)) { noise++; return; }
+    if (has(low, ABSD_HINTS)) { hinted.push(s); } else { other.push(s); }
+  });
+
   Logger.log('threads ' + threads.length + ', distinct subjects ' + order.length);
-  Logger.log('recognised ' + kept + ', ignored ' + dropped);
+  Logger.log('recognised as attendance : ' + kept);
+  Logger.log('known noise, not listed  : ' + noise);
+  Logger.log('ignored but suspicious   : ' + hinted.length);
+  Logger.log('ignored, everything else : ' + other.length);
   Logger.log('');
 
-  Logger.log('================ RECOGNISED ================');
-  order.forEach(function (s) {
+  Logger.log('=========== IGNORED BUT LOOKS LIKE SOMEBODY WILL BE OFF ===========');
+  if (!hinted.length) { Logger.log('  (none)'); }
+  hinted.forEach(function (s) {
     var r = seen[s];
-    if (!r.st) { return; }
-    Logger.log('  ' + r.when + '  ' + p(r.st, 11) + p(r.n + 'x', 5) + s.slice(0, 76));
+    Logger.log('  ' + r.when + ' ' + p(r.n + 'x', 4) + p(r.from, 34) + s.slice(0, 68));
   });
 
   Logger.log('');
-  Logger.log('================ IGNORED — look here for real absences ================');
-  Logger.log('Anything below that is actually someone saying they will be off is a');
-  Logger.log('wording the classifier does not know. Send these to Claude.');
-  Logger.log('');
-  order.forEach(function (s) {
+  Logger.log('=========== IGNORED, EVERYTHING ELSE ===========');
+  if (!other.length) { Logger.log('  (none)'); }
+  other.forEach(function (s) {
     var r = seen[s];
-    if (r.st) { return; }
-    Logger.log('  ' + r.when + '  ' + p(r.n + 'x', 5) + p(r.from, 34) + s.slice(0, 70));
+    Logger.log('  ' + r.when + ' ' + p(r.n + 'x', 4) + p(r.from, 34) + s.slice(0, 68));
   });
 
-  return { subjects: order.length, recognised: kept, ignored: dropped };
+  return { subjects: order.length, recognised: kept, noise: noise,
+           suspicious: hinted.length, other: other.length };
 }
