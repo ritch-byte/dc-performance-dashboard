@@ -352,7 +352,12 @@ const ABS_MAX     = 250;
 // summaries, coaching logs and rebooking requests.
 function absStatus_(subject) {
   const s = String(subject || '').toLowerCase();
-  if (/shift change|rebook|request for|fulfillment|coaching-log/.test(s)) return '';
+  // Not attendance notices whatever else they say. "request for" used to sit in this
+  // list and was swallowing the notices it most needed to catch: a leave request is
+  // very often titled "Request for Leave", and this line runs before the leave test,
+  // so it returned nothing at all. The two things that exclusion was really guarding
+  // against, shift changes and rebookings, are named directly and still caught.
+  if (/shift change|rebook|fulfillment|coaching-log/.test(s)) return '';
   if (/absen/.test(s))                                       return 'Absent';
   if (/\bleave\b|\bvl\b|\bsl\b|vacation|sick leave/.test(s))  return 'On leave';
   if (/under\s*time/.test(s))                                 return 'Undertime';
@@ -1377,4 +1382,53 @@ function whereAmI() {
     Logger.log('paste the code there. Publishing a tab from this one would publish nothing.');
   }
   return { bound: true, name: ss.getName(), url: ss.getUrl(), tabs: names };
+}
+
+/**
+ * Every subject sent to sd-attendance@, and what the classifier makes of it.
+ *
+ * Run this when a notice somebody definitely sent did not show up. It writes
+ * nothing; it prints each subject beside the status absStatus_ assigns, so a
+ * notice being dropped is visible as a line reading "(ignored)" next to words
+ * that plainly describe an absence.
+ *
+ * The point is that a miss here is silent by construction: a subject the
+ * classifier does not recognise looks exactly like a week when nobody was off.
+ */
+function scanAbsenceSubjects() {
+  var threads = GmailApp.search(ABS_QUERY, 0, ABS_MAX);
+  var seen = {}, kept = 0, dropped = 0, rows = [];
+
+  threads.forEach(function (th) {
+    th.getMessages().forEach(function (msg) {
+      var subj = String(msg.getSubject() || '').trim();
+      if (seen[subj]) { seen[subj].n++; return; }
+      var st = absStatus_(subj);
+      var from = String(msg.getFrom() || '').match(/[\w.\-+]+@[\w.\-]+/);
+      seen[subj] = { n: 1, st: st,
+                     from: from ? from[0].toLowerCase() : '?',
+                     when: Utilities.formatDate(msg.getDate(), 'Asia/Manila', 'MM-dd') };
+      rows.push(subj);
+      if (st) { kept++; } else { dropped++; }
+    });
+  });
+
+  Logger.log('QUERY : ' + ABS_QUERY);
+  Logger.log('threads ' + threads.length + ', distinct subjects ' + rows.length);
+  Logger.log('recognised ' + kept + ', ignored ' + dropped);
+  Logger.log('');
+  Logger.log('--- RECOGNISED ---');
+  rows.forEach(function (s) {
+    var r = seen[s];
+    if (!r.st) { return; }
+    Logger.log('  ' + r.when + '  ' + pad_(r.st, 11) + pad_(String(r.n) + 'x', 5) + s.slice(0, 80));
+  });
+  Logger.log('');
+  Logger.log('--- IGNORED, check these for anything that is really an absence ---');
+  rows.forEach(function (s) {
+    var r = seen[s];
+    if (r.st) { return; }
+    Logger.log('  ' + r.when + '  ' + pad_(String(r.n) + 'x', 5) + s.slice(0, 90));
+  });
+  return { subjects: rows.length, recognised: kept, ignored: dropped };
 }
