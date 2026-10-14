@@ -422,8 +422,11 @@ function syncAbsences() {
   const seen = {};
   let scanned = 0, notices = 0;
 
-  GmailApp.search(ABS_QUERY, 0, ABS_MAX).forEach(function (thread) {
-    thread.getMessages().forEach(function (msg) {
+  // Batched for the same reason as the booking sync: this reads EVERY message of
+  // every matching thread, so the per-thread round trip was the more expensive of
+  // the two.
+  GmailApp.getMessagesForThreads(GmailApp.search(ABS_QUERY, 0, ABS_MAX)).forEach(function (msgs) {
+    msgs.forEach(function (msg) {
       scanned++;
       const status = absStatus_(msg.getSubject());
       if (!status) { return; }
@@ -500,7 +503,7 @@ function syncAll() {
   // The confirmation emails, which are a record of booked DCs independent of the booking sheet.
   // Wrapped because a failure here must not take the calendar and absence syncs down with it:
   // those two are what the assignment board runs on, and this one is a second opinion.
-  try { out.bookings = writeBookingsTab(); }
+  try { out.bookings = writeBookingsTab(BOOK_SYNC_DAYS); }
   catch (err) { out.bookings = { error: String(err) }; console.warn('booking email sync: ' + err); }
   return out;
 }
@@ -1144,11 +1147,17 @@ function pad_(s, n) {
  * would be useless for exactly the ranges the dashboard is built to show.
  * ────────────────────────────────────────────────────────────────────────── */
 
+// How far back the ROUTINE sync re-reads. Different from SCAN_DAYS, which is what
+// a hand-run sweep covers, for the same reason the calendar sync keeps its refresh
+// edge apart from its retention edge: the tab merges, so a booking from three weeks
+// ago is already on it and asking about it again every half hour buys nothing. A
+// week is ample slack for anything that arrived late or was missed during an outage.
+var BOOK_SYNC_DAYS = 7;
 var BOOK_TAB     = 'Bookings';
 var BOOK_HEADERS = ['key', 'bookedOn', 'meetingDate', 'partner', 'lead', 'sdrEmail', 'syncedAt'];
 var BOOK_KEEP_DAYS = 400;   // how much history the tab retains, not how far the query reads
 
-function writeBookingsTab() {
+function writeBookingsTab(days) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   if (!ss) { return { error: 'this script is not attached to a spreadsheet' }; }
   var sh = ss.getSheetByName(BOOK_TAB);
@@ -1170,17 +1179,24 @@ function writeBookingsTab() {
 
   var now = new Date();
   var stamp = Utilities.formatDate(now, 'Asia/Manila', "yyyy-MM-dd'T'HH:mm");
-  var query = SCAN_QUERY_SUBJECT + ' newer_than:' + SCAN_DAYS + 'd';
+  var query = SCAN_QUERY_SUBJECT + ' newer_than:' + (days || SCAN_DAYS) + 'd';
   var found = scanSearchAll_(query);
   var threads = found.threads;
 
+  // One batched fetch for every thread, rather than th.getMessages() inside the
+  // loop. That call is a round trip each time, so at 470 threads it was 470 of
+  // them, and the count grows with every confirmation the floor sends. syncAll
+  // hit the thirty-minute ceiling once and ran nine minutes on another pass,
+  // which is this line being paid for over and over.
+  var msgsByThread = GmailApp.getMessagesForThreads(threads);
+
   var fresh = {}, parsed = 0, skipped = 0;
-  threads.forEach(function (th) {
+  threads.forEach(function (th, ti) {
     var p = scanParseSubject_(th.getFirstMessageSubject());
     if (!p) { skipped++; return; }
     p.meetingDate = scanMeetingDate_(p.whenRaw);
 
-    var first = th.getMessages()[0];
+    var first = (msgsByThread[ti] || [])[0];
     if (!first) { return; }
     var hit = String(first.getFrom() || '').match(/[\w.\-+]+@[\w.\-]+/);
     p.sender  = hit ? hit[0].toLowerCase() : '';
